@@ -7,7 +7,7 @@
 [![Accessibility](https://img.shields.io/badge/Accessibility-Built%20for%20Blind%20%26%20Low--Vision%20Users-purple.svg)](#built-for-eyes-free-independence)
 [![100% Local](https://img.shields.io/badge/Privacy-100%25%20Local%20%26%20Offline-success.svg)](#architecture)
 
-Murmur AI is a free, open-source desktop companion designed to give blind, visually impaired, and hands-free users full autonomy over their computers. Launching automatically at boot, it combines local speech recognition, natural neural voices, and a real-time Vision-Language Model (VLM) to bridge the gap where traditional screen readers stop—allowing you to navigate visually dense software, install applications, manage files, and ask *"What is on my screen right now?"* entirely by voice.
+Murmur AI is a free, open-source desktop companion designed to give blind, visually impaired, and hands-free users full autonomy over their computers. Launching automatically at boot, it combines local speech recognition, natural neural voices, and a real-time Vision-Language Model (VLM) to bridge the gap where traditional screen readers stop allowing you to navigate visually dense software, install applications, manage files, and ask *"What is on my screen right now?"* entirely by voice.
 
 No cloud subscriptions. No API keys. No telemetry.
 
@@ -15,7 +15,7 @@ No cloud subscriptions. No API keys. No telemetry.
 
 ## Built for Eyes-Free Independence
 
-Traditional screen readers (like NVDA, VoiceOver, and Orca) depend on software developers properly labeling every UI element in an OS accessibility tree. When an application lacks accessibility tags, or relies on dense visual viewports, timelines, and custom canvases—blind users are often locked out.
+Traditional screen readers (like NVDA, VoiceOver, and Orca) depend on software developers properly labeling every UI element in an OS accessibility tree. When an application lacks accessibility tags, or relies on dense visual viewports, timelines, and custom canvases, blind users are often locked out.
 
 Murmur AI solves this using **Multimodal Visual Grounding**:
 * **Navigate Unlabeled & Complex Interfaces:** Uses live screen capture and Set-of-Marks visual detection to see buttons, menus, timelines, and icons in applications like **Blender**, **DaVinci Resolve**, and web apps, clicking and typing on your behalf.
