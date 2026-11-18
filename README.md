@@ -15,12 +15,12 @@ No cloud subscriptions. No API keys. No telemetry.
 
 ## Built for Eyes-Free Independence
 
-Traditional screen readers (like NVDA, VoiceOver, and Orca) depend on software developers properly labeling every UI element in an OS accessibility tree. When an application lacks accessibility tags—or relies on dense visual viewports, timelines, and custom canvases—blind users are often locked out.
+Traditional screen readers (like NVDA, VoiceOver, and Orca) depend on software developers properly labeling every UI element in an OS accessibility tree. When an application lacks accessibility tags, or relies on dense visual viewports, timelines, and custom canvases—blind users are often locked out.
 
 Murmur AI solves this using **Multimodal Visual Grounding**:
 * **Navigate Unlabeled & Complex Interfaces:** Uses live screen capture and Set-of-Marks visual detection to see buttons, menus, timelines, and icons in applications like **Blender**, **DaVinci Resolve**, and web apps, clicking and typing on your behalf.
 * **On-Demand Visual Context:** Ask *"What's on my screen?"*, *"Did that download finish?"*, or *"Read the error dialog"* to get concise, spoken descriptions of visual UI states, pop-ups, and layouts.
-* **Zero-Touch Startup & Conversational Control:** Starts at boot and listens continuously via local Voice Activity Detection (`silero-vad`)—no hunting for push-to-talk keys. You can interrupt the AI mid-sentence anytime just by speaking.
+* **Zero-Touch Startup & Conversational Control:** Starts at boot and listens continuously via local Voice Activity Detection (`silero-vad`), no hunting for push-to-talk keys. You can interrupt the AI mid-sentence anytime just by speaking.
 * **Spoken Safety Confirmations:** Before running destructive commands, deleting files, or installing software, Murmur AI reads the exact action aloud and waits for your verbal *"Yes"* before proceeding.
 
 ---
