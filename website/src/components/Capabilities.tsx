@@ -12,9 +12,9 @@ const workflows: Workflow[] = [
   {
     id: "gui",
     index: "01",
-    title: "Complex GUI navigation",
+    title: "Hard-to-navigate apps",
     blurb:
-      "Set-of-Marks grounding finds clickable elements, then executes precise actions inside Blender, DaVinci Resolve, or any app — no cloud vision API.",
+      "Buttons get numbered boxes drawn on a screenshot. The model reads the number and clicks the spot. Works in Blender, DaVinci Resolve, and anywhere else the accessibility tree is thin.",
     lines: [
       { tone: "muted", text: "# goal: smooth the selected mesh in Blender" },
       { tone: "blue", text: "screen.capture() → 17 marked elements" },
@@ -27,9 +27,9 @@ const workflows: Workflow[] = [
   {
     id: "install",
     index: "02",
-    title: "Autonomous app installation",
+    title: "Installing software",
     blurb:
-      "Native silent package managers first. The agent searches, shows you the exact command, waits for approval, then streams live download progress.",
+      "It looks for the app in winget, brew, flatpak, or apt. You see the exact command and approve it before anything runs. Then you watch the download climb.",
     lines: [
       { tone: "muted", text: "# user: install blender" },
       { tone: "blue", text: "detect → winget | brew | flatpak | snap | apt" },
@@ -42,9 +42,9 @@ const workflows: Workflow[] = [
   {
     id: "privacy",
     index: "03",
-    title: "Local privacy architecture",
+    title: "Nothing leaves your machine",
     blurb:
-      "Every model, transcript, and screenshot stays on your machine. There is no cloud inference, no telemetry, and no API key to configure.",
+      "Models, transcripts, screenshots: all local. There's no cloud service to trust, nothing to sign up for, and no API key to paste in.",
     lines: [
       { tone: "muted", text: "# network egress audit" },
       { tone: "ink", text: "Ollama        127.0.0.1:11434  ✓ local" },
@@ -84,7 +84,8 @@ export default function Capabilities() {
       <div className="flex flex-col gap-3">
         <span className="mono-label"><span className="text-red">02</span> / capabilities</span>
         <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-          It doesn&apos;t just answer. It <span className="text-blue">operates</span>.
+          Ask a question and get an answer. Or tell it to
+          <span className="text-blue"> do the work</span>.
         </h2>
       </div>
 

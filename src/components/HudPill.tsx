@@ -128,7 +128,7 @@ export default function HudPill() {
     <section
       className="fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       role="region"
-      aria-label="Murmur AI voice assistant status and controls"
+      aria-label="Murmur AI status and controls"
     >
       {/* Non-visual status + captions for screen readers (polite). */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -163,7 +163,7 @@ export default function HudPill() {
             onClick={abortAutomation}
             className="app-region-no-drag flex h-8 shrink-0 items-center gap-1 rounded-lg border border-red/40 bg-red-fill/20 px-2 text-[11px] font-bold text-red transition-colors hover:bg-red-fill/30"
             aria-label="Stop automation now"
-            title="Stop automation (say 'stop automation' or move mouse to a screen corner)"
+            title="Say 'stop automation', or move the mouse to a screen corner"
           >
             <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
               <rect x="4" y="4" width="12" height="12" rx="2" />
@@ -224,7 +224,7 @@ export default function HudPill() {
 
       {guidance && (
         <div className="app-region-no-drag mt-2 rounded-lg border border-blue/35 bg-blue-deep/25 p-2.5" role="alert" aria-live="assertive">
-          <p className="text-[10px] font-semibold uppercase text-blue">I'm stuck — need your help</p>
+          <p className="text-[10px] font-semibold uppercase text-blue">I'm stuck. Need a hand?</p>
           <p className="mt-1 text-[11px] leading-snug text-ink">{guidance.text}</p>
           <div className="mt-2 flex gap-1.5">
             <label htmlFor="guidance-input" className="sr-only">Your guidance</label>
@@ -234,7 +234,7 @@ export default function HudPill() {
               value={guidanceInput}
               onChange={(e) => setGuidanceInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitGuidance(); }}
-              placeholder="Type guidance, or just say it…"
+              placeholder="Type it, or just say it out loud…"
               className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-2 py-1.5 text-[11px] text-ink placeholder:text-muted"
             />
             <button
@@ -256,7 +256,7 @@ export default function HudPill() {
           aria-live="assertive"
           aria-atomic="true"
         >
-          <p className="mono-label !text-red">Approval needed</p>
+          <p className="mono-label !text-red">Should I go ahead?</p>
           <p className="mt-0.5 break-words text-[11px] leading-snug text-ink">
             {confirmation.description}
           </p>
@@ -271,7 +271,7 @@ export default function HudPill() {
               className="flex-1 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white hover:brightness-110"
               aria-label="Approve and run the action. Shortcut: Enter"
             >
-              Yes, run it
+              Yes, do it
             </button>
             <button
               type="button"
@@ -283,7 +283,7 @@ export default function HudPill() {
             </button>
           </div>
           <p className="sr-only">
-            You can also say "yes, confirm" or "no, cancel" out loud.
+            You can answer out loud: say yes to approve, or no to cancel.
           </p>
         </div>
       )}

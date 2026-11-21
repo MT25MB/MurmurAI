@@ -4,7 +4,7 @@
 
 # Murmur AI
 
-**Eyes-free, hands-free computing. A 100% local, zero-cost AI desktop agent that sees your screen, describes what's happening, and operates any software through natural conversation.**
+**Talk to your computer and have it do the work. Runs entirely on your machine. Free, open source, and built for people who use a screen reader or no hands at all.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-156CDD?style=for-the-badge)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=for-the-badge)](#installation)
@@ -19,37 +19,41 @@
 
 ---
 
-Murmur AI is a free, open-source desktop companion designed to give blind, visually impaired, and hands-free users full autonomy over their computers. Launching automatically at boot, it combines local speech recognition, natural neural voices, and a real-time Vision-Language Model (VLM) to bridge the gap where traditional screen readers stop — letting you navigate visually dense software, install applications, manage files, and ask *"What is on my screen right now?"* entirely by voice.
+Murmur AI is a free assistant that lives on your desktop. You talk to it. It listens, looks at the screen, and clicks or types for you.
 
-No cloud subscriptions. No API keys. No telemetry. Everything runs on your machine.
+That matters most when the screen is hard to read. Screen readers lean on labels that developers add to buttons and menus. Plenty of apps skip those labels, or draw their interface on a canvas where labels don't exist. Murmur AI reads the screen as an image instead. It can find a button in Blender's viewport, walk through DaVinci's timeline, or tell you what's in a dialog box.
+
+It starts when your computer boots. Local speech recognition turns your voice into text. A local model decides what to do. Local speech synthesis answers out loud. Say "what's on my screen?" and get a spoken description. Say "install Blender" and watch it happen.
+
+Nothing is sent to a server. There's no subscription, no account, no API key, and no telemetry.
 
 ---
 
 ## Built for Eyes-Free Independence
 
-Traditional screen readers (like NVDA, VoiceOver, and Orca) depend on software developers properly labeling every UI element in an OS accessibility tree. When an application lacks accessibility tags, or relies on dense visual viewports, timelines, and custom canvases, blind users are often locked out.
+Screen readers such as NVDA, VoiceOver, and Orca work from an accessibility tree. That tree only helps when developers label their controls. An app built on a timeline or a custom canvas often has no labels to read, and the user is left out.
 
-Murmur AI solves this using **Multimodal Visual Grounding**:
+Murmur AI looks at the screen instead.
 
-* **Navigate Unlabeled & Complex Interfaces:** Uses live screen capture and Set-of-Marks visual detection to see buttons, menus, timelines, and icons in applications like **Blender**, **DaVinci Resolve**, and web apps, clicking and typing on your behalf.
-* **On-Demand Visual Context:** Ask *"What's on my screen?"*, *"Did that download finish?"*, or *"Read the error dialog"* to get concise, spoken descriptions of visual UI states, pop-ups, and layouts.
-* **Zero-Touch Startup & Conversational Control:** Starts at boot and listens continuously via local Voice Activity Detection (`webrtcvad`, with optional Silero), no hunting for push-to-talk keys. You can interrupt the AI mid-sentence anytime just by speaking.
-* **Spoken Safety Confirmations:** Before running destructive commands, deleting files, or installing software, Murmur AI reads the exact action aloud and waits for your verbal *"Yes"* before proceeding.
+* **Unlabeled apps.** It captures the screen, finds buttons and menus with OpenCV, numbers them, and clicks the one the model picks. That covers **Blender**, **DaVinci Resolve**, and browser apps.
+* **Spoken descriptions.** Ask *"What's on my screen?"*, *"Did that download finish?"*, or *"Read the error dialog"*. You get a short answer out loud.
+* **No push-to-talk.** It starts at boot and listens through local voice activity detection (`webrtcvad`, with optional Silero). Talk over it whenever you like to cut it off.
+* **Confirmations out loud.** Before a destructive command, a file deletion, or an install, it reads the exact action and waits for you to say *"yes"*.
 
 ---
 
-## Core Capabilities
+## What it can do
 
-* **Natural Two-Way Voice Loop:** Pairs local VAD and `faster-whisper` (STT) with `Kokoro-82M` (TTS) for low-latency, human-sounding speech synthesis with instant barge-in interruption.
-* **Set-of-Marks (SoM) Visual Agent:** Captures screen frames (`mss`), identifies interactive controls via OpenCV and OS accessibility APIs, draws numbered boxes on the image, then executes precise mouse/keyboard actions (`pyautogui`) driven by a local vision model (`qwen2.5-vl:7b`).
-* **Smart Shortcut Execution:** Detects the active foreground application and applies its native keyboard shortcuts automatically for faster, more reliable navigation.
-* **Voice-Driven App Installation:** Say *"Install VLC"* or *"Install Blender"* and Murmur AI handles installation silently through native package managers (`winget`, `brew`, `flatpak`, `snap`, `apt`, `dnf`, `pacman`), falling back to visual browser navigation if needed.
+* **Voice in, voice out.** `webrtcvad` catches when you start and stop talking, `faster-whisper` turns the audio into text, and `Kokoro-82M` speaks the reply. Start talking mid-reply and it stops.
+* **Set-of-Marks.** `mss` grabs a frame. OpenCV and OS accessibility APIs find the controls. Numbered boxes go on the image, the vision model (`qwen2.5-vl:7b`) picks a number, and `pyautogui` clicks or types.
+* **Shortcuts first.** It checks which app is in front and uses that app's own hotkeys where it can. Fewer clicks, fewer mistakes.
+* **Installing apps.** Say *"Install VLC"* or *"Install Blender"*. It searches `winget`, `brew`, `flatpak`, `snap`, `apt`, `dnf`, or `pacman`, shows you the command, and waits for your OK. If no package exists, it falls back to the browser.
 
 ---
 
 ## Architecture
 
-Murmur AI runs a lightweight **Tauri v2** (Rust + React/TypeScript) desktop shell paired with a bundled local Python sidecar over WebSockets (`ws://127.0.0.1:8765`).
+The desktop shell is **Tauri v2** (Rust with React and TypeScript). A Python sidecar runs beside it and talks over a local WebSocket at `ws://127.0.0.1:8765`.
 
 ```text
  [ Microphone ] ──► webrtcvad + Faster-Whisper (local STT)
@@ -66,12 +70,12 @@ Murmur AI runs a lightweight **Tauri v2** (Rust + React/TypeScript) desktop shel
              Kokoro-82M TTS ──► [ Speakers ]
 ```
 
-- **Frontend:** Tauri v2 shell, React + TypeScript + Tailwind, transparent HUD pill + tray icon
-- **Backend:** Python 3.11 FastAPI sidecar with a typed WebSocket state machine (`IDLE → LISTENING → THINKING → SPEAKING`)
-- **Inference:** Ollama — `qwen2.5:7b` for voice/tool chat, `qwen2.5-vl:7b` for screen vision
-- **Voice:** faster-whisper (`base.en`, `int8`) and Kokoro-82M (with Piper / pyttsx3 fallbacks)
-- **Local cache:** models and weights live in `~/.murmur-ai/models/`
-- **Privacy:** the only network listeners are `127.0.0.1:8765` and local Ollama at `127.0.0.1:11434`; there is no third-party egress
+- **Shell:** Tauri v2, React, TypeScript, Tailwind. The HUD is a small transparent pill with a tray icon.
+- **Sidecar:** Python 3.11 and FastAPI. States move through `IDLE → LISTENING → THINKING → SPEAKING`.
+- **Models:** Ollama runs `qwen2.5:7b` for conversation and tool calls, `qwen2.5-vl:7b` for vision.
+- **Voice:** faster-whisper (`base.en`, `int8`) for speech to text, Kokoro-82M for text to speech, with Piper or pyttsx3 as fallbacks.
+- **Cache:** models and weights live in `~/.murmur-ai/models/`.
+- **Network:** the only listeners are `127.0.0.1:8765` and Ollama at `127.0.0.1:11434`. Nothing phones home.
 
 Full architecture rules live in [AGENTS.md](AGENTS.md).
 
@@ -93,18 +97,18 @@ Every installer is built from source by GitHub Actions in `.github/workflows/rel
 
 ## Quick start
 
-1. **Install [Ollama](https://ollama.com).** The first-run setup card detects it and offers a one-click install if missing.
-2. **Pull the two local models.** The setup card does this with live progress, or run it manually:
+1. **[Install Ollama](https://ollama.com).** Setup checks for it and offers to install it if it's missing.
+2. **Pull the two models.** Setup handles this with progress bars, or do it yourself:
 
    ```bash
    ollama pull qwen2.5:7b
    ollama pull qwen2.5-vl:7b
    ```
 
-3. **Grant OS permissions.** macOS: Accessibility + Screen Recording. Linux: X11 (XTest) or a Wayland portal. Windows: none required.
+3. **Allow screen access.** On macOS, turn on Accessibility and Screen Recording. On Linux, you need X11 (XTest) or a Wayland portal. Windows needs nothing extra.
 4. **Start talking.** Try *"Install Blender"*, *"What's on my screen?"*, or *"Open DaVinci and import the clips"*.
 
-First launch also caches Whisper and Kokoro weights into `~/.murmur-ai/models/`.
+First launch also saves Whisper and Kokoro weights under `~/.murmur-ai/models/`.
 
 ---
 
@@ -116,7 +120,7 @@ First launch also caches Whisper and Kokoro weights into `~/.murmur-ai/models/`.
 | CPU | 4 cores with AVX2 | 8 cores |
 | RAM | 8 GB | 16 GB+ |
 | Storage | ~8 GB free for models and weights | 20 GB SSD |
-| GPU | Not required — CPU inference works | NVIDIA or Apple Silicon for lower latency |
+| GPU | Not needed; CPU inference works | NVIDIA or Apple Silicon for lower latency |
 | Microphone | Any input device | Noise-cancelling |
 
 ---
@@ -124,9 +128,9 @@ First launch also caches Whisper and Kokoro weights into `~/.murmur-ai/models/`.
 ## Privacy by design
 
 * No cloud inference, no paid APIs, no analytics, no crash reporting.
-* Audio, transcripts, and screenshots stay in memory or on your local disk.
-* Destructive actions always require explicit confirmation — spoken or via the HUD.
-* You can clear local state at any time.
+* Audio, transcripts, and screenshots stay in memory or on your disk.
+* Destructive actions wait for your OK, spoken or clicked.
+* Clear local state whenever you want.
 
 ---
 
@@ -150,10 +154,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for ground rules and the definition of do
 
 ## Contributing
 
-Contributions are welcome, especially improvements to accessibility, visual grounding, and support for more applications. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. By contributing you agree that your work is licensed under the MIT License.
+Contributions are welcome. Accessibility fixes, better screen grounding, and support for more apps all help. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Contributing means you agree to the [MIT License](LICENSE).
 
 ## License
 
 [MIT](LICENSE) © Murmur AI contributors.
 
-<div align="center"><sub>Built for people who want an assistant, not a data pipeline.</sub></div>
+<div align="center"><sub>Made for getting things done on your own machine.</sub></div>

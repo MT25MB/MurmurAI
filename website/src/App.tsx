@@ -52,9 +52,10 @@ export default function App() {
               </h1>
 
               <p className="rise delay-2 mt-6 max-w-xl text-base leading-relaxed text-muted">
-                Murmur AI is an open-source desktop agent that listens, thinks, and
-                operates your machine — using local models only. Nothing leaves your
-                device. No subscription, no cloud API, no data collection.
+                Murmur AI is an open-source assistant that takes your voice commands
+                and acts on them: opening apps, clicking through Blender, reading a
+                dialog out loud. Every model runs on your machine. Your files and
+                voice never go anywhere. No subscription, no account, no cloud.
               </p>
 
               <div id="download" className="rise delay-3 mt-9 scroll-mt-24">

@@ -139,12 +139,12 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
     return (
       <div className="flex h-full w-full items-center justify-center bg-obsidian p-4 text-muted" role="main" aria-label="Murmur AI setup error">
         <div className="w-full max-w-md rounded-2xl border border-red/35 bg-red-deep/30 p-6 text-center" role="alert" aria-live="assertive" aria-labelledby="backend-error-title">
-          <p id="backend-error-title" className="text-sm font-semibold text-red">Backend not reachable</p>
+          <p id="backend-error-title" className="text-sm font-semibold text-red">Can't reach the local backend</p>
           <p className="mt-1 text-xs text-red/80">{loadError}</p>
           <button
             type="button"
             onClick={refresh}
-            aria-label="Retry connecting to the local Murmur AI backend"
+            aria-label="Try connecting to the local backend again"
             className="mt-4 rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-white hover:bg-surface-2"
           >
             Retry
@@ -157,7 +157,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   if (!status) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-obsidian text-muted" role="status" aria-live="polite">
-        <p className="text-sm">Checking your local environment…</p>
+        <p className="text-sm">Checking what's installed…</p>
       </div>
     );
   }
@@ -167,22 +167,22 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
       ok: status.ollama.running,
       label: "Ollama running",
       detail: status.ollama.running
-        ? "Local inference server is ready."
+        ? "Up and running."
         : status.ollama.installed
-          ? "Ollama is installed but not running — start it and retry."
-          : "Ollama is not installed.",
+          ? "Installed, but not running. Start Ollama, then check again."
+          : "Not installed yet.",
     },
     ...status.required_models.map((m) => ({
       ok: status.models[m],
       label: m,
-      detail: status.models[m] ? "Ready." : status.model_labels[m] || "Not downloaded.",
+      detail: status.models[m] ? "Installed." : status.model_labels[m] || "Not downloaded yet.",
     })),
     {
       ok: status.weights_ready,
       label: "Local voice weights",
       detail: status.weights_ready
-        ? "Whisper + Kokoro cached."
-        : "Downloading on first launch into your local cache.",
+        ? "Whisper and Kokoro are saved locally."
+        : "We'll fetch these on first launch.",
     },
   ];
 
@@ -203,13 +203,13 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
           <img src={logoUrl} alt="" aria-hidden="true" className="h-11 w-11 object-contain" />
           <div>
             <h1 id="setup-title" className="text-lg font-semibold tracking-tight text-white">Welcome to Murmur AI</h1>
-            <p id="setup-intro" className="text-xs text-muted">One-time local setup. Nothing leaves this device.</p>
+            <p id="setup-intro" className="text-xs text-muted">A one-time setup on this machine. Your stuff stays here.</p>
           </div>
         </div>
 
         {/* Screen-reader summary of overall readiness. */}
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {allReady ? "All requirements are ready." : `Setup incomplete. Missing: ${missing.join(", ")}.`}
+          {allReady ? "You're all set." : `Still needed: ${missing.join(", ")}.`}
         </p>
 
         {/* Environment checks */}
@@ -324,7 +324,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
             <button
               type="button"
               onClick={testMic}
-              aria-label="Test microphone. Speak after starting; stops after five seconds."
+              aria-label="Test your microphone. Talk after starting; it stops after five seconds."
               className="shrink-0 rounded-md bg-surface-2 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-surface-2"
             >
               Test mic
@@ -343,7 +343,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
               />
             </div>
             <span className="w-16 text-right text-[10px] text-muted" aria-live="polite">
-              {micState === "error" ? "Denied" : micState === "done" ? "Done" : micState === "listening" ? "Speak…" : "Idle"}
+              {micState === "error" ? "Blocked" : micState === "done" ? "Done" : micState === "listening" ? "Go ahead, talk" : "Ready"}
             </span>
           </div>
         </section>
@@ -383,10 +383,10 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
               onClick={handlePermissions}
               disabled={busy}
               aria-busy={busy}
-              aria-label="Check or request operating system accessibility permissions"
+              aria-label="Check your system permissions, or ask for them"
               className="mt-2 w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-50"
             >
-              Check / request permissions
+              Check permissions
             </button>
           </section>
         )}
@@ -402,10 +402,10 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
           onClick={handleFinish}
           disabled={busy || !allReady || !permsReady}
           aria-busy={busy}
-          aria-label={allReady ? "Finish setup and start Murmur AI" : `Setup incomplete. Missing: ${missing.join(", ")}.`}
+          aria-label={allReady ? "Finish setup and start Murmur AI" : `Still needed: ${missing.join(", ")}.`}
           className="mt-6 w-full rounded-lg bg-blue-fill px-4 py-3 text-sm font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {allReady ? "Finish setup" : "Complete the steps above"}
+          {allReady ? "Start Murmur AI" : "Finish the steps above"}
         </button>
       </div>
     </div>

@@ -4,25 +4,25 @@ const steps = [
   {
     n: "01",
     title: "Install Ollama",
-    body: "The local inference server. Murmur AI detects it on first launch and offers a one-click install if it's missing.",
+    body: "This is the engine that runs the models. Murmur AI checks for it on first launch and offers to install it if it can't find it.",
     code: "# macOS / Windows\nbrew install ollama      # or: winget install Ollama.Ollama\n\n# Linux\ncurl -fsSL https://ollama.com/install.sh | sh",
   },
   {
     n: "02",
     title: "First-run model download",
-    body: "The setup card pulls the two required local models and caches Whisper + Kokoro weights into ~/.murmur-ai/models/. Live progress is shown for each.",
+    body: "Setup pulls the two models it needs and stores Whisper and Kokoro weights under ~/.murmur-ai/models/. You'll see a progress bar for each.",
     code: "ollama pull qwen2.5:7b        # fast voice + tool chat\nollama pull qwen2.5-vl:7b     # screen vision",
   },
   {
     n: "03",
     title: "Grant OS permissions",
-    body: "Screen control needs your OS's blessing. Murmur AI checks state and walks you through the exact settings panel.",
+    body: "Your OS decides whether an app can read the screen and move the mouse. Murmur AI checks what's already allowed and points you to the right settings screen.",
     code: "macOS   → Accessibility + Screen Recording\nLinux   → X11 (XTest) or Wayland portal capture\nWindows → no extra permission required",
   },
   {
     n: "04",
     title: "Talk to your computer",
-    body: "The floating HUD pill listens, thinks, acts, and speaks — entirely on-device. Say “install Blender” or “what's on my screen?”",
+    body: "The small HUD at the bottom of your screen listens, answers, and gets to work. Try “install Blender” or “what's on my screen?”",
     code: "you  →  “open DaVinci and import the clips”\nai   →  LISTENING → THINKING → EXECUTING → done",
   },
 ];
@@ -34,7 +34,7 @@ export default function QuickStart() {
         <div className="flex flex-col gap-3">
           <span className="mono-label"><span className="text-red">03</span> / quick start</span>
           <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-            From zero to voice-controlled in <span className="text-blue">four steps</span>.
+            Up and running in <span className="text-blue">four steps</span>.
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted">
             No API keys. No accounts. No cloud. If you can install Ollama, you can run Murmur AI.
@@ -59,7 +59,7 @@ export default function QuickStart() {
         <div id="docs" className="mt-8 flex flex-col items-start justify-between gap-5 rounded-2xl border border-border bg-gradient-to-br from-blue-deep/25 to-transparent p-6 sm:flex-row sm:items-center sm:p-8">
           <div>
             <p className="text-lg font-semibold text-ink">Want the full architecture and agent rules?</p>
-            <p className="mt-1 text-sm text-muted">The repository&apos;s AGENTS.md documents every module, safety gate, and design decision.</p>
+            <p className="mt-1 text-sm text-muted">AGENTS.md covers every module, safety gate, and design choice in the repo.</p>
           </div>
           <a
             href={`${REPO_URL}#readme`}
