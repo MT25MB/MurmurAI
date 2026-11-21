@@ -33,6 +33,21 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux system dependencies for cargo check
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            portaudio19-dev \
+            python3-tk \
+            xvfb
+
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
