@@ -20,7 +20,7 @@ mss>=10.0
 Pillow>=10.0
 
 # SoM visual grounding (local only)
-opencv-python-headless>=4.9
+opencv-python-headless>=5.1.0.95
 pygetwindow>=0.0.9
 # Platform-specific accessibility (install the one for your OS):
 #   Windows: pywinauto>=0.6.8
