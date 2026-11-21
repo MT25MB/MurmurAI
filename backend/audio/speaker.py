@@ -16,7 +16,7 @@ import numpy as np
 
 try:  # pragma: no cover - platform optional
     import sounddevice as sd
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     sd = None  # type: ignore
 
 logger = logging.getLogger("murmur_ai.audio.speaker")

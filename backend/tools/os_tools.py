@@ -16,12 +16,12 @@ from pathlib import Path
 
 try:  # pragma: no cover - platform optional
     import pyautogui
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     pyautogui = None
 
 try:  # pragma: no cover - platform optional
     import mss
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     mss = None
 
 import base64

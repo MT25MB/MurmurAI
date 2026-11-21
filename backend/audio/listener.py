@@ -16,17 +16,17 @@ import numpy as np
 
 try:  # pragma: no cover - platform optional
     import sounddevice as sd
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     sd = None  # type: ignore
 
 try:  # pragma: no cover - platform optional
     import webrtcvad
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     webrtcvad = None  # type: ignore
 
 try:  # pragma: no cover - platform optional
     from faster_whisper import WhisperModel
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     WhisperModel = None  # type: ignore
 
 logger = logging.getLogger("murmur_ai.audio.listener")

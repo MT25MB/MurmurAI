@@ -34,12 +34,12 @@ import numpy as np
 
 try:  # pragma: no cover - platform optional
     import mss
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     mss = None  # type: ignore
 
 try:  # pragma: no cover - platform optional
     import pyautogui
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     pyautogui = None  # type: ignore
 
 import httpx

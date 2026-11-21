@@ -99,13 +99,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Create sidecar placeholders (gitignored)
-        # The prepare script skips when CI=true (to avoid clobbering real
-        # PyInstaller sidecars in the release job). This CI job has no real
-        # sidecars, so force placeholders for cargo check's externalBin validation.
-        env:
-          CI: ""
-          GITHUB_ACTIONS: ""
-        run: node scripts/prepare-sidecar.mjs
+        # GitHub forces CI=true, and prepare-sidecar.mjs deliberately skips in CI
+        # (so it can't overwrite real PyInstaller sidecars in the release job).
+        # This check job has no real sidecars, so create them directly.
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          for t in x86_64-pc-windows-msvc.exe x86_64-apple-darwin \
+                   aarch64-apple-darwin x86_64-unknown-linux-gnu \
+                   aarch64-unknown-linux-gnu; do
+            printf 'PLACEHOLDER - replaced by PyInstaller in the release workflow\n' \
+              > "src-tauri/binaries/murmur-backend-${t}"
+          done
 
       - name: Cargo check
         working-directory: src-tauri

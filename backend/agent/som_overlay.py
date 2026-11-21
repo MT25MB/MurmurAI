@@ -24,7 +24,7 @@ from typing import Optional
 try:  # pragma: no cover - platform optional
     import cv2
     import numpy as np
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     cv2 = None  # type: ignore
     np = None  # type: ignore
 
