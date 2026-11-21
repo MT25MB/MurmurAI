@@ -15,7 +15,7 @@ export default function App() {
 
   if (ready === null) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-[#07070b] text-sm text-zinc-500">
+      <div className="flex h-full w-full items-center justify-center bg-obsidian text-sm text-muted" role="status" aria-live="polite">
         Checking setup…
       </div>
     );

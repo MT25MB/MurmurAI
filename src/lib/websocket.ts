@@ -13,7 +13,9 @@ export type ClientMessage =
   | { type: "state" }
   | { type: "text_input"; text: string }
   | { type: "audio_chunk"; data: string }
-  | { type: "confirm"; request_id: string; approved: boolean };
+  | { type: "confirm"; request_id: string; approved: boolean }
+  | { type: "guidance_response"; request_id: string; text: string }
+  | { type: "abort_automation"; text?: string };
 
 /** Messages the backend may send to the HUD. */
 export type ServerMessage =
@@ -27,6 +29,8 @@ export type ServerMessage =
       description: string;
       command: string;
     }
+  | { type: "guidance_required"; request_id: string; text: string }
+  | { type: "automation_stopped"; text: string }
   | { type: "progress"; text: string; percent?: number }
   | { type: "error"; detail: string }
   | { type: "info"; text: string };

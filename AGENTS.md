@@ -41,6 +41,34 @@ This file is the source of truth for every coding agent and human contributor.
   backend's `/health` and WebSocket control plane boot even when heavy models or
   system packages are not installed. Never add a cloud API key or paid endpoint.
 
+### Accessibility (first-class)
+- `describe_screen(focus)` in `agent/vision_agent.py` captures the screen and
+  queries the VLM with a blind-optimized prompt, then speaks the result through
+  `audio/speaker.py` (shared via `audio/speaker_provider.py`).
+- `CONFIRMATION_REQUIRED` events are spoken aloud with the exact action and
+  verbal choices ("yes, confirm" / "no, cancel"); verbal responses are parsed in
+  `main.py::_try_verbal_confirmation` alongside UI/Enter/Escape approval.
+- Toggleable earcons (`audio/speaker.py::chime`) give short tones for
+  listening/thinking/speaking/confirmation/error (`MURMUR_AI_EARCONS=1`).
+- HUD + onboarding use ARIA roles, polite/assertive live regions,
+  `role=progressbar`/`meter`, keyboard shortcuts (M mute, Enter approve,
+  Escape cancel), and 3px high-contrast focus rings.
+
+### Visual agent planning, loop recovery & abort
+- `agent/task_plan.py` decomposes multi-step goals into ordered subgoals
+  (LLM with deterministic comma/list fallback); only the active subgoal and a
+  bounded `format_history()` (last 6 steps, brief outcomes) go to the VLM.
+- `agent/loop_detector.py` fingerprints actions + average-hash screenshots;
+  repeated actions or static screens on the same subgoal trigger recovery:
+  first an alternative-path hint (shortcut/menu), then a spoken
+  `guidance_required` question via the event bus (or graceful abort on timeout).
+- `agent/abort.py` is a shared thread-safe `abort_controller`. PyAutoGUI's corner
+  failsafe, the `stop_automation` tool, dedicated spoken phrases ("stop
+  automation"/"abort task"), and the HUD Stop button all abort the loop, clear
+  pending actions, and announce "Automation stopped" via `automation_stopped`.
+- New WS messages: `guidance_required`/`guidance_response`, `automation_stopped`,
+  `abort_automation`.
+
 ---
 
 ## 2. Repository layout
@@ -73,8 +101,11 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ audio/{__init__.py,listener.py,speaker.py}
-   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,shortcuts.json}
+   ├─ tests/                 # pytest suite: safety, tools/audio interfaces,
+   │                         #   SoM mapping, WS broadcasts, planning/abort
+   ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
+   ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py}
+   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,shortcuts.json}
    ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py}
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec

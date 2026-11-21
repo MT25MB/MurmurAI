@@ -137,12 +137,14 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
 
   if (loadError && !status) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-obsidian p-4 text-muted">
-        <div className="w-full max-w-md rounded-2xl border border-red/35 bg-red-deep/30 p-6 text-center">
-          <p className="text-sm font-semibold text-red">Backend not reachable</p>
+      <div className="flex h-full w-full items-center justify-center bg-obsidian p-4 text-muted" role="main" aria-label="Murmur AI setup error">
+        <div className="w-full max-w-md rounded-2xl border border-red/35 bg-red-deep/30 p-6 text-center" role="alert" aria-live="assertive" aria-labelledby="backend-error-title">
+          <p id="backend-error-title" className="text-sm font-semibold text-red">Backend not reachable</p>
           <p className="mt-1 text-xs text-red/80">{loadError}</p>
           <button
+            type="button"
             onClick={refresh}
+            aria-label="Retry connecting to the local Murmur AI backend"
             className="mt-4 rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-white hover:bg-surface-2"
           >
             Retry
@@ -154,7 +156,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
 
   if (!status) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-obsidian text-muted">
+      <div className="flex h-full w-full items-center justify-center bg-obsidian text-muted" role="status" aria-live="polite">
         <p className="text-sm">Checking your local environment…</p>
       </div>
     );
@@ -186,26 +188,38 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
 
   const allReady = checks.every((c) => c.ok);
   const permsReady = !permissions || permissions.items.every((p) => p.granted !== false);
+  const missing = checks.filter((c) => !c.ok).map((c) => c.label);
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-obsidian p-5 text-ink">
-      <div className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface/95 p-6 shadow-2xl ring-1 ring-white/5">
+    <div className="h-full w-full overflow-y-auto bg-obsidian p-5 text-ink" role="main" aria-label="Murmur AI first-run setup" aria-busy={busy}>
+      <div
+        className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface/95 p-6 shadow-2xl ring-1 ring-white/5"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="setup-title"
+        aria-describedby="setup-intro"
+      >
         <div className="flex items-center gap-3">
           <img src={logoUrl} alt="" aria-hidden="true" className="h-11 w-11 object-contain" />
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">Welcome to Murmur AI</h1>
-            <p className="text-xs text-muted">One-time local setup. Nothing leaves this device.</p>
+            <h1 id="setup-title" className="text-lg font-semibold tracking-tight text-white">Welcome to Murmur AI</h1>
+            <p id="setup-intro" className="text-xs text-muted">One-time local setup. Nothing leaves this device.</p>
           </div>
         </div>
+
+        {/* Screen-reader summary of overall readiness. */}
+        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {allReady ? "All requirements are ready." : `Setup incomplete. Missing: ${missing.join(", ")}.`}
+        </p>
 
         {/* Environment checks */}
         <section className="mt-6">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Environment
           </h2>
-          <div className="mt-2 space-y-1.5">
+          <ul className="mt-2 space-y-1.5" role="list">
             {checks.map((c) => (
-              <div
+              <li
                 key={c.label}
                 className="flex items-center gap-3 rounded-lg border border-border bg-surface/60 px-3 py-2"
               >
@@ -213,23 +227,28 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
                     c.ok ? "bg-blue/20 text-blue" : "bg-red/20 text-red"
                   }`}
+                  aria-hidden="true"
                 >
                   {c.ok ? "✓" : "!"}
                 </span>
+                <span className="sr-only">{c.ok ? "Ready:" : "Missing:"}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-white">{c.label}</p>
                   <p className="truncate text-[11px] text-muted">{c.detail}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
 
         {/* Ollama install */}
         {!status.ollama.installed && (
           <button
+            type="button"
             onClick={handleInstallOllama}
             disabled={busy}
+            aria-busy={busy}
+            aria-label="Install Ollama locally"
             className="mt-4 w-full rounded-lg bg-blue-fill px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
           >
             Install Ollama
@@ -260,7 +279,9 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                     </span>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handlePull(m)}
+                      aria-label={`Download the ${m} model. ${status.model_labels[m]}.`}
                       className="shrink-0 rounded-md bg-blue-fill px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                     >
                       Pull
@@ -268,18 +289,25 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                   )}
                 </div>
                 {pull?.model === m && (
-                  <div className="mt-2">
-                    <p className="truncate text-[11px] text-blue" title={pull.text}>
+                  <div className="mt-2" aria-live="polite">
+                    <p className="truncate text-[11px] text-blue" title={pull.text} aria-hidden="true">
                       {pull.text}
                     </p>
-                    {pull.percent !== null && (
+                    <div
+                      role="progressbar"
+                      aria-label={`Download progress for ${m}`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={pull.percent ?? 0}
+                    >
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                         <div
                           className="h-full rounded-full bg-blue-fill transition-all duration-200"
-                          style={{ width: `${pull.percent}%` }}
+                          style={{ width: `${pull.percent ?? 0}%` }}
                         />
                       </div>
-                    )}
+                    </div>
+                    <span className="sr-only">{pull.text}</span>
                   </div>
                 )}
               </div>
@@ -294,18 +322,27 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
           </h2>
           <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-surface/60 p-3">
             <button
+              type="button"
               onClick={testMic}
+              aria-label="Test microphone. Speak after starting; stops after five seconds."
               className="shrink-0 rounded-md bg-surface-2 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-surface-2"
             >
               Test mic
             </button>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2"
+              role="meter"
+              aria-label="Microphone input level"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(micLevel * 100)}
+            >
               <div
                 className="h-full rounded-full bg-blue-fill transition-all duration-75"
                 style={{ width: `${micLevel * 100}%` }}
               />
             </div>
-            <span className="w-16 text-right text-[10px] text-muted">
+            <span className="w-16 text-right text-[10px] text-muted" aria-live="polite">
               {micState === "error" ? "Denied" : micState === "done" ? "Done" : micState === "listening" ? "Speak…" : "Idle"}
             </span>
           </div>
@@ -342,8 +379,11 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
               ))}
             </div>
             <button
+              type="button"
               onClick={handlePermissions}
               disabled={busy}
+              aria-busy={busy}
+              aria-label="Check or request operating system accessibility permissions"
               className="mt-2 w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-50"
             >
               Check / request permissions
@@ -351,11 +391,18 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
           </section>
         )}
 
-        {loadError && <p className="mt-3 text-[11px] text-red-400">{loadError}</p>}
+        {loadError && (
+          <p className="mt-3 rounded-md border border-red/30 bg-red-deep/20 p-2 text-[11px] text-red" role="alert" aria-live="assertive">
+            {loadError}
+          </p>
+        )}
 
         <button
+          type="button"
           onClick={handleFinish}
           disabled={busy || !allReady || !permsReady}
+          aria-busy={busy}
+          aria-label={allReady ? "Finish setup and start Murmur AI" : `Setup incomplete. Missing: ${missing.join(", ")}.`}
           className="mt-6 w-full rounded-lg bg-blue-fill px-4 py-3 text-sm font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {allReady ? "Finish setup" : "Complete the steps above"}

@@ -18,7 +18,10 @@ class ClientMessage(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    type: Literal["ping", "state", "text_input", "audio_chunk", "confirm"]
+    type: Literal[
+        "ping", "state", "text_input", "audio_chunk", "confirm",
+        "guidance_response", "abort_automation",
+    ]
     text: str | None = None
     data: str | None = None  # base64 audio chunk
     request_id: str | None = None
@@ -34,6 +37,8 @@ class ServerMessage(BaseModel):
         "text_output",
         "audio_ack",
         "confirmation_required",
+        "guidance_required",
+        "automation_stopped",
         "progress",
         "pull_progress",
         "pull_complete",

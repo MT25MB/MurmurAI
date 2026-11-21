@@ -53,10 +53,37 @@ body {
   color: #fff;
 }
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-blue);
-  outline-offset: 2px;
+/* High-contrast keyboard focus: 3px ring + offset, visible on every control. */
+:where(a, button, summary, [tabindex], select, input):focus-visible {
+  outline: 3px solid var(--color-blue);
+  outline-offset: 3px;
   border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--color-obsidian), 0 0 0 6px rgba(85, 152, 249, 0.28);
+}
+
+/* Visually hidden but available to screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Respect Windows high-contrast / forced-colors mode. */
+@media (forced-colors: active) {
+  :where(a, button, summary, [tabindex], select, input):focus-visible {
+    outline: 3px solid Highlight;
+  }
+  .panel,
+  [role="dialog"],
+  [role="alert"] {
+    border: 1px solid CanvasText;
+  }
 }
 
 /* Drag regions: the whole pill drags; explicit controls opt out. */

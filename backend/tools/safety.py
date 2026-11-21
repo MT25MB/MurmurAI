@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import subprocess  # module-level so execution can be mocked in tests
 from typing import Callable
 
 logger = logging.getLogger("murmur_ai.safety")

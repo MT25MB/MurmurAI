@@ -22,11 +22,37 @@ import httpx
 from tools.os_tools import OS_TOOLS, dispatch_tool
 from tools.installer_tool import INSTALL_TOOLS
 from tools.safety import SafetyGate
+from agent.vision_agent import DESCRIBE_TOOL
+from agent.abort import abort_controller, is_abort_phrase
 
 logger = logging.getLogger("murmur_ai.agent.brain")
 
-# All tools exposed to the local Ollama model (OS control + app installer).
-ALL_TOOLS = OS_TOOLS + INSTALL_TOOLS
+STOP_TOOL = [
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_automation",
+            "description": (
+                "Immediately stop any running GUI/vision automation. Use when the "
+                "user says stop, abort, cancel the task, or wants the agent to halt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "Why automation is being stopped.",
+                    }
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+# All tools exposed to the local Ollama model (OS control + installer + a11y + abort).
+ALL_TOOLS = OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + STOP_TOOL
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
 
@@ -47,6 +73,11 @@ Available local tools:
 - install_application(app_name): install an app via native silent package managers
   (winget/choco/brew/flatpak/snap/apt). The user is asked to approve before any
   install runs. If the app is not found, it installs via the browser visually.
+- describe_screen(focus): describe the current screen ALOUD for a blind or
+  low-vision user. Use it when they ask what's on screen, to read a dialog/error,
+  or to find the focused control. The result is spoken automatically.
+- stop_automation(reason): immediately stop any running GUI/vision automation.
+  Use it whenever the user wants to stop, abort, or cancel an ongoing task.
 
 ReAct loop: think about what the user wants, pick ONE tool at a time (or none),
 execute it, observe the result, then reply. If a tool says confirmation is
@@ -105,6 +136,14 @@ class Brain:
         screen_base64: str | None = None,
     ) -> str:
         """One full ReAct turn. Returns the final spoken response text."""
+        # Hard safety: an explicit abort phrase halts automation before any
+        # model call, so it works even while a vision loop is spinning.
+        if is_abort_phrase(user_text):
+            abort_controller.abort("user said stop")
+            return self._clean_for_voice(
+                "Stopping automation. Everything is halted. What would you like me to do instead?"
+            )
+
         history = conversation_history or []
         messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(history)
@@ -135,6 +174,10 @@ class Brain:
                 args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
             except json.JSONDecodeError:
                 args = {}
+
+            if name == "stop_automation":
+                abort_controller.abort(args.get("reason", "user requested"))
+                return self._clean_for_voice("Automation stopped. Everything is halted.")
 
             result = dispatch_tool(name, args, self.safety)
 

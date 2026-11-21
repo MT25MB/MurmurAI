@@ -168,6 +168,10 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
         from .installer_tool import install_application
 
         return install_application(arguments.get("app_name", ""))
+    if name == "describe_screen":
+        from agent.vision_agent import describe_screen
+
+        return describe_screen(arguments.get("focus", "overview"))
     return f"Unknown tool: {name}"
 
 

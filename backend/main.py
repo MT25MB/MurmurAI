@@ -25,6 +25,8 @@ from agent.brain import Brain
 from agent.state import SessionState, ServerMessage
 from audio.listener import VoiceListener
 from audio.speaker import LocalSpeaker
+from audio.speaker_provider import set_speaker as register_speaker
+from agent.abort import abort_controller, is_abort_phrase
 from tools.safety import SafetyGate
 from tools.event_bus import tool_bus
 import setup as setup_module
@@ -74,12 +76,18 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     app_state.loop = loop
 
-    # Wire the tool event bus so tools can push progress to all HUDs.
+    # Wire the tool event bus so tools can push progress to all HUDs and
+    # speak confirmation prompts aloud for blind/low-vision users.
     def emit_from_tool(message: ServerMessage) -> None:
         if loop.is_running():
             asyncio.run_coroutine_threadsafe(broadcast_to_huds(message), loop)
 
-    tool_bus.configure(loop, emit_from_tool)
+    def speak_from_tool(text: str) -> None:
+        speaker = app_state.speaker
+        if speaker is not None:
+            speaker.speak(text)
+
+    tool_bus.configure(loop, emit_from_tool, speak_fn=speak_from_tool)
 
     logger.info("Murmur AI backend starting on %s:%s", BACKEND_HOST, BACKEND_PORT)
     try:
@@ -88,10 +96,12 @@ async def lifespan(app: FastAPI):
             kokoro_voice=os.getenv("KOKORO_VOICE", "af_heart"),
             piper_model=os.getenv("PIPER_MODEL") or None,
         )
+        register_speaker(app_state.speaker)
         logger.info("TTS speaker initialized")
     except Exception:
         logger.exception("TTS speaker init failed; continuing without TTS")
         app_state.speaker = None
+        register_speaker(None)
 
     # On first launch, download local STT/TTS weights into ~/.murmur-ai/models/.
     # Runs in the background so the control plane starts immediately.
@@ -312,6 +322,21 @@ async def ws(websocket: WebSocket):
                     # Legacy safety-gate confirmation: re-run the brain with approval.
                     await handle_confirm(session, send, msg.request_id, bool(msg.approved))
 
+            elif msg.type == "guidance_response":
+                # Free-text answer to a spoken "I'm stuck, what should I do?" prompt.
+                if tool_bus.resolve_guidance(msg.request_id or "", msg.text or ""):
+                    await send(ServerMessage(type="info", text="Guidance received."))
+
+            elif msg.type == "abort_automation":
+                # UI abort button: halt the running vision loop immediately.
+                abort_controller.abort(msg.text or "user pressed stop in the HUD")
+                await send(
+                    ServerMessage(
+                        type="automation_stopped",
+                        text=f"Automation stopped. {abort_controller.reason}",
+                    )
+                )
+
             elif msg.type == "audio_chunk":
                 # Streaming audio from the HUD (optional path).
                 logger.debug("Received audio chunk (%s bytes)", len(msg.data or ""))
@@ -333,6 +358,11 @@ async def handle_text_input(
 ) -> None:
     """Full voice turn: transcribe already done; think, act, speak."""
     session.add_turn("user", text)
+    # If the user is answering a spoken confirmation, handle it here instead of
+    # sending "yes"/"no" to the model.
+    if _try_verbal_confirmation(text) is not None:
+        await send(ServerMessage(type="text_output", text=text))
+        return
     await _set_state(send, session, "THINKING")
 
     try:
@@ -382,10 +412,82 @@ async def handle_confirm(
     session.pending.pop(request_id, None)
 
 
+# ---- verbal confirmation ----
+
+import re as _re
+
+_YES_RE = _re.compile(
+    r"\b(yes|yeah|yep|yup|confirm|confirmed|approve|approved|okay|ok|"
+    r"sure|go ahead|do it|allow|please do|yes please|yes confirm)\b",
+    _re.IGNORECASE,
+)
+_NO_RE = _re.compile(
+    r"\b(no|nope|nah|never|cancel|cancelled|deny|denied|stop|abort|"
+    r"don't|do not|no cancel|no thanks)\b",
+    _re.IGNORECASE,
+)
+
+
+def _try_verbal_confirmation(text: str) -> Optional[bool]:
+    """If a confirmation is pending and the text says yes/no, resolve it.
+
+    Returns True if a pending confirmation was consumed (approved or denied),
+    False otherwise. 'no' takes precedence to be fail-safe.
+    """
+    pending = tool_bus.pending_ids()
+
+    # A dedicated stop phrase halts automation regardless of pending state,
+    # and denies any pending confirmation (fail-safe = no).
+    if is_abort_phrase(text):
+        abort_controller.abort("user said stop")
+        if pending:
+            tool_bus.resolve_confirmation(pending[-1], False)
+        return None
+
+    # If we're waiting for stuck-guidance, any spoken text is the answer.
+    guidance_pending = tool_bus.guidance_ids()
+    if guidance_pending and not pending:
+        tool_bus.resolve_guidance(guidance_pending[-1], text)
+        return False  # consumed as guidance, not a yes/no confirmation
+
+    if not pending:
+        return None
+    denied = bool(_NO_RE.search(text))
+    approved = bool(_YES_RE.search(text))
+    if not (denied or approved):
+        return None
+    decision = False if denied else approved
+    # Resolve the most recent pending request.
+    request_id = pending[-1]
+    tool_bus.resolve_confirmation(request_id, decision)
+    logger.info("Verbal confirmation %s for %s (heard: %r)", decision, request_id, text)
+    _chime("confirmation" if decision else "error")
+    if app_state.speaker is not None:
+        app_state.speaker.speak("Approved." if decision else "Cancelled.")
+    return decision
+
+
 # ---- state helpers ----
+
+def _chime(kind: str) -> None:
+    """Play a state-transition earcon if the user enabled them."""
+    if app_state.speaker is not None:
+        try:
+            app_state.speaker.chime(kind)
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("Earcon failed", exc_info=True)
+
 
 async def _set_state(send, session: SessionState, status: str) -> None:
     await send(ServerMessage(type="state", status=status, uptime_s=session.uptime()))
+    cue = {
+        "LISTENING": "listening",
+        "THINKING": "thinking",
+        "SPEAKING": "speaking",
+        "CONFIRMATION_REQUIRED": "confirmation",
+    }.get(status)
+    if cue:
+        _chime(cue)
 
 
 async def _speak_and_return(session: SessionState, send, reply: str) -> None:
@@ -428,6 +530,10 @@ async def start_listening(session: SessionState, send) -> None:
 
 
 async def _on_utterance_async(session, send, text: str) -> None:
+    # Verbal "yes, confirm" / "no, cancel" can answer a pending spoken prompt.
+    if _try_verbal_confirmation(text) is not None:
+        await send(ServerMessage(type="text_output", text=text))
+        return
     await _set_state(send, session, "THINKING")
     try:
         reply = await asyncio.to_thread(

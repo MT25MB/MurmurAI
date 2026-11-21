@@ -8,6 +8,7 @@ the moment the user starts talking mid-sentence. Zero cloud dependencies.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from typing import Optional
 
@@ -32,6 +33,7 @@ class LocalSpeaker:
         kokoro_voice: str = "af_heart",
         piper_model: Optional[str] = None,
         device: Optional[int] = None,
+        earcons: Optional[bool] = None,
     ):
         if sd is None:
             raise RuntimeError(
@@ -41,6 +43,11 @@ class LocalSpeaker:
         self.kokoro_voice = kokoro_voice
         self.piper_model = piper_model
         self.device = device
+        # Non-intrusive state chimes. Opt-in via constructor or
+        # MURMUR_AI_EARCONS=1; can be toggled at runtime with set_earcons().
+        if earcons is None:
+            earcons = os.getenv("MURMUR_AI_EARCONS", "0") == "1"
+        self.earcons_enabled = bool(earcons)
 
         self._engine = None  # resolved engine name
         self._kokoro = None
@@ -117,6 +124,62 @@ class LocalSpeaker:
         except Exception:  # pragma: no cover - environment dependent
             self._pyttsx3 = None
             return False
+
+    # ---- earcons (non-intrusive state chimes) ----
+
+    # Each cue is a short list of (frequency_hz, duration_s, gain) notes.
+    # Tones are gentle sine waves with a fade envelope to avoid clicks.
+    EARCON_NOTES: dict[str, list[tuple[float, float, float]]] = {
+        "listening": [(660.0, 0.06, 0.16)],
+        "thinking": [(520.0, 0.05, 0.13), (700.0, 0.05, 0.11)],
+        "speaking": [(480.0, 0.05, 0.10)],
+        "confirmation": [(740.0, 0.07, 0.15), (880.0, 0.09, 0.15)],
+        "error": [(300.0, 0.10, 0.16), (220.0, 0.14, 0.16)],
+    }
+
+    def set_earcons(self, enabled: bool) -> None:
+        """Enable or disable state chimes at runtime."""
+        self.earcons_enabled = bool(enabled)
+        logger.info("Earcons %s", "enabled" if enabled else "disabled")
+
+    def chime(self, kind: str) -> None:
+        """Play a short audio cue for a state transition (non-blocking, multiplicative).
+
+        No-op when earcons are disabled or an unknown cue is requested. Never
+        interrupts speech — chimes are short and played at low gain.
+        """
+        if not self.earcons_enabled or sd is None:
+            return
+        notes = self.EARCON_NOTES.get(kind)
+        if not notes:
+            return
+        try:
+
+            def render() -> np.ndarray:
+                chunks: list[np.ndarray] = []
+                for freq, dur, gain in notes:
+                    n = int(SAMPLE_RATE * dur)
+                    t = np.linspace(0, dur, n, endpoint=False)
+                    wave = np.sin(2 * np.pi * freq * t) * gain
+                    # Fade in/out (10% each end) to avoid audible clicks.
+                    env = np.ones(n)
+                    edge = max(1, n // 10)
+                    env[:edge] = np.linspace(0, 1, edge)
+                    env[-edge:] = np.linspace(1, 0, edge)
+                    chunks.append(wave * env)
+                    # Tiny silence between notes.
+                    chunks.append(np.zeros(int(SAMPLE_RATE * 0.02)))
+                audio = np.concatenate(chunks).astype(np.float32)
+                return audio
+
+            # Fire-and-forget in a thread so the event loop never blocks.
+            threading.Thread(
+                target=lambda: self._stream_audio(render(), SAMPLE_RATE),
+                daemon=True,
+                name="murmur_ai-earcon",
+            ).start()
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("Earcon playback failed", exc_info=True)
 
     # ---- public API ----
 

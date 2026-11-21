@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest pytest-asyncio
+
+      - name: Run backend test suite
+        working-directory: backend
+        env:
+          MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS: "0"
+        run: python -m pytest tests -q
+
+      - name: Compile all backend modules
+        working-directory: backend
+        run: python -c "import compileall, sys; sys.exit(0 if compileall.compile_dir('.', quiet=1) else 1)"
+
+      - name: Smoke-test replay helper
+        working-directory: backend
+        run: python replay_log.py --help
+
+  frontend-build:
+    name: Frontend + website type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            website/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Type-check and build app
+        run: npm run build
+
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Type-check and build website
+        working-directory: website
+        run: npm run build
+
+  tauri-check:
+    name: Tauri Rust shell check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            portaudio19-dev \
+            python3-tk
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create sidecar placeholders (gitignored)
+        # The prepare script skips when CI=true (to avoid clobbering real
+        # PyInstaller sidecars in the release job). This CI job has no real
+        # sidecars, so force placeholders for cargo check's externalBin validation.
+        env:
+          CI: ""
+          GITHUB_ACTIONS: ""
+        run: node scripts/prepare-sidecar.mjs
+
+      - name: Cargo check
+        working-directory: src-tauri
+        run: cargo check
