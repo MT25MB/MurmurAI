@@ -51,6 +51,8 @@ def test_dispatch_describe_screen_is_registered(monkeypatch):
 def test_installer_builds_winget_command(monkeypatch):
     import tools.installer_tool as it
 
+    # Force the Windows code path so this test is OS-independent (CI is Linux).
+    monkeypatch.setattr(it.platform, "system", lambda: "Windows")
     monkeypatch.setattr(it.shutil, "which", lambda name: "/usr/bin/winget" if name == "winget" else None)
     monkeypatch.setattr(
         it, "_run_capture",
