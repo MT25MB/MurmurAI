@@ -10,6 +10,13 @@ import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// In CI the real PyInstaller sidecar already exists — never create placeholders
+// there, otherwise `npm run tauri build` (via the pretauri hook) can shadow it.
+if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") {
+  console.log("CI detected — skipping sidecar placeholders (PyInstaller provides them).");
+  process.exit(0);
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const binaries = join(root, "src-tauri", "binaries");
 mkdirSync(binaries, { recursive: true });

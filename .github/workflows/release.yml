@@ -18,14 +18,11 @@ jobs:
         include:
           - platform: windows-latest
             triple: x86_64-pc-windows-msvc
-            tauri_args: --windows
           # macos-latest runners are Apple Silicon; this produces arm64 .dmg.
           - platform: macos-latest
             triple: aarch64-apple-darwin
-            tauri_args: --macos
           - platform: ubuntu-22.04
             triple: x86_64-unknown-linux-gnu
-            tauri_args: --linux
 
     runs-on: ${{ matrix.platform }}
 
@@ -122,4 +119,4 @@ jobs:
             No cloud APIs, no subscription, no telemetry. See the README for details.
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.tauri_args }}
+          args: --target ${{ matrix.triple }}
