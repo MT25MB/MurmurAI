@@ -25,6 +25,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,6 +61,58 @@ MAX_STEPS_DEFAULT = 15
 STEP_SETTLE_S = 1.5  # let heavy apps render after each action
 
 VALID_ACTIONS = {"CLICK", "DOUBLE_CLICK", "DRAG", "TYPE", "KEY", "WAIT", "FINISH"}
+
+# Global capture target shared by every ScreenController. None means "follow
+# the monitor containing the focused window" (the default).
+_active_monitor_index: Optional[int] = None
+
+
+def get_active_monitor() -> Optional[int]:
+    """Return the user-selected 1-based monitor, or None for auto/focused."""
+    return _active_monitor_index
+
+
+def set_active_monitor(index: int | str) -> str:
+    """Select the monitor used for capture. Returns a spoken confirmation."""
+    global _active_monitor_index
+    try:
+        number = int(index)
+    except (TypeError, ValueError):
+        return f"{index} is not a monitor number."
+    from tools.window_tools import get_monitors
+
+    monitors = get_monitors()
+    valid = {m["index"] for m in monitors}
+    if number not in valid:
+        return f"Monitor {number} does not exist. I can see {len(monitors)} monitor(s)."
+    _active_monitor_index = number
+    return f"Watching monitor {number}."
+
+
+def reset_active_monitor() -> None:
+    """Return to automatically following the focused window."""
+    global _active_monitor_index
+    _active_monitor_index = None
+
+
+def parse_monitor_phrase(text: str) -> Optional[int]:
+    """Parse 'look at my second monitor' / 'monitor 2' into a 1-based index."""
+    if not text:
+        return None
+    words = {
+        "first": 1, "primary": 1, "main": 1, "one": 1, "1": 1,
+        "second": 2, "two": 2, "2": 2,
+        "third": 3, "three": 3, "3": 3,
+        "fourth": 4, "four": 4, "4": 4,
+    }
+    lowered = text.lower()
+    if "monitor" not in lowered and "display" not in lowered and "screen" not in lowered:
+        return None
+    for word, number in words.items():
+        if re.search(rf"\b{word}\b", lowered):
+            return number
+    return None
+
 
 SYSTEM_PROMPT = """You are a visual computer-use agent operating a desktop GUI locally.
 You receive a screenshot of the current screen. Interactive elements may be
@@ -168,7 +221,7 @@ class StepRecord:
 class ScreenController:
     """Captures screens and executes precise GUI actions via pyautogui."""
 
-    def __init__(self, monitor_index: int = 1):
+    def __init__(self, monitor_index: Optional[int] = None):
         if mss is None:
             raise RuntimeError("mss is not installed. Run: pip install mss")
         if pyautogui is None:
@@ -176,29 +229,110 @@ class ScreenController:
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.05
         self._sct = mss.mss()
-        monitors = self._sct.monitors
-        self.monitor = monitors[monitor_index] if len(monitors) > monitor_index else monitors[0]
-        self._width = int(self.monitor["width"])
-        self._height = int(self.monitor["height"])
-        self._left = int(self.monitor["left"])
-        self._top = int(self.monitor["top"])
+        self.monitors = self._discover_monitors()
+
+        # A caller may pin a monitor; otherwise follow the user's global choice,
+        # or the monitor holding the focused window.
+        self.follow_focused = monitor_index is None and get_active_monitor() is None
+        selected = monitor_index if monitor_index is not None else get_active_monitor()
+        if selected is None:
+            selected = self.focused_monitor_index()
+        self.select_monitor(selected)
+
+    def _discover_monitors(self) -> list[dict[str, int]]:
+        """Normalize mss monitors into 1-based display descriptors."""
+        raw = list(self._sct.monitors or [])
+        if not raw:
+            raw = [{"left": 0, "top": 0, "width": 1920, "height": 1080}]
+        # mss.monitors[0] is the virtual rectangle spanning every display.
+        actual = raw[1:] if len(raw) > 1 else raw
+        return [
+            {
+                "index": index,
+                "left": int(mon["left"]),
+                "top": int(mon["top"]),
+                "width": int(mon["width"]),
+                "height": int(mon["height"]),
+            }
+            for index, mon in enumerate(actual, start=1)
+        ]
+
+    def focused_monitor_index(self) -> int:
+        """Return the monitor containing the currently focused window."""
+        try:
+            from tools.window_tools import list_windows, monitor_for_rect
+
+            focused = next((w for w in list_windows() if w.focused), None)
+            if focused is not None:
+                return monitor_for_rect(
+                    focused.left, focused.top, focused.width, focused.height,
+                    self.monitors,
+                )
+        except Exception:
+            logger.debug("Focused monitor detection failed", exc_info=True)
+        return 1
+
+    def select_monitor(self, index: int) -> None:
+        """Pin capture and click mapping to a 1-based monitor index."""
+        monitor = next((m for m in self.monitors if m["index"] == index), self.monitors[0])
+        self.monitor_index = monitor["index"]
+        # mss.grab expects a dict with left/top/width/height.
+        self.monitor = {
+            "left": monitor["left"],
+            "top": monitor["top"],
+            "width": monitor["width"],
+            "height": monitor["height"],
+        }
+        self._width = monitor["width"]
+        self._height = monitor["height"]
+        self._left = monitor["left"]
+        self._top = monitor["top"]
         logger.info(
             "ScreenController on monitor %s: %dx%d at (%d,%d)",
-            monitor_index, self._width, self._height, self._left, self._top,
+            self.monitor_index, self._width, self._height, self._left, self._top,
         )
 
-    def capture(self, max_dim: int = 1280) -> tuple[bytes, int, int]:
+    def list_monitors(self) -> list[dict[str, int]]:
+        return list(self.monitors)
+
+    def _sync_monitor(self) -> None:
+        selected = get_active_monitor()
+        if selected is not None:
+            if selected != self.monitor_index:
+                self.select_monitor(selected)
+        elif self.follow_focused:
+            target = self.focused_monitor_index()
+            if target != self.monitor_index:
+                self.select_monitor(target)
+
+    def capture(self, max_dim: Optional[int] = None) -> tuple[bytes, int, int]:
+        self._sync_monitor()
         shot = self._sct.grab(self.monitor)
         img = np.array(shot)  # BGRA
         h, w = img.shape[:2]
-        if max(w, h) > max_dim:
-            scale = max_dim / max(w, h)
-            new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
-            img = self._downscale(img, new_w, new_h)
-            h, w = img.shape[:2]
         rgb = img[:, :, :3][:, :, ::-1].copy()  # BGRA->RGB
+        pil = self._array_to_pil(rgb)
+
+        # Adaptive cap from the hardware profile. Downscaling before base64
+        # encoding cuts VLM inference time substantially on 4K/high-DPI screens.
+        if max_dim is None:
+            try:
+                max_dim = int(os.getenv("MURMUR_MAX_SCREEN_DIM", "1280"))
+            except ValueError:
+                max_dim = 1280
+
+        if max_dim > 0 and max(w, h) > max_dim:
+            # Aspect-preserving LANCZOS resize. Callers stay in normalized
+            # 0-1000 coordinates so Set-of-Marks mapping is unaffected.
+            from system.profiler import downscale_png
+
+            raw = io.BytesIO()
+            pil.save(raw, format="PNG")
+            png, w, h = downscale_png(raw.getvalue(), max_dim)
+            return png, w, h
+
         buf = io.BytesIO()
-        self._array_to_pil(rgb).save(buf, format="PNG", optimize=True)
+        pil.save(buf, format="PNG", optimize=True)
         return buf.getvalue(), w, h
 
     def to_base64(self, png_bytes: bytes) -> str:
@@ -213,21 +347,30 @@ class ScreenController:
         y = int(max(0, min(1000, norm[1])) / 1000 * height)
         return x, y
 
+    def norm_to_global(self, x: float, y: float) -> tuple[int, int]:
+        """Map normalized 0-1000 coords to global screen (x, y).
+
+        Includes the active monitor's left/top offset, which can be negative
+        when a secondary display sits to the left of the primary.
+        """
+        local_x, local_y = self._norm_to_px([x, y], self._width, self._height)
+        return self._left + local_x, self._top + local_y
+
     def click(self, x: float, y: float) -> None:
-        px, py = self._norm_to_px([x, y], self._width, self._height)
+        px, py = self.norm_to_global(x, y)
         pyautogui.click(px, py)
 
     def double_click(self, x: float, y: float) -> None:
-        px, py = self._norm_to_px([x, y], self._width, self._height)
+        px, py = self.norm_to_global(x, y)
         pyautogui.doubleClick(px, py)
 
     def right_click(self, x: float, y: float) -> None:
-        px, py = self._norm_to_px([x, y], self._width, self._height)
+        px, py = self.norm_to_global(x, y)
         pyautogui.rightClick(px, py)
 
     def move_and_drag(self, start_x: float, start_y: float, end_x: float, end_y: float) -> None:
-        sx, sy = self._norm_to_px([start_x, start_y], self._width, self._height)
-        ex, ey = self._norm_to_px([end_x, end_y], self._width, self._height)
+        sx, sy = self.norm_to_global(start_x, start_y)
+        ex, ey = self.norm_to_global(end_x, end_y)
         pyautogui.moveTo(sx, sy)
         pyautogui.dragTo(ex, ey)
 
@@ -579,6 +722,7 @@ class VisionAgent:
                     ],
                     "stream": False,
                     "format": "json",
+                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
                 },
             )
             resp.raise_for_status()

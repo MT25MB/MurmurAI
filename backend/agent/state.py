@@ -20,12 +20,17 @@ class ClientMessage(BaseModel):
 
     type: Literal[
         "ping", "state", "text_input", "audio_chunk", "confirm",
-        "guidance_response", "abort_automation",
+        "guidance_response", "abort_automation", "set_listening_mode",
+        "update_available", "update_confirm", "update_status", "be_quiet",
     ]
     text: str | None = None
     data: str | None = None  # base64 audio chunk
     request_id: str | None = None
     approved: bool | None = None
+    mode: str | None = None  # "active" | "sleep"
+    version: str | None = None  # update notification
+    notes: str | None = None    # release summary
+    detail: str | None = None   # update error/offline detail
 
 
 class ServerMessage(BaseModel):
@@ -44,6 +49,9 @@ class ServerMessage(BaseModel):
         "pull_complete",
         "error",
         "info",
+        "update_available",
+        "update_install",
+        "update_check_request",
     ]
     ts: float | None = None
     status: str | None = None
@@ -57,6 +65,8 @@ class ServerMessage(BaseModel):
     command: str | None = None
     model: str | None = None
     detail: str | None = None
+    version: str | None = None   # update notification
+    notes: str | None = None     # spoken release summary
 
     def to_json(self) -> str:
         return self.model_dump_json(exclude_none=True)
@@ -78,6 +88,14 @@ class SessionState:
     turns: list[dict[str, str]] = field(default_factory=list)
     pending: dict[str, ConfirmationRequest] = field(default_factory=dict)
     audio_chunks: int = 0
+    # Lightweight per-session context for pronoun/"this"/"it" resolution.
+    context: dict[str, object] = field(default_factory=dict)
+
+    def remember(self, key: str, value: object) -> None:
+        self.context[key] = value
+
+    def recall(self, key: str) -> object | None:
+        return self.context.get(key)
 
     def uptime(self) -> int:
         return int(time.monotonic() - self.started_at)

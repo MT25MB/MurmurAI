@@ -73,9 +73,12 @@ for package in (
 hiddenimports.extend([
     "agent", "agent.brain", "agent.state", "agent.vision_agent",
     "agent.som_overlay", "agent.app_knowledge",
-    "audio", "audio.listener", "audio.speaker",
+    "audio", "audio.listener", "audio.speaker", "audio.echo_guard", "audio.media_duck",
     "tools", "tools.os_tools", "tools.safety", "tools.installer_tool",
-    "tools.event_bus", "setup",
+    "tools.event_bus", "tools.browser_tool", "tools.window_tools", "tools.context_tools",
+    "tools.mcp_manager", "setup",
+    "system", "system.profiler", "system.settings_tools", "system.diagnostics_bundle",
+    "playwright", "playwright.sync_api",
 ])
 
 a = Analysis(

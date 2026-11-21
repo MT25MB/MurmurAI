@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "local-notes": {
+      "command": "python",
+      "args": ["-m", "mcp_server_notes"],
+      "env": {
+        "NOTES_DIR": "/home/me/notes"
+      },
+      "allowlist": ["search_notes"],
+      "enabled": true
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/Documents"],
+      "env": {},
+      "allowlist": [],
+      "enabled": true
+    }
+  }
+}

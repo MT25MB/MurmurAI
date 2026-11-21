@@ -25,6 +25,37 @@ This file is the source of truth for every coding agent and human contributor.
   red accent `#F05653` / fill `#D01C29` (white text 5.41:1). Blue is derived
   from the logo hue; red is reserved for execution/alert states.
 - Auto-start on boot via **`tauri-plugin-autostart`** (opt-in, user controlled).
+- Audio coexistence: `audio/echo_guard.py` suppresses the listener and wake
+  word while `audio/speaker.py` is playing TTS plus a 250ms tail (configurable
+  `echo_guard`, `echo_guard_tail_ms`, optional `loopback_guard` /
+  `MURMUR_LOOPBACK_DEVICE`). `audio/media_duck.py` lowers system media while
+  speaking when `media_ducking` is on. `screen_reader_friendly` suppresses
+  redundant chimes. "Be quiet" / "Stop talking" (voice, Q key, or Ctrl/Cmd+Shift+Q)
+  call `speaker.interrupt()` immediately.
+- Voice-controlled settings + diagnostics live in `system/settings_tools.py`.
+  Preferences persist in `~/.murmur-ai/config.json` (speech rate, voice,
+  chimes, description verbosity, listening mode, mic threshold, chat/vision
+  models) and are applied to the live speaker/listener/brain at startup and on
+  change. Voice commands are matched locally before the brain: "speak faster",
+  "change your voice", "turn chimes off", "switch to detailed screen
+  descriptions", "switch to wake-word mode", "increase mic threshold", "switch
+  vision model to X", "show current models". `run_diagnostics` checks the
+  microphone, Ollama, local models, OS permissions and Wayland/X11 session and
+  speaks a plain-English report with "fix permissions"/"restart Ollama" offers.
+  The React `SettingsDrawer` (Ctrl/Cmd+, or tray menu) edits the same file over
+  `GET/POST /settings`, `/settings/reset` and `/diagnostics`, with full ARIA.
+- Hands-free updates via **`tauri-plugin-updater`**: Rust commands
+  `check_for_updates()` / `install_update()` read
+  `https://github.com/MT25MB/MurmurAI/releases/latest/download/latest.json`.
+  The HUD relays a discovered release to the Python sidecar over WebSocket;
+  the backend speaks the version + release summary and asks "Would you like me
+  to download and restart to install it?" Yes/no (spoken or clicked) resolves
+  through `main.py` and calls the install command. Offline/unverified checks
+  are reported as info, never as an update prompt.
+- Release signing: set repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the matching public key is in
+  `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. `tauri-action`
+  signs artifacts and publishes `latest.json` on every `v*` tag.
 
 ### Backend Sidecar
 - **Python 3.11+**, **FastAPI**, **uvicorn**, real-time over WebSocket at
@@ -41,6 +72,25 @@ This file is the source of truth for every coding agent and human contributor.
   backend's `/health` and WebSocket control plane boot even when heavy models or
   system packages are not installed. Never add a cloud API key or paid endpoint.
 
+### Hardware profiling & latency (first class)
+- `system/profiler.py` detects RAM, VRAM (nvidia-smi), CPU cores, and compute
+  backend (CUDA / Apple Metal / CPU) and picks a model tier on startup:
+  - **High (16GB+ RAM or 6GB+ VRAM):** `qwen2.5:7b` + `qwen2.5-vl:7b`,
+    `small.en` whisper (`float16`/`int8_float16`).
+  - **Light (8–12GB RAM, no GPU):** `qwen2.5:3b` + `qwen2.5-vl:3b` (or
+    `minicpm-v`), `tiny.en` whisper (`int8`).
+- Chosen profile is saved to `~/.murmur-ai/hardware_profile.json`; settings/env
+  overrides always win (`OLLAMA_MODEL`, `OLLAMA_VISION_MODEL`, `WHISPER_MODEL`,
+  `WHISPER_COMPUTE_TYPE`, `WHISPER_DEVICE`, `MURMUR_MAX_SCREEN_DIM`,
+  `OLLAMA_KEEP_ALIVE`).
+- Ollama chat + vision calls send `keep_alive: "30m"` and are warmed at startup
+  via `/api/generate` so consecutive commands avoid cold model reloads.
+- 4K/high-DPI screenshots are downscaled with LANCZOS before base64 encoding
+  (aspect preserved, SoM stays in normalized 0-1000 coords) using the tier's
+  `MURMUR_MAX_SCREEN_DIM` cap.
+- Kokoro and silero-vad are imported in a background thread at startup so the
+  first spoken greeting does not stutter.
+
 ### Accessibility (first-class)
 - `describe_screen(focus)` in `agent/vision_agent.py` captures the screen and
   queries the VLM with a blind-optimized prompt, then speaks the result through
@@ -48,8 +98,50 @@ This file is the source of truth for every coding agent and human contributor.
 - `CONFIRMATION_REQUIRED` events are spoken aloud with the exact action and
   verbal choices ("yes, confirm" / "no, cancel"); verbal responses are parsed in
   `main.py::_try_verbal_confirmation` alongside UI/Enter/Escape approval.
+- `system/diagnostics_bundle.py` builds a privacy-safe zip on the Desktop (or
+  `~/.murmur-ai/diagnostics/`) with recent local logs, hardware/OS profile,
+  localhost Ollama status and sanitized config. Secrets, credentials, custom
+  paths, env values and user identifiers are redacted. The `export_diagnostics`
+  tool speaks the exact archive path for attaching to a GitHub issue.
+- `scripts/smoke-test.sh` / `.ps1` (via `scripts/smoke_check.py`) verify frontend
+  and sidecar artifacts, brain tool schemas, a localhost-only sidecar startup,
+  `/health`, `/setup/status` and the `/ws` handshake. `verify-all` runs it as
+  its final step. No microphone or external network is needed.
+- `tools/context_tools.py` provides local clipboard access (pyperclip with
+  native fallbacks) and recent-file inspection (Downloads/Desktop/Documents or
+  an explicit path) with spoken size/type/age summaries. `SessionState.context`
+  remembers the last mentioned file/app and clipboard text so "this"/"it"/
+  "what's copied" resolve locally before a model call; voice phrases for
+  clipboard questions and "copy that result to my clipboard" are handled
+  deterministically in `main.py`.
+- `tools/mcp_manager.py` is a stdlib JSON-RPC stdio MCP client. It reads
+  `~/.murmur-ai/mcp_servers.json` (`command`/`args`/`env` per server), connects
+  on startup, discovers tools via `tools/list`, and injects their schemas into
+  `agent.brain.ALL_TOOLS` as `mcp__<server>__<tool>`. Tools that write files,
+  use the network, or run system actions require `tool_bus.request_confirmation`
+  unless the server's `allowlist` contains that tool. Voice phrases: "what
+  plugins are active" and "reload my plugins".
+- `tools/browser_tool.py` provides accessibility-first web automation via local
+  Playwright (attaches to the user's Chrome over CDP at `localhost:9222`, or
+  launches Chromium). Tools: `open_url` (URLs or private DuckDuckGo/Startpage
+  search, no API key), `read_page_summary` (headings, main article text, form
+  fields, buttons/links; nav clutter stripped for spoken narration),
+  `click_web_element` and `fill_web_field` (accessible-name/label locators, no
+  pixel coordinates). Requires `pip install playwright && playwright install chromium`.
+  **Routing rule:** prefer browser tools for websites, articles, web search and
+  online forms; reserve `vision_agent.py` for native desktop apps (Blender,
+  DaVinci Resolve, OS dialogs) and canvas-heavy web apps.
 - Toggleable earcons (`audio/speaker.py::chime`) give short tones for
   listening/thinking/speaking/confirmation/error (`MURMUR_AI_EARCONS=1`).
+- **Offline wake word + sleep/wake states** (`audio/wake_word.py`): 100% local
+  detector (`openwakeword`, or silero-vad + tiny `faster-whisper` keyword gate
+  fallback). Two listening modes: **active** (default continuous VAD with
+  barge-in) and **sleep/standby** (`SLEEPING` state, wake-word only, ignores room
+  audio). Say "go to sleep" / "stop listening" / "pause murmur" to enter standby;
+  say "hey murmur" / "wake up murmur" to wake (ascending chime + "I'm listening").
+  Spoken `set_listening_mode` and `SLEEPING` WS messages keep HUD and tray in sync.
+  Tauri global hotkey **Ctrl/Cmd+Shift+Space** toggles standby and announces the
+  change aloud for screen-reader/keyboard users (HUD sleep button is the fallback).
 - HUD + onboarding use ARIA roles, polite/assertive live regions,
   `role=progressbar`/`meter`, keyboard shortcuts (M mute, Enter approve,
   Escape cancel), and 3px high-contrast focus rings.
@@ -86,8 +178,9 @@ Murmur AI/
 │  ├─ main.tsx
 │  ├─ App.tsx
 │  ├─ index.css
-│  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx}
-│  └─ lib/{websocket.ts,setup.ts}
+│  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx}
+│  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
+│  └─ components/*.test.tsx    # Vitest + Testing Library (12 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -101,12 +194,19 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # pytest suite: safety, tools/audio interfaces,
-   │                         #   SoM mapping, WS broadcasts, planning/abort
+   ├─ tests/                 # 322 pytest tests: audio/VAD/STT/TTS, agent tools
+   │                         #   + ReAct + installer + confirmations, vision/SoM,
+   │                         #   WS state machine + setup, safety, planning/abort
+   │                         #   (see test_agent_tools.py, test_vision.py,
+   │                         #    test_server_setup.py, test_profiler.py,
+   │                         #    test_browser_tool.py, test_updates.py,
+   │                         #    test_mcp_manager.py, test_context_tools.py,
+   │                         #    test_diagnostics_bundle.py + fixtures/)
+   ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
-   ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py}
+   ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py}  # offline wake word + sleep/wake
    ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,shortcuts.json}
-   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py}
+   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,mcp_manager.py}
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec
    └─ logs/                  # visual-agent step replay (screenshots + JSON)

@@ -1,0 +1,194 @@
+"""Agent brain ReAct loop, tool schemas, describe_screen, installer selection,
+and strict confirmation gating for destructive actions.
+"""
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from agent.brain import ALL_TOOLS, Brain
+from tools.installer_tool import detect_install_plan
+from tools.safety import SafetyGate
+
+
+# ---- tool schemas ----
+
+def test_all_tool_schemas_valid():
+    names = []
+    for tool in ALL_TOOLS:
+        fn = tool["function"]
+        assert {"name", "description", "parameters"} <= fn.keys()
+        p = fn["parameters"]
+        assert p["type"] == "object" and isinstance(p["properties"], dict)
+        names.append(fn["name"])
+    assert len(names) == len(set(names))
+    for expected in ("run_terminal_command", "manage_files", "install_application",
+                     "describe_screen", "stop_automation"):
+        assert expected in names
+
+
+# ---- ReAct loop with mocked Ollama ----
+
+def test_react_direct_reply(monkeypatch):
+    brain = Brain()
+    brain._chat = lambda messages, **k: {"message": {"content": "Hello there."}}
+    reply = brain.think_and_act("hi")
+    assert reply == "Hello there."
+
+
+def test_react_executes_tool_then_replies(monkeypatch):
+    brain = Brain()
+    calls = []
+
+    def fake_chat(messages, **k):
+        # First pass requests a tool; second pass produces the final answer.
+        if k.get("tools"):
+            return {"message": {"tool_calls": [{
+                "function": {"name": "open_application",
+                             "arguments": json.dumps({"app_name": "Notepad"})},
+            }]}}
+        return {"message": {"content": "Opened it."}}
+
+    brain._chat = fake_chat
+    monkeypatch.setattr("agent.brain.dispatch_tool",
+                        lambda name, args, safety: calls.append((name, args)) or "launched")
+    reply = brain.think_and_act("open notepad")
+    assert calls == [("open_application", {"app_name": "Notepad"})]
+    assert reply == "Opened it."
+
+
+def test_react_confirmation_required_surfaces_without_execution(monkeypatch):
+    brain = Brain()
+    brain._chat = lambda messages, **k: {"message": {"tool_calls": [{
+        "function": {"name": "run_terminal_command",
+                     "arguments": json.dumps({"command": "rm -rf /"})},
+    }]}} if k.get("tools") else {"message": {"content": "never"}}
+    monkeypatch.setattr("agent.brain.dispatch_tool",
+                        lambda *a: "Confirmation required for destructive command")
+    reply = brain.think_and_act("delete everything")
+    assert "confirmation required" in reply.lower()
+
+
+def test_clean_for_voice_strips_markdown():
+    text = "**Bold** `code`\n- item one\n- item two\n```python\nprint(1)\n```"
+    cleaned = Brain._clean_for_voice(text)
+    assert "**" not in cleaned and "```" not in cleaned and "`" not in cleaned
+    assert "item one" in cleaned and "item two" in cleaned
+
+
+# ---- describe_screen blind-accessibility output ----
+
+def test_describe_screen_speaks_and_returns_text(monkeypatch):
+    import agent.vision_agent as va
+
+    spoken = []
+    monkeypatch.setattr(va, "ScreenController", lambda: SimpleNamespace())
+    monkeypatch.setattr(va.VisionAgent, "describe", lambda self, focus="overview":
+                        "WINDOW: Blender\nFOCUS: Cube\nNEXT: press X")
+    monkeypatch.setattr("audio.speaker_provider.get_speaker",
+                        lambda: SimpleNamespace(speak=spoken.append))
+    result = va.describe_screen("focus")
+    assert "WINDOW:" in result and "NEXT:" in result
+    assert spoken and spoken[0] == result
+
+
+def test_describe_screen_without_speaker_still_returns(monkeypatch):
+    import agent.vision_agent as va
+    monkeypatch.setattr(va, "ScreenController", lambda: SimpleNamespace())
+    monkeypatch.setattr(va.VisionAgent, "describe", lambda self, focus="overview": "description")
+    monkeypatch.setattr("audio.speaker_provider.get_speaker", lambda: None)
+    assert va.describe_screen() == "description"
+
+
+# ---- installer selection across package managers ----
+
+@pytest.mark.parametrize("system,manager,existing,expected_id,expected_flags", [
+    ("Windows", "winget", ["winget"], "Vendor.App", ["--silent", "--accept-package-agreements"]),
+    ("Darwin", "brew-cask", ["brew"], "blender", ["--cask"]),
+    ("Linux", "flatpak", ["flatpak"], "org.blender.Blender", ["-y"]),
+    ("Linux", "apt", ["apt-get"], "blender", ["-y"]),
+    ("Linux", "dnf", ["dnf"], "blender", ["-y"]),
+    ("Linux", "pacman", ["pacman"], "blender", ["--noconfirm"]),
+])
+def test_installer_selects_package_manager(monkeypatch, system, manager, existing,
+                                           expected_id, expected_flags):
+    import tools.installer_tool as it
+    monkeypatch.setattr(it.platform, "system", lambda: system)
+    monkeypatch.setattr(it.shutil, "which", lambda n: f"/usr/bin/{n}" if n in existing else None)
+
+    def fake_capture(cmd, timeout=30):
+        if system == "Windows":
+            return "Name    Id         Version\nBlender Vendor.App 1.0"
+        if system == "Darwin":
+            return "blender\nblender-extra"
+        return f"blender 1.0\n{expected_id} app"
+
+    monkeypatch.setattr(it, "_run_capture", fake_capture)
+    plan = detect_install_plan("blender")
+    assert plan is not None and plan.manager == manager, (plan, manager)
+    for flag in expected_flags:
+        assert flag in plan.install_command, plan.install_command
+
+
+def test_installer_no_manager_falls_back(monkeypatch):
+    import tools.installer_tool as it
+    monkeypatch.setattr(it.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(it.shutil, "which", lambda n: None)
+    assert detect_install_plan("anything") is None
+
+
+# ---- confirmation gating ----
+
+def test_destructive_shell_pauses_for_confirmation(monkeypatch):
+    gate = SafetyGate(confirm_callback=None)
+    result = gate.run_shell("rm -rf /")
+    assert "confirmation required" in result.lower()
+    assert gate.audit == []  # nothing executed
+
+
+def test_file_deletion_denied_does_not_execute(monkeypatch):
+    import tools.safety as safety
+    called = {"n": 0}
+    monkeypatch.setattr(safety.shutil, "rmtree", lambda *a: called.__setitem__("n", 1))
+    monkeypatch.setattr(safety.Path, "unlink", lambda *a, **k: called.__setitem__("n", 1))
+    gate = SafetyGate(confirm_callback=lambda d, c: False)
+    result = gate.run_file_operation("delete", "/tmp/whatever")
+    assert "cancelled" in result.lower() and called["n"] == 0
+    assert gate.audit[-1]["decision"] == "denied"
+
+
+def test_safe_file_read_needs_no_confirmation(tmp_path):
+    p = tmp_path / "note.txt"
+    p.write_text("hello", encoding="utf-8")
+    gate = SafetyGate(confirm_callback=None)
+    assert gate.run_file_operation("read", str(p)) == "hello"
+
+
+def test_installation_emits_confirmation_then_waits(monkeypatch):
+    import tools.installer_tool as it
+    from tools.event_bus import ToolEventBus
+
+    events = []
+    bus = ToolEventBus()
+    bus.emit = lambda m: events.append(json.loads(m.to_json()))
+    seen = {}
+    def fake_request(description, command, timeout=180):
+        seen["description"] = description
+        seen["command"] = command
+        return False
+    bus.request_confirmation = fake_request
+    it.tool_bus = bus
+    it.detect_install_plan = lambda name: it.PackagePlan(
+        manager="winget", package_id="Vendor.App", search_command=[],
+        install_command=["winget", "install", "--id", "Vendor.App", "--silent"],
+        description="test",
+    )
+    result = it.install_application("FakeApp")
+    assert "cancel" in result.lower()
+    assert "FakeApp" in seen["description"]
+    assert "--silent" in seen["command"]
+    # request_confirmation is faked here, so no confirmation_required frame is
+    # emitted by the bus itself. The real emission path is covered in test_tools.py.

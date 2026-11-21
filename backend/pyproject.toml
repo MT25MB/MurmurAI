@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "murmur-ai-backend"
-version = "1.1.1"
+version = "0.1.0"
 description = "Murmur AI local voice sidecar — FastAPI + WebSocket control plane"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -23,12 +23,14 @@ voice = [
   "sounddevice>=0.5",
   "faster-whisper>=1.1",
   "webrtcvad-wheels>=2.0.14",
+  "openwakeword>=0.5.0",
   "kokoro>=0.1.0",
   "pyttsx3>=2.90",
 ]
 computer = [
   "pyautogui>=0.9.54",
   "mss>=10.0",
+  "playwright>=1.44",
 ]
 dev = [
   "pytest>=8",
@@ -36,8 +38,13 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["audio*", "agent*", "tools*"]
+include = ["audio*", "agent*", "tools*", "system*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+# Third-party deprecation from starlette.testclient's httpx shim; the app does
+# not use that code path in production and the warning adds no signal.
+filterwarnings = [
+  "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]

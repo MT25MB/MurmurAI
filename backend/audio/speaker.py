@@ -10,9 +10,12 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from typing import Optional
 
 import numpy as np
+
+from audio.media_duck import MediaDucker
 
 try:  # pragma: no cover - platform optional
     import sounddevice as sd
@@ -41,6 +44,7 @@ class LocalSpeaker:
             )
         self.engine_pref = engine
         self.kokoro_voice = kokoro_voice
+        self.speech_rate = 1.0  # 0.5 (slow) .. 2.0 (fast), applied on next speak()
         self.piper_model = piper_model
         self.device = device
         # Non-intrusive state chimes. Opt-in via constructor or
@@ -48,6 +52,10 @@ class LocalSpeaker:
         if earcons is None:
             earcons = os.getenv("MURMUR_AI_EARCONS", "0") == "1"
         self.earcons_enabled = bool(earcons)
+        self.screen_reader_friendly = False
+        self.duck_media = False
+        self.last_speak_end: Optional[float] = None
+        self._ducker = MediaDucker(enabled=False)
 
         self._engine = None  # resolved engine name
         self._kokoro = None
@@ -135,6 +143,10 @@ class LocalSpeaker:
         "speaking": [(480.0, 0.05, 0.10)],
         "confirmation": [(740.0, 0.07, 0.15), (880.0, 0.09, 0.15)],
         "error": [(300.0, 0.10, 0.16), (220.0, 0.14, 0.16)],
+        # Subtle ascending chime played when waking from standby.
+        "wake": [(523.25, 0.07, 0.12), (659.25, 0.07, 0.12), (783.99, 0.10, 0.13)],
+        # Descending chime for entering standby.
+        "sleep": [(587.33, 0.07, 0.10), (440.0, 0.10, 0.10)],
     }
 
     def set_earcons(self, enabled: bool) -> None:
@@ -142,13 +154,47 @@ class LocalSpeaker:
         self.earcons_enabled = bool(enabled)
         logger.info("Earcons %s", "enabled" if enabled else "disabled")
 
+    def set_speech_rate(self, rate: float) -> float:
+        """Set speaking speed; clamped to 0.5x..2.0x. Takes effect next utterance."""
+        try:
+            value = min(2.0, max(0.5, float(rate)))
+        except (TypeError, ValueError):
+            value = 1.0
+        self.speech_rate = value
+        logger.info("Speech rate set to %s", value)
+        return value
+
+    def set_voice(self, voice: str) -> str:
+        """Select the TTS voice (Kokoro voice id or pyttsx3 voice name)."""
+        self.kokoro_voice = str(voice or "af_heart")
+        self._engine = None  # re-resolve so a voice-only switch takes effect
+        logger.info("Voice set to %s", self.kokoro_voice)
+        return self.kokoro_voice
+
+    def set_screen_reader_friendly(self, enabled: bool) -> bool:
+        """Reduce redundant chatter so Murmur's speech stays crisp alongside a SR."""
+        self.screen_reader_friendly = bool(enabled)
+        logger.info("Screen-reader friendly mode %s", "on" if enabled else "off")
+        return self.screen_reader_friendly
+
+    def set_media_ducking(self, enabled: bool, duck_to: int = 35) -> bool:
+        """Duck system media while speaking, then restore it afterwards."""
+        self.duck_media = bool(enabled)
+        self._ducker = MediaDucker(enabled=self.duck_media, duck_to=duck_to)
+        return self.duck_media
+
+    def be_quiet(self) -> None:
+        """Immediately stop speaking (voice command / hotkey 'be quiet')."""
+        self.interrupt()
+
     def chime(self, kind: str) -> None:
         """Play a short audio cue for a state transition (non-blocking, multiplicative).
 
         No-op when earcons are disabled or an unknown cue is requested. Never
         interrupts speech — chimes are short and played at low gain.
         """
-        if not self.earcons_enabled or sd is None:
+        if not self.earcons_enabled or sd is None or self.screen_reader_friendly:
+            # Screen readers already announce state changes; avoid double chatter.
             return
         notes = self.EARCON_NOTES.get(kind)
         if not notes:
@@ -191,6 +237,8 @@ class LocalSpeaker:
         self.interrupt()  # cut anything currently playing
         self._stop.clear()
         self._interrupted = False
+        if self.duck_media:
+            self._ducker.duck()
         self._play_thread = threading.Thread(
             target=self._run_speak, args=(text,), daemon=True, name="Murmur AI-speaker"
         )
@@ -215,8 +263,8 @@ class LocalSpeaker:
     # ---- internals ----
 
     def _run_speak(self, text: str) -> None:
-        engine = self._resolve_engine()
         try:
+            engine = self._resolve_engine()
             if engine == "kokoro":
                 self._speak_kokoro(text)
             elif engine == "piper":
@@ -226,6 +274,10 @@ class LocalSpeaker:
         except Exception:  # pragma: no cover - engine dependent
             logger.exception("TTS playback failed")
         finally:
+            # Marker used by the echo guard's 250 ms tail buffer.
+            self.last_speak_end = time.monotonic()
+            if self.duck_media:
+                self._ducker.restore()
             with self._lock:
                 self._play_thread = None
 
@@ -244,7 +296,7 @@ class LocalSpeaker:
         KModel, KPipeline = self._kokoro  # type: ignore[misc]
         # Kokoro API may vary by version; adapt defensively.
         pipeline = KPipeline(lang_code="a", model=KModel())
-        for _, _, audio in pipeline(text, voice=self.kokoro_voice, speed=1.0):
+        for _, _, audio in pipeline(text, voice=self.kokoro_voice, speed=self.speech_rate):
             if self._interrupted:
                 break
             audio = np.asarray(audio, dtype=np.float32)
@@ -266,6 +318,15 @@ class LocalSpeaker:
         import pyttsx3  # type: ignore
 
         engine = pyttsx3.init()
+        try:
+            engine.setProperty("rate", int(200 * self.speech_rate))
+            if self.kokoro_voice:
+                for voice in engine.getProperty("voices") or []:
+                    if str(getattr(voice, "name", "")).lower() == self.kokoro_voice.lower():
+                        engine.setProperty("voice", voice.id)
+                        break
+        except Exception:  # pragma: no cover - engine dependent
+            pass
         # pyttsx3 runs its own event loop; drive it until done or interrupted.
         engine.say(text)
         while engine.isBusy() and not self._interrupted:

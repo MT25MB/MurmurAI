@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-push guardrail: verify on main pushes and on version tags.
+set -euo pipefail
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+  if echo "$remote_ref" | grep -Eq 'refs/heads/main|refs/tags/v'; then
+    echo "Pushing to $remote_ref: running full verification..."
+    if [ -f scripts/verify-all.sh ]; then
+      bash scripts/verify-all.sh
+    elif [ -f scripts/verify-all.ps1 ]; then
+      pwsh -File scripts/verify-all.ps1
+    else
+      echo "BLOCKED: no verification script found." >&2
+      exit 1
+    fi
+  fi
+done
+exit 0

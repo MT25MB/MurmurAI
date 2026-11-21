@@ -2,6 +2,8 @@
 
 <img src="website/public/logo-blue.png" alt="Murmur AI" width="120" />
 
+<img src="website/public/social-banner.png" alt="Murmur AI, a local voice-controlled desktop agent" width="640" />
+
 # Murmur AI
 
 **Talk to your computer and have it do the work. Runs entirely on your machine. Free, open source, and built for people who use a screen reader or no hands at all.**
@@ -48,6 +50,7 @@ Murmur AI looks at the screen instead.
 * **Set-of-Marks.** `mss` grabs a frame. OpenCV and OS accessibility APIs find the controls. Numbered boxes go on the image, the vision model (`qwen2.5-vl:7b`) picks a number, and `pyautogui` clicks or types.
 * **Shortcuts first.** It checks which app is in front and uses that app's own hotkeys where it can. Fewer clicks, fewer mistakes.
 * **Installing apps.** Say *"Install VLC"* or *"Install Blender"*. It searches `winget`, `brew`, `flatpak`, `snap`, `apt`, `dnf`, or `pacman`, shows you the command, and waits for your OK. If no package exists, it falls back to the browser.
+* **Clipboard and recent files.** Ask *"What did I just copy?"*, *"Summarize my clipboard"*, or *"Copy that result to my clipboard"*. Say *"What did I just download?"* to hear recent files with sizes and types. Words like *"this"* and *"it"* resolve against the last file or app you mentioned in the session.
 
 ---
 
@@ -76,6 +79,36 @@ The desktop shell is **Tauri v2** (Rust with React and TypeScript). A Python sid
 - **Voice:** faster-whisper (`base.en`, `int8`) for speech to text, Kokoro-82M for text to speech, with Piper or pyttsx3 as fallbacks.
 - **Cache:** models and weights live in `~/.murmur-ai/models/`.
 - **Network:** the only listeners are `127.0.0.1:8765` and Ollama at `127.0.0.1:11434`. Nothing phones home.
+
+### Settings and self-diagnostics
+
+Press **Ctrl+,** (or **Cmd+,** on macOS), or use the tray menu, to open the accessible settings panel. It stays in sync with `~/.murmur-ai/config.json` and controls speech rate, voice, chimes, screen-description detail, listening mode, microphone threshold and model selection. You can also just say **"Speak faster"**, **"Change your voice"**, **"Turn chimes off"**, **"Switch to detailed screen descriptions"**, **"Switch to wake-word mode"**, **"Increase mic threshold"**, **"Switch vision model to qwen3-vl"**, or **"Show current models"**.
+
+Murmur AI won't listen to its own voice: TTS playback mutes voice detection with a short tail buffer, and an optional loopback device can ignore room audio. Enable *Lower media volume while speaking* to duck background media. Say **"Be quiet"** or **"Stop talking"** (or press **Q**, or **Ctrl/Cmd+Shift+Q**) to cut speech instantly.
+
+Say **"Run diagnostics"** or **"Why aren't you working?"** for a plain-English spoken report on your microphone, Ollama, local models, OS permissions and display session. If you hit a bug, say **"Export diagnostics"**: Murmur builds a privacy-safe zip on your Desktop (logs, hardware profile, Ollama status and a sanitized config, with paths and secrets redacted) and speaks the exact path so you can attach it to a GitHub issue. Nothing is uploaded automatically. It can offer to fix missing permissions or restart Ollama by voice.
+
+### Local MCP plugins
+
+Murmur AI can load community [Model Context Protocol](https://modelcontextprotocol.io/) tools from servers that run entirely on your machine. Create `~/.murmur-ai/mcp_servers.json` using the standard stdio format (`command`, `args`, `env`):
+
+```json
+{
+  "servers": {
+    "notes": {
+      "command": "python",
+      "args": ["-m", "mcp_server_notes"],
+      "env": { "NOTES_DIR": "/home/me/notes" },
+      "allowlist": ["search_notes"],
+      "enabled": true
+    }
+  }
+}
+```
+
+A complete sample is written to `~/.murmur-ai/mcp_servers.example.json` on first launch (and lives in `backend/mcp_servers.example.json`). Each discovered tool is registered with the brain as `mcp__<server>__<tool>`. Tools that write files, contact the network, or run system actions ask for spoken confirmation before they run; put a tool in that server's `allowlist` to skip the prompt for a tool you trust.
+
+Say **"What plugins or MCP tools are active?"** to hear what is loaded, or **"Reload my plugins"** to pick up config changes without restarting.
 
 Full architecture rules live in [AGENTS.md](AGENTS.md).
 

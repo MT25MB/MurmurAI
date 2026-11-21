@@ -172,6 +172,77 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
         from agent.vision_agent import describe_screen
 
         return describe_screen(arguments.get("focus", "overview"))
+    if name in ("open_url", "read_page_summary", "click_web_element", "fill_web_field"):
+        from .browser_tool import (
+            click_web_element,
+            fill_web_field,
+            open_url,
+            read_page_summary,
+        )
+
+        if name == "open_url":
+            return open_url(arguments.get("url", ""))
+        if name == "read_page_summary":
+            return read_page_summary()
+        if name == "click_web_element":
+            return click_web_element(arguments.get("label_or_role", ""))
+        return fill_web_field(arguments.get("field_label", ""), arguments.get("text", ""))
+    if name in ("list_open_windows", "focus_or_manage_window"):
+        from .window_tools import focus_or_manage_window, list_open_windows
+
+        if name == "list_open_windows":
+            return list_open_windows()
+        return focus_or_manage_window(
+            arguments.get("app_or_title", ""), arguments.get("action", "focus")
+        )
+    if name == "set_active_monitor":
+        from agent.vision_agent import set_active_monitor
+
+        return set_active_monitor(arguments.get("monitor", 1))
+    if name == "list_mcp_tools":
+        from .mcp_manager import list_plugins
+
+        return list_plugins()
+    if name == "reload_mcp_plugins":
+        from .mcp_manager import reload_plugins
+
+        return reload_plugins().get("summary", "Plugins reloaded.")
+    if name in ("read_clipboard", "write_clipboard", "inspect_recent_files"):
+        from .context_tools import (
+            inspect_recent_files,
+            read_clipboard,
+            write_clipboard,
+        )
+
+        if name == "read_clipboard":
+            return read_clipboard()
+        if name == "write_clipboard":
+            return write_clipboard(arguments.get("text", ""))
+        return inspect_recent_files(
+            arguments.get("directory", "downloads"),
+            int(arguments.get("limit", 5) or 5),
+        )
+    if name == "export_diagnostics":
+        from system.diagnostics_bundle import export_diagnostics
+
+        return export_diagnostics()
+    if name == "run_diagnostics":
+        from system.settings_tools import run_diagnostics
+
+        return run_diagnostics()["summary"]
+    if name == "get_settings":
+        from system.settings_tools import settings_summary
+
+        return settings_summary()
+    if name == "set_setting":
+        from system.settings_tools import settings_summary, update_settings
+
+        update_settings(arguments.get("changes", {}))
+        return settings_summary()
+    if name.startswith("mcp__"):
+        from .mcp_manager import call_mcp_tool
+
+        return call_mcp_tool(name, arguments)
     return f"Unknown tool: {name}"
 
 

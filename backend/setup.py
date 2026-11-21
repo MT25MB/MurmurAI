@@ -24,6 +24,13 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from system.profiler import (
+    KEEP_ALIVE,
+    configure_from_hardware as _configure_hardware,
+    prewarm_audio as _prewarm_audio,
+    recommend_config,
+)
+
 logger = logging.getLogger("murmur_ai.setup")
 
 OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
@@ -93,16 +100,17 @@ def ollama_status() -> dict[str, Any]:
     return result
 
 
-def pulled_models() -> dict[str, bool]:
-    """Return {model_name: is_pulled} for each required model."""
-    status = {name: False for name in REQUIRED_MODELS}
+def pulled_models(models: Optional[list[str]] = None) -> dict[str, bool]:
+    """Return {model_name: is_pulled}. Defaults to the required model set."""
+    names = models if models is not None else REQUIRED_MODELS
+    status = {name: False for name in names}
     try:
         resp = httpx.get(f"{OLLAMA_HOST}/api/tags", timeout=2.0)
         if resp.status_code != 200:
             return status
-        models = resp.json().get("models", [])
-        available = {m.get("name", "").lower() for m in models if isinstance(m, dict)}
-        for name in REQUIRED_MODELS:
+        models_data = resp.json().get("models", [])
+        available = {m.get("name", "").lower() for m in models_data if isinstance(m, dict)}
+        for name in names:
             base = name.split(":")[0]
             status[name] = any(
                 a == name.lower() or a.startswith(base + ":") for a in available
@@ -110,6 +118,86 @@ def pulled_models() -> dict[str, bool]:
     except Exception:  # pragma: no cover - network dependent
         pass
     return status
+
+
+# ---------------------------------------------------------------------------
+# Hardware-driven model tier (first-run setup)
+# ---------------------------------------------------------------------------
+
+def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
+    """Return the model tier recommended for this machine.
+
+    High-RAM/GPU machines get the 7b models; lightweight/CPU machines get the
+    3b models. A saved profile or an explicit ``profile`` can override this.
+    """
+    from system.profiler import HardwareProfile, load_profile
+
+    profile = profile or load_profile()
+    cfg = recommend_config(profile)
+    models = [cfg["chat_model"], cfg["vision_model"]]
+    labels = {
+        cfg["chat_model"]: "Fast voice & tool chat model",
+        cfg["vision_model"]: "Screen-vision model",
+    }
+    return {
+        **cfg,
+        "models": models,
+        "model_labels": labels,
+        "alternatives": [cfg["alternate_vision_model"]],
+    }
+
+
+def configure_from_hardware(profile: Optional[Any] = None) -> dict[str, Any]:
+    """Detect hardware and apply the recommended model/whisper settings.
+
+    Called once on background startup. Environment variables already set by
+    the user (settings) always win.
+    """
+    cfg = _configure_hardware(profile)
+    logger.info(
+        "Applied %s tier (%s): chat=%s vision=%s whisper=%s/%s",
+        cfg["tier"], cfg["compute_backend"], cfg["chat_model"],
+        cfg["vision_model"], cfg["whisper_model"], cfg["whisper_compute_type"],
+    )
+    return cfg
+
+
+async def warm_models(models: Optional[list[str]] = None) -> dict[str, bool]:
+    """Ask Ollama to load the chat and vision models and keep them resident.
+
+    Uses ``/api/generate`` with an empty prompt and ``keep_alive: 30m`` so the
+    first real voice command avoids a cold model reload. Non-fatal and safe to
+    call when Ollama is offline.
+    """
+    if models is None:
+        rec = recommended_setup()
+        models = [rec["chat_model"], rec["vision_model"]]
+
+    results: dict[str, bool] = {}
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            for model in models:
+                try:
+                    resp = await client.post(
+                        f"{OLLAMA_HOST}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": "",
+                            "stream": False,
+                            "keep_alive": KEEP_ALIVE,
+                        },
+                    )
+                    results[model] = resp.status_code == 200
+                except Exception:  # pragma: no cover - network dependent
+                    results[model] = False
+    except Exception:  # pragma: no cover - network dependent
+        pass
+    return results
+
+
+def prewarm_audio_on_startup(speaker: Optional[Any] = None) -> dict[str, bool]:
+    """Background pre-warm of Kokoro + silero-vad (non-fatal)."""
+    return _prewarm_audio(speaker)
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +226,12 @@ def _download_whisper(progress: ProgressCallback) -> None:
     try:
         from faster_whisper import WhisperModel  # type: ignore
 
-        progress("Whisper", 10, f"Downloading {WHISPER_MODEL} weights…")
-        WhisperModel(WHISPER_MODEL, compute_type="int8", device="cpu")
+        # Read at call time so the hardware profile applied on startup wins.
+        model = os.getenv("WHISPER_MODEL", WHISPER_MODEL)
+        compute = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+        device = os.getenv("WHISPER_DEVICE", "cpu")
+        progress("Whisper", 10, f"Downloading {model} weights…")
+        WhisperModel(model, compute_type=compute, device=device)
         _marker_path("whisper").write_text("ok", encoding="utf-8")
         progress("Whisper", 100, "Whisper weights ready.")
     except ImportError:
@@ -373,12 +465,17 @@ def request_accessibility_prompt() -> dict[str, Any]:
 
 def get_setup_status() -> dict[str, Any]:
     """Aggregate everything the HUD needs to decide whether to show onboarding."""
+    from system.profiler import detect_hardware, load_profile
+
     ollama = ollama_status()
     models = pulled_models()
     weights = local_weights_status()
     required_ready = all(models.values())
     weights_ready = all(weights.values())
     complete = COMPLETE_MARKER.exists() and ollama["running"] and required_ready and weights_ready
+
+    profile = load_profile() or detect_hardware()
+    recommendation = recommended_setup(profile)
     return {
         "ollama": ollama,
         "models": models,
@@ -387,6 +484,16 @@ def get_setup_status() -> dict[str, Any]:
         "weights_ready": weights_ready,
         "model_cache_dir": str(MODEL_CACHE_DIR),
         "required_models": REQUIRED_MODELS,
+        "recommended_models": recommendation["models"],
+        "recommended_model_labels": recommendation["model_labels"],
+        "hardware": {
+            "total_ram_gb": profile.total_ram_gb,
+            "vram_gb": profile.vram_gb,
+            "cpu_cores": profile.cpu_cores,
+            "compute_backend": profile.compute_backend,
+            "tier": profile.tier,
+        },
+        "recommendation": recommendation,
         "complete": complete,
         "onboarding_dismissed": COMPLETE_MARKER.exists(),
     }

@@ -21,6 +21,12 @@ import httpx
 
 from tools.os_tools import OS_TOOLS, dispatch_tool
 from tools.installer_tool import INSTALL_TOOLS
+from tools.browser_tool import BROWSER_TOOLS
+from tools.window_tools import WINDOW_TOOLS
+from tools.context_tools import CONTEXT_TOOLS
+from tools.mcp_manager import MANAGEMENT_TOOLS
+from system.settings_tools import SETTINGS_TOOLS
+from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
 from tools.safety import SafetyGate
 from agent.vision_agent import DESCRIBE_TOOL
 from agent.abort import abort_controller, is_abort_phrase
@@ -51,8 +57,12 @@ STOP_TOOL = [
     },
 ]
 
-# All tools exposed to the local Ollama model (OS control + installer + a11y + abort).
-ALL_TOOLS = OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + STOP_TOOL
+# All tools exposed to the local Ollama model (OS control + installer + a11y +
+# browser + abort).
+ALL_TOOLS = (
+    OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
+    + CONTEXT_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS + DIAGNOSTICS_TOOLS + STOP_TOOL
+)
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
 
@@ -76,8 +86,46 @@ Available local tools:
 - describe_screen(focus): describe the current screen ALOUD for a blind or
   low-vision user. Use it when they ask what's on screen, to read a dialog/error,
   or to find the focused control. The result is spoken automatically.
+- open_url(url): open a website or search the web (plain words run a private
+  DuckDuckGo/Startpage search, no API key). Use it for browsing the web.
+- read_page_summary(): read the active web page as concise, spoken-friendly
+  text: headings, main article text, form fields, buttons and links. Navigation
+  clutter is stripped. Use it to read articles or search results aloud.
+- click_web_element(label_or_role): click a web button/link by its visible text
+  or ARIA label, with no pixel coordinates.
+- fill_web_field(field_label, text): type into a web form field by label or
+  placeholder.
+- list_open_windows(): list open windows with titles, monitor numbers and the
+  focused window. Use it when the user asks what windows are open.
+- focus_or_manage_window(app_or_title, action): focus, maximize, minimize,
+  close, or move_to_primary_monitor a window by app name or title.
+- set_active_monitor(monitor): switch the screen/vision capture to a 1-based
+  monitor. Use when the user says "look at my second monitor".
+- read_clipboard(): read what the user just copied.
+- write_clipboard(text): copy a result to the local clipboard.
+- inspect_recent_files(directory, limit): list recent downloads/files with
+  sizes and types. Use for "what did I just download" or finding a recent PDF.
+- list_mcp_tools(): list active MCP/plugin servers and their tools. Use when
+  the user asks what plugins or MCP tools are active.
+- reload_mcp_plugins(): reload ~/.murmur-ai/mcp_servers.json and reconnect to
+  all local MCP servers. Use when the user says reload my plugins.
+- mcp__* tools: dynamically discovered community tools. Tools that write,
+  contact the network, or affect the system ask for spoken confirmation first.
+- export_diagnostics(): create a privacy-safe zip of recent logs, hardware and
+  sanitized config, and speak its exact path for a GitHub issue.
+- run_diagnostics(): check microphone, Ollama, local models, permissions and
+  display session; speaks a plain-English report. Use when the user asks why
+  Murmur AI is not working or says run diagnostics.
+- get_settings(): read current voice, listening and privacy preferences.
+- set_setting(changes): change one or more preferences by name.
 - stop_automation(reason): immediately stop any running GUI/vision automation.
   Use it whenever the user wants to stop, abort, or cancel an ongoing task.
+
+Tool choice for screens: prefer the browser tools whenever the task is about
+websites, reading articles, searching the web, or filling online forms. Reserve
+describe_screen / the vision agent for NATIVE desktop apps (Blender, DaVinci
+Resolve, OS dialogs) and canvas-heavy web apps where the browser's accessibility
+tree is not useful.
 
 ReAct loop: think about what the user wants, pick ONE tool at a time (or none),
 execute it, observe the result, then reply. If a tool says confirmation is
@@ -120,6 +168,8 @@ class Brain:
             "model": model or self.model,
             "messages": messages,
             "stream": False,
+            # Keep models resident between commands to remove cold-start lag.
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
         }
         if tools:
             payload["tools"] = tools

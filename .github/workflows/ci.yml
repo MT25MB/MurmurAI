@@ -65,7 +65,13 @@ jobs:
       - name: Install app dependencies
         run: npm ci
 
-      - name: Type-check and build app
+      - name: Type-check app
+        run: npm run typecheck
+
+      - name: Frontend unit tests (Vitest)
+        run: npm test
+
+      - name: Build app
         run: npm run build
 
       - name: Install website dependencies

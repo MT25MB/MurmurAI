@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMurmurSocket } from "../lib/websocket";
+import { useSleepWakeHotkey } from "../lib/useSleepWakeHotkey";
+import { useAutoUpdater } from "../lib/updater";
 import { Waveform } from "./Waveform";
 import logoUrl from "../assets/logo-blue.png";
 
-type Phase = "IDLE" | "LISTENING" | "THINKING" | "SPEAKING" | "CONFIRMATION_REQUIRED";
+type Phase = "IDLE" | "LISTENING" | "THINKING" | "SPEAKING" | "CONFIRMATION_REQUIRED" | "SLEEPING";
 
 /** State -> (label, token color). Blue = active sense, red = action/alert. */
 const stateStyle: Record<Phase, { label: string; color: string; fill: string }> = {
@@ -12,6 +14,7 @@ const stateStyle: Record<Phase, { label: string; color: string; fill: string }> 
   THINKING: { label: "Thinking", color: "var(--color-muted)", fill: "bg-surface-2" },
   SPEAKING: { label: "Speaking", color: "var(--color-red)", fill: "bg-red-fill" },
   CONFIRMATION_REQUIRED: { label: "Confirm action", color: "var(--color-red)", fill: "bg-red-fill" },
+  SLEEPING: { label: "Sleeping", color: "var(--color-muted)", fill: "bg-surface-2" },
 };
 
 export default function HudPill() {
@@ -29,13 +32,23 @@ export default function HudPill() {
   const [guidanceInput, setGuidanceInput] = useState("");
   const [stopped, setStopped] = useState("");
   const [automating, setAutomating] = useState(false);
+  const [mode, setMode] = useState<"active" | "sleep">("active");
+  const [update, setUpdate] = useState<{
+    request_id: string;
+    version: string;
+    notes: string;
+    text: string;
+  } | null>(null);
   const amplitudeRef = useRef(0);
   const approveRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!lastMessage) return;
     if (lastMessage.type === "state") {
-      setStatus((lastMessage.status as Phase) || "IDLE");
+      const next = (lastMessage.status as Phase) || "IDLE";
+      setStatus(next);
+      if (next === "SLEEPING") setMode("sleep");
+      else if (next === "IDLE" || next === "LISTENING") setMode("active");
       if (typeof lastMessage.amplitude === "number") amplitudeRef.current = lastMessage.amplitude;
     }
     if (lastMessage.type === "text_output") {
@@ -65,7 +78,22 @@ export default function HudPill() {
       setConfirmation(null);
       setTimeout(() => setStopped(""), 6000);
     }
+    if (lastMessage.type === "update_available") {
+      setUpdate({
+        request_id: lastMessage.request_id,
+        version: lastMessage.version,
+        notes: lastMessage.notes,
+        text: lastMessage.text,
+      });
+    }
+    if (lastMessage.type === "update_install") {
+      setUpdate(null);
+      setTranscript(lastMessage.text);
+    }
   }, [lastMessage]);
+
+  // Startup / voice-driven update check, Tauri events and confirmed installs.
+  useAutoUpdater(send, lastMessage);
 
   // Move focus to the Approve button when a confirmation appears, so
   // keyboard-only users can act immediately with Enter.
@@ -82,6 +110,35 @@ export default function HudPill() {
     },
     [confirmation, send],
   );
+
+  // Switch between active conversation and sleep/standby. The backend
+  // announces the change aloud, so this is safe for screen-reader users.
+  const changeMode = useCallback(
+    (next: "active" | "sleep") => {
+      setMode(next);
+      send({ type: "set_listening_mode", mode: next });
+      if (next === "sleep") {
+        setStatus("SLEEPING");
+        setTranscript("");
+      } else {
+        setStatus("LISTENING");
+      }
+    },
+    [send],
+  );
+
+  const answerUpdate = useCallback(
+    (approved: boolean) => {
+      if (!update) return;
+      send({ type: "update_confirm", request_id: update.request_id, approved });
+      setUpdate(null);
+    },
+    [update, send],
+  );
+
+  // Tauri global hotkey (Ctrl/Cmd+Shift+Space) toggles standby. In a browser
+  // there is no Tauri event, so the in-HUD button below is the tactile fallback.
+  useSleepWakeHotkey(mode, changeMode);
 
   // Global keyboard shortcuts: M = mute toggle, Enter = approve, Escape = cancel.
   // Typed in a text field is ignored to avoid hijacking input.
@@ -102,11 +159,36 @@ export default function HudPill() {
       if (e.key.toLowerCase() === "m") {
         e.preventDefault();
         setMuted((m) => !m);
+      } else if (e.key.toLowerCase() === "q") {
+        // Quick "be quiet": stop TTS immediately without muting the mic.
+        e.preventDefault();
+        send({ type: "be_quiet" });
+        setTranscript("I'll be quiet.");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirmation, answer]);
+  }, [confirmation, answer, send]);
+
+  // Tray/global hotkey asks us to silence spoken output immediately.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("backend:be-quiet", () => {
+          if (!disposed) send({ type: "be_quiet" });
+        });
+      } catch {
+        // Browser dev: the Q shortcut still works.
+      }
+    })();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [send]);
 
   const submitGuidance = useCallback(() => {
     if (!guidance || !guidanceInput.trim()) return;
@@ -171,6 +253,24 @@ export default function HudPill() {
             Stop
           </button>
         )}
+        <button
+          type="button"
+          className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          onClick={() => changeMode(mode === "active" ? "sleep" : "active")}
+          aria-pressed={mode === "sleep"}
+          aria-label={mode === "sleep" ? "Wake Murmur (Ctrl+Shift+Space)" : "Put Murmur to sleep (Ctrl+Shift+Space)"}
+          title={mode === "sleep" ? "Wake up" : "Go to sleep"}
+        >
+          {mode === "sleep" ? (
+            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+              <path d="M10 2a1 1 0 0 1 1 1v1.1a6 6 0 1 1-4.1 4.1H6A1 1 0 0 1 5 7.2V6a4 4 0 0 1 8 0v1.1a1 1 0 0 1-.5.86 4 4 0 0 0-2.5 3.7V13a1 1 0 0 1-2 0V9.6a1 1 0 0 1 .5-.86A4 4 0 0 0 10 5V3a1 1 0 0 1 0-1Z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+              <path d="M7 3a1 1 0 0 1 1 1v9.6a3 3 0 1 0 4 0V4a1 1 0 1 1 2 0v9.6a5 5 0 1 1-8 0V4a1 1 0 0 1 1-1Z" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
@@ -244,6 +344,40 @@ export default function HudPill() {
               className="shrink-0 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white disabled:opacity-40"
             >
               Send
+            </button>
+          </div>
+        </div>
+      )}
+
+      {update && (
+        <div
+          className="app-region-no-drag mt-2 rounded-lg border border-blue/35 bg-blue-deep/25 p-2.5"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <p className="mono-label !text-blue">Update available</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-ink">Version {update.version}</p>
+          {update.notes && (
+            <p className="mt-1 line-clamp-3 text-[10px] leading-snug text-muted">{update.notes}</p>
+          )}
+          <p className="sr-only">{update.text}</p>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => answerUpdate(true)}
+              className="flex-1 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white hover:brightness-110"
+              aria-label="Download and install the update"
+            >
+              Install update
+            </button>
+            <button
+              type="button"
+              onClick={() => answerUpdate(false)}
+              className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[10px] font-bold text-ink hover:border-blue"
+              aria-label="Skip this update"
+            >
+              Not now
             </button>
           </div>
         </div>

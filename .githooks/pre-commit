@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-commit guardrail for Murmur AI.
+# Blocks commits on main unless the full verification suite passes, and refuses
+# to stage secrets, logs, or giant model binaries.
+set -euo pipefail
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")"
+
+# Secret / artifact scan on staged files.
+staged="$(git diff --cached --name-only)"
+if echo "$staged" | grep -Eiq '(^|/)\.env($|\.)|(^|/)backend/logs/|(^|/)logs/'; then
+  echo "BLOCKED: secrets or log files staged." >&2
+  exit 1
+fi
+if echo "$staged" | grep -Ei '\.(gguf|onnx|safetensors|pt|bin|wav|mp3|db|sqlite)$'; then
+  echo "BLOCKED: model/binary artifact staged." >&2
+  exit 1
+fi
+if git diff --cached --diff-filter=ACM | grep -Eiq '(api[_-]?key|secret[_-]?key|password\s*=|ghp_[A-Za-z0-9]|sk-[A-Za-z0-9]{20})'; then
+  echo "BLOCKED: possible secret in staged diff." >&2
+  exit 1
+fi
+
+if [ "$branch" = "main" ]; then
+  echo "On main: running full verification suite before commit..."
+  if [ -f scripts/verify-all.sh ]; then
+    bash scripts/verify-all.sh
+  elif [ -f scripts/verify-all.ps1 ]; then
+    pwsh -File scripts/verify-all.ps1
+  else
+    echo "BLOCKED: no verification script found." >&2
+    exit 1
+  fi
+fi
+
+exit 0

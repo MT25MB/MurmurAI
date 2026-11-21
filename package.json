@@ -1,22 +1,31 @@
 {
   "name": "murmur-ai",
   "private": true,
-  "version": "1.1.1",
+  "version": "0.1.0",
   "type": "module",
   "description": "Murmur AI — 100% local voice-controlled desktop agent",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "pretauri": "node scripts/prepare-sidecar.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-updater": "^2.8.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.0",
+    "jsdom": "^25.0.0",
+    "vitest": "^2.1.0",
     "@tailwindcss/vite": "^4.1.0",
     "@tauri-apps/cli": "^2.8.0",
     "@types/react": "^19.1.0",

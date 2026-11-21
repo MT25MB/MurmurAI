@@ -12,13 +12,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import signal
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from agent.brain import Brain
@@ -57,6 +58,17 @@ class AppState:
         self.hud_sockets: set[WebSocket] = set()
         self.send_locks: dict[int, asyncio.Lock] = {}
         self.setup_task: Optional[asyncio.Task] = None
+        # Sleep/wake state machine: "active" (continuous VAD) or "sleep" (wake-word only).
+        self.listening_mode = "active"
+        self.wake_detector = None
+        self.wake_task: Optional[asyncio.Task] = None
+        # Hardware profile + latency warm-up tasks (see system/profiler.py).
+        self.hardware_config: Optional[dict] = None
+        # Pending spoken update prompt: {request_id, version, notes}.
+        self.pending_update: Optional[dict] = None
+        self.warm_task: Optional[asyncio.Task] = None
+        self.prewarm_task: Optional[asyncio.Task] = None
+        self.plugin_task: Optional[asyncio.Task] = None
         self._shutting_down = False
 
     def session_for(self, websocket: WebSocket) -> SessionState:
@@ -103,15 +115,52 @@ async def lifespan(app: FastAPI):
         app_state.speaker = None
         register_speaker(None)
 
+    # Profile the machine and apply the best model tier before any model is
+    # used. Environment variables / saved settings overrides always win.
+    try:
+        app_state.hardware_config = setup_module.configure_from_hardware()
+        app_state.brain.model = app_state.hardware_config["chat_model"]
+        app_state.brain.vision_model = app_state.hardware_config["vision_model"]
+    except Exception:
+        logger.exception("Hardware profiling failed; using default model tier")
+
+    # Apply persisted voice/listening/model preferences to the live runtime.
+    try:
+        from system import settings_tools
+
+        settings_tools.apply_settings()
+    except Exception:
+        logger.exception("Could not apply saved settings")
+
     # On first launch, download local STT/TTS weights into ~/.murmur-ai/models/.
     # Runs in the background so the control plane starts immediately.
     app_state.setup_task = asyncio.create_task(setup_module.ensure_local_weights())
+    # Keep Ollama models warm and pre-import TTS/VAD so the first command and
+    # first greeting have no cold-start stutter. All non-fatal, background.
+    app_state.warm_task = asyncio.create_task(setup_module.warm_models())
+    app_state.prewarm_task = asyncio.create_task(
+        asyncio.to_thread(setup_module.prewarm_audio_on_startup, app_state.speaker)
+    )
+
+    # Load local MCP plugin tools in the background. Missing/broken servers are
+    # collected as non-fatal errors and reported by "what plugins are active".
+    from tools import mcp_manager
+
+    app_state.plugin_task = asyncio.create_task(
+        asyncio.to_thread(mcp_manager.manager.reload)
+    )
 
     yield
 
     app_state._shutting_down = True
     if app_state.setup_task:
         app_state.setup_task.cancel()
+    if app_state.warm_task:
+        app_state.warm_task.cancel()
+    if app_state.prewarm_task:
+        app_state.prewarm_task.cancel()
+    if app_state.plugin_task:
+        app_state.plugin_task.cancel()
     if app_state.listening_task:
         app_state.listening_task.cancel()
     if app_state.speaking_task:
@@ -178,6 +227,40 @@ async def setup_complete() -> JSONResponse:
 @app.post("/setup/reset")
 async def setup_reset() -> JSONResponse:
     return JSONResponse(setup_module.reset_setup())
+
+
+# ---- settings + diagnostics HTTP endpoints (used by the settings drawer) ----
+
+@app.get("/settings")
+async def get_settings_endpoint() -> JSONResponse:
+    from system import settings_tools
+
+    return JSONResponse(settings_tools.load_settings())
+
+
+@app.post("/settings")
+async def post_settings_endpoint(request: Request) -> JSONResponse:
+    from system import settings_tools
+
+    try:
+        changes = await request.json()
+    except Exception:
+        changes = {}
+    return JSONResponse(settings_tools.update_settings(changes if isinstance(changes, dict) else {}))
+
+
+@app.post("/settings/reset")
+async def reset_settings_endpoint() -> JSONResponse:
+    from system import settings_tools
+
+    return JSONResponse(settings_tools.reset_settings())
+
+
+@app.get("/diagnostics")
+async def get_diagnostics() -> JSONResponse:
+    from system import settings_tools
+
+    return JSONResponse(settings_tools.run_diagnostics())
 
 
 # ---- model pull WebSocket (streams Ollama /api/pull progress) ----
@@ -327,6 +410,41 @@ async def ws(websocket: WebSocket):
                 if tool_bus.resolve_guidance(msg.request_id or "", msg.text or ""):
                     await send(ServerMessage(type="info", text="Guidance received."))
 
+            elif msg.type == "set_listening_mode":
+                mode = (msg.mode or "").lower()
+                if mode == "sleep":
+                    await enter_sleep(session, send)
+                elif mode == "active":
+                    await wake_up(session, send)
+                    await start_listening(session, send)
+                else:
+                    await send(ServerMessage(type="error", detail="Unknown listening mode."))
+
+            elif msg.type == "update_available":
+                # The Tauri updater found a release; announce it aloud once.
+                await on_update_available(
+                    session, send, msg.version or "new", msg.notes
+                )
+
+            elif msg.type == "update_confirm":
+                await resolve_update_confirmation(
+                    session, send, bool(msg.approved)
+                )
+
+            elif msg.type == "update_status":
+                # Offline / verification failures are logged, never spoken as
+                # an update prompt (graceful fallback).
+                logger.info("Update check status from shell: %s", msg.detail or "")
+                await send(ServerMessage(type="info", text=msg.detail or "Update check finished."))
+
+            elif msg.type == "be_quiet":
+                if app_state.speaker is not None:
+                    if hasattr(app_state.speaker, "be_quiet"):
+                        app_state.speaker.be_quiet()
+                    else:
+                        app_state.speaker.interrupt()
+                await send(ServerMessage(type="info", text="I'll be quiet."))
+
             elif msg.type == "abort_automation":
                 # UI abort button: halt the running vision loop immediately.
                 abort_controller.abort(msg.text or "user pressed stop in the HUD")
@@ -353,11 +471,43 @@ async def ws(websocket: WebSocket):
 
 # ---- handlers ----
 
+async def _try_monitor_switch(session, send, text: str) -> bool:
+    """Handle 'look at my second monitor' locally, without a model call."""
+    from agent.vision_agent import parse_monitor_phrase, set_active_monitor
+
+    monitor = parse_monitor_phrase(text)
+    if monitor is None:
+        return False
+    reply = set_active_monitor(monitor)
+    await send(ServerMessage(type="text_output", text=reply))
+    await _speak_and_return(session, send, reply)
+    return True
+
+
 async def handle_text_input(
     session: SessionState, send, text: str
 ) -> None:
     """Full voice turn: transcribe already done; think, act, speak."""
     session.add_turn("user", text)
+    if text_is_sleep_phrase(text):
+        await enter_sleep(session, send)
+        return
+    if text_is_wake_phrase(text) and app_state.listening_mode == "sleep":
+        await wake_up(session, send)
+        await start_listening(session, send)
+        return
+    if await _try_monitor_switch(session, send, text):
+        return
+    if await _try_update_check_phrase(session, send, text):
+        return
+    if await _try_update_verbal_confirmation(session, send, text):
+        return
+    if await _try_plugin_phrase(session, send, text):
+        return
+    if await _try_settings_phrase(session, send, text):
+        return
+    if await _try_context_phrase(session, send, text):
+        return
     # If the user is answering a spoken confirmation, handle it here instead of
     # sending "yes"/"no" to the model.
     if _try_verbal_confirmation(text) is not None:
@@ -370,7 +520,7 @@ async def handle_text_input(
         # streaming progress and accepting confirmations during installs.
         reply = await asyncio.to_thread(
             app_state.brain.think_and_act,
-            user_text=text,
+            user_text=_augment_with_context(text, session),
             conversation_history=session.turns,
         )
     except Exception:
@@ -467,6 +617,256 @@ def _try_verbal_confirmation(text: str) -> Optional[bool]:
     return decision
 
 
+# ---- sleep / wake state machine ----
+
+from audio.wake_word import (  # noqa: E402
+    WakeWordDetector, text_is_wake_phrase, text_is_sleep_phrase, SAMPLE_RATE,
+)
+
+
+def _get_wake_detector():
+    """Lazy-load the offline wake-word detector."""
+    if app_state.wake_detector is None:
+        try:
+            app_state.wake_detector = WakeWordDetector()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Wake-word detector init failed")
+            app_state.wake_detector = False  # type: ignore[assignment]
+    return app_state.wake_detector or None
+
+
+def _apply_listening_mode(mode: str) -> None:
+    """Switch between active VAD listening and sleep/wake-word standby."""
+    assert mode in ("active", "sleep")
+    app_state.listening_mode = mode
+
+
+def _announce(text: str) -> None:
+    if app_state.speaker is not None:
+        try:
+            app_state.speaker.speak(text)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Announcement failed")
+
+
+async def enter_sleep(session: SessionState, send) -> None:
+    """Stop active audio, switch to standby, and announce the change."""
+    # Release the microphone so standby ignores all general room audio.
+    if app_state.listening_task and not app_state.listening_task.done():
+        app_state.listening_task.cancel()
+        app_state.listening_task = None
+    if app_state.listener is not None:
+        try:
+            app_state.listener.stop()
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("Listener stop on sleep failed", exc_info=True)
+        app_state.listener = None
+
+    _apply_listening_mode("sleep")
+    _chime("sleep")
+    _announce("Going to sleep. Say hey Murmur to wake me.")
+    await send(ServerMessage(type="state", status="SLEEPING", uptime_s=session.uptime()))
+    # Ensure any active wake task is running.
+    if app_state.wake_task is None or app_state.wake_task.done():
+        app_state.wake_task = asyncio.create_task(_wake_monitor(session, send))
+
+
+async def wake_up(session: SessionState, send) -> None:
+    """Leave standby, resume active listening, chime and speak 'I'm listening'."""
+    _apply_listening_mode("active")
+    _chime("wake")
+    _announce("I'm listening")
+    await send(ServerMessage(type="state", status="IDLE", uptime_s=session.uptime()))
+    # Cancel the standby monitor; active listening resumes via start_listening.
+    if app_state.wake_task is not None:
+        app_state.wake_task.cancel()
+        app_state.wake_task = None
+
+
+async def _wake_monitor(session: SessionState, send) -> None:
+    """While sleeping, poll the local wake-word detector without streaming audio."""
+    import sounddevice as sd
+
+    detector = _get_wake_detector()
+    try:
+        with sd.InputStream(samplerate=16000, channels=1, dtype="int16",
+                            blocksize=int(SAMPLE_RATE * 0.5)) as stream:
+            while not app_state._shutting_down and app_state.listening_mode == "sleep":
+                indata, _ = stream.read(int(SAMPLE_RATE * 0.5))
+                pcm = indata.tobytes()
+                if detector is not None and detector.detect(pcm):
+                    await wake_up(session, send)
+                    # Resume the active conversation loop.
+                    await start_listening(session, send)
+                    return
+                await asyncio.sleep(0.1)
+    except Exception:
+        logger.exception("Wake monitor stopped", exc_info=True)
+
+
+# ---- update notifications (driven by the Tauri updater commands) ----
+
+def _spoken_release_summary(notes: str | None, limit: int = 240) -> str:
+    """Condense GitHub release notes into a short, speakable summary."""
+    if not notes:
+        return ""
+    text = " ".join(str(notes).split())
+    text = re.sub(r"[#*_`>\[\]]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0] + "…"
+    return text
+
+
+async def on_update_available(session: SessionState, send, version: str, notes: str | None) -> None:
+    """Announce a discovered update to every HUD and speak the prompt aloud."""
+    request_id = f"upd-{int(time.time() * 1000)}"
+    summary = _spoken_release_summary(notes)
+    app_state.pending_update = {
+        "request_id": request_id,
+        "version": version,
+        "notes": notes or "",
+    }
+    prompt = (
+        f"Version {version} is available. "
+        + (f"{summary} " if summary else "")
+        + "Would you like me to download and restart to install it?"
+    )
+    await broadcast_to_huds(
+        ServerMessage(
+            type="update_available",
+            request_id=request_id,
+            version=version,
+            notes=summary,
+            text=prompt,
+        )
+    )
+    _announce(prompt)
+
+
+async def resolve_update_confirmation(session: SessionState, send, approved: bool) -> None:
+    """Apply the user's yes/no answer to a pending update prompt."""
+    pending = app_state.pending_update
+    if not pending:
+        await send(ServerMessage(type="info", text="There is no pending update."))
+        return
+    request_id = pending.get("request_id", "")
+    version = pending.get("version", "")
+    app_state.pending_update = None
+    if approved:
+        await broadcast_to_huds(
+            ServerMessage(
+                type="update_install",
+                request_id=request_id,
+                version=version,
+                text=f"Installing version {version}…",
+            )
+        )
+        _announce(f"Installing version {version} now.")
+    else:
+        await send(ServerMessage(type="info", text="Update cancelled."))
+        _announce("Okay, I won't update right now.")
+
+
+_UPDATE_CHECK_RE = re.compile(
+    r"\b(check|look) for (an )?(updates?|newer version)\b|\b(any )?updates? available\b",
+    re.IGNORECASE,
+)
+
+
+async def _try_update_check_phrase(session: SessionState, send, text: str) -> bool:
+    """Let the user ask 'check for updates' without going through the model."""
+    if not _UPDATE_CHECK_RE.search(text or ""):
+        return False
+    await send(ServerMessage(type="update_check_request", text="Checking for updates…"))
+    _announce("Let me check for updates.")
+    return True
+
+
+async def _try_update_verbal_confirmation(session, send, text: str) -> bool:
+    """Answer a spoken update prompt with yes/no before tool confirmations."""
+    if not app_state.pending_update:
+        return False
+    lowered = (text or "").lower()
+    if _YES_RE.search(lowered):
+        await resolve_update_confirmation(session, send, True)
+        return True
+    if _NO_RE.search(lowered):
+        await resolve_update_confirmation(session, send, False)
+        return True
+    return False
+
+
+# ---- local MCP plugin management phrases ----
+
+_PLUGIN_LIST_RE = re.compile(
+    r"\b(list|show|what|which)\b.*\b(plugins?|mcp tools?)\b|\b(plugins?|mcp tools?)\b.*\b(active|loaded|available)\b",
+    re.IGNORECASE,
+)
+_PLUGIN_RELOAD_RE = re.compile(
+    r"\b(reload|refresh|restart)\b.*\b(plugins?|mcp)\b", re.IGNORECASE
+)
+
+
+async def _try_plugin_phrase(session: SessionState, send, text: str) -> bool:
+    """Handle plugin inspection/reload locally without a model call."""
+    from tools import mcp_manager
+
+    lowered = text or ""
+    if _PLUGIN_RELOAD_RE.search(lowered):
+        status = await asyncio.to_thread(mcp_manager.manager.reload)
+        reply = status.get("summary", "Plugins reloaded.")
+        await send(ServerMessage(type="info", text=reply))
+        await _speak_and_return(session, send, reply)
+        return True
+    if _PLUGIN_LIST_RE.search(lowered):
+        reply = mcp_manager.manager.spoken_status()
+        await send(ServerMessage(type="info", text=reply))
+        await _speak_and_return(session, send, reply)
+        return True
+    return False
+
+
+# ---- local settings / diagnostics phrases ----
+
+async def _try_settings_phrase(session: SessionState, send, text: str) -> bool:
+    """Handle settings and diagnostics voice commands without a model call."""
+    from system import settings_tools
+
+    reply = settings_tools.handle_voice_command(text)
+    if reply is None:
+        return False
+    await send(ServerMessage(type="info", text=reply))
+    await _set_state(send, session, "IDLE")
+    return True
+
+
+# ---- clipboard / active context ----
+
+async def _try_context_phrase(session: SessionState, send, text: str) -> bool:
+    """Answer clipboard and recent-file questions locally."""
+    from tools import context_tools
+
+    context_tools.record_context(text, session)
+    reply = context_tools.handle_context_phrase(text, session)
+    if reply is None:
+        return False
+    await send(ServerMessage(type="info", text=reply))
+    await _set_state(send, session, "IDLE")
+    return True
+
+
+def _augment_with_context(text: str, session: SessionState) -> str:
+    """Resolve 'this'/'it' against session context before asking the model."""
+    from tools import context_tools
+
+    context_tools.record_context(text, session)
+    resolved = context_tools.resolve_reference(text, session)
+    if resolved:
+        return f"{text}\n(Relevant context: {resolved})"
+    return text
+
+
 # ---- state helpers ----
 
 def _chime(kind: str) -> None:
@@ -482,9 +882,11 @@ async def _set_state(send, session: SessionState, status: str) -> None:
     await send(ServerMessage(type="state", status=status, uptime_s=session.uptime()))
     cue = {
         "LISTENING": "listening",
+        "IDLE": "listening",
         "THINKING": "thinking",
         "SPEAKING": "speaking",
         "CONFIRMATION_REQUIRED": "confirmation",
+        "SLEEPING": "sleep",
     }.get(status)
     if cue:
         _chime(cue)
@@ -530,6 +932,29 @@ async def start_listening(session: SessionState, send) -> None:
 
 
 async def _on_utterance_async(session, send, text: str) -> None:
+    # Sleep/wake commands are handled locally, never sent to the model.
+    if text_is_sleep_phrase(text):
+        await enter_sleep(session, send)
+        return
+    if text_is_wake_phrase(text):
+        if app_state.listening_mode == "sleep":
+            await wake_up(session, send)
+            await start_listening(session, send)
+            return
+        # In active mode a wake phrase is just a normal utterance; fall through.
+    if await _try_monitor_switch(session, send, text):
+        return
+    if await _try_update_check_phrase(session, send, text):
+        return
+    if await _try_update_verbal_confirmation(session, send, text):
+        return
+    if await _try_plugin_phrase(session, send, text):
+        return
+    if await _try_settings_phrase(session, send, text):
+        return
+    if await _try_context_phrase(session, send, text):
+        return
+
     # Verbal "yes, confirm" / "no, cancel" can answer a pending spoken prompt.
     if _try_verbal_confirmation(text) is not None:
         await send(ServerMessage(type="text_output", text=text))
@@ -538,7 +963,7 @@ async def _on_utterance_async(session, send, text: str) -> None:
     try:
         reply = await asyncio.to_thread(
             app_state.brain.think_and_act,
-            user_text=text,
+            user_text=_augment_with_context(text, session),
             conversation_history=session.turns,
         )
     except Exception:

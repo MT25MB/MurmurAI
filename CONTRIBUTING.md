@@ -57,6 +57,24 @@ cd website && npm install && npm run dev
 - UI changes preserve the locked **obsidian / blue / red** palette defined in
   `src/index.css` and `website/src/index.css` (measured contrast, semantic tokens).
 
+## Verification and git hooks
+
+Run the whole suite locally before pushing:
+
+```bash
+bash scripts/verify-all.sh                    # macOS / Linux
+powershell -File scripts/verify-all.ps1       # Windows
+```
+
+Enable the guardrails that verify automatically on commits to `main` and on
+pushes to `main` or `v*` tags:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hooks also refuse to stage secrets, `backend/logs/`, or model binaries.
+
 ## Pull requests
 
 1. Fork and create a focused branch (`feat/…`, `fix/…`, `docs/…`).

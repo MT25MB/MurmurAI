@@ -29,6 +29,8 @@ try:  # pragma: no cover - platform optional
 except Exception:  # pragma: no cover - optional dep may be installed but unusable (headless/no PortAudio)
     WhisperModel = None  # type: ignore
 
+from audio.echo_guard import ECHO_TAIL_S, echo_is_active
+
 logger = logging.getLogger("murmur_ai.audio.listener")
 
 SAMPLE_RATE = 16000
@@ -67,6 +69,10 @@ class VoiceListener:
         self.device = device
         self.silence_ms = silence_ms
         self.on_utterance = on_utterance
+        self.mic_threshold = 0.5  # 0..1, higher ignores quieter room noise
+        self.echo_guard = True
+        self.echo_tail_s = ECHO_TAIL_S
+        self.loopback_guard = True
 
         self._model: Optional[WhisperModel] = None
         self._model_lock = threading.Lock()
@@ -96,6 +102,25 @@ class VoiceListener:
     def unload_model(self) -> None:
         with self._model_lock:
             self._model = None
+
+    def set_mic_threshold(self, value: float) -> float:
+        """Adjust VAD aggressiveness for noisy rooms (0..1, higher = stricter)."""
+        try:
+            threshold = min(1.0, max(0.0, float(value)))
+        except (TypeError, ValueError):
+            threshold = 0.5
+        self.mic_threshold = threshold
+        # webrtcvad supports 0 (least aggressive) through 3 (most aggressive).
+        self._vad = webrtcvad.Vad(min(3, int(threshold * 4)))
+        logger.info("Mic threshold set to %s", threshold)
+        return threshold
+
+    def set_echo_guard(self, enabled: bool, tail_s: float = ECHO_TAIL_S,
+                       loopback: bool = True) -> None:
+        """Configure speaker-bleed suppression (on/off, tail, loopback check)."""
+        self.echo_guard = bool(enabled)
+        self.echo_tail_s = max(0.0, float(tail_s))
+        self.loopback_guard = bool(loopback)
 
     # ---- lifecycle ----
 
@@ -153,6 +178,13 @@ class VoiceListener:
 
     def _process_frames(self) -> None:
         """Consume complete 30 ms frames from the buffer and run VAD."""
+        if self.echo_guard and echo_is_active(self.echo_tail_s, self.loopback_guard):
+            # Drop anything captured while Murmur (or loud media) was playing.
+            # Resetting the utterance prevents TTS bleed becoming a false command.
+            self._buffer.clear()
+            self._speaking = False
+            self._silence_frames = 0
+            return
         while len(self._buffer) >= FRAME_SAMPLES * 2:
             frame = bytes(self._buffer[: FRAME_SAMPLES * 2])
             del self._buffer[: FRAME_SAMPLES * 2]

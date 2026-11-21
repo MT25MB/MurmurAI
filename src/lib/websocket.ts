@@ -15,7 +15,12 @@ export type ClientMessage =
   | { type: "audio_chunk"; data: string }
   | { type: "confirm"; request_id: string; approved: boolean }
   | { type: "guidance_response"; request_id: string; text: string }
-  | { type: "abort_automation"; text?: string };
+  | { type: "abort_automation"; text?: string }
+  | { type: "set_listening_mode"; mode: "active" | "sleep" }
+  | { type: "update_available"; version?: string; notes?: string }
+  | { type: "update_confirm"; request_id: string; approved: boolean }
+  | { type: "update_status"; detail?: string }
+  | { type: "be_quiet" };
 
 /** Messages the backend may send to the HUD. */
 export type ServerMessage =
@@ -33,7 +38,16 @@ export type ServerMessage =
   | { type: "automation_stopped"; text: string }
   | { type: "progress"; text: string; percent?: number }
   | { type: "error"; detail: string }
-  | { type: "info"; text: string };
+  | { type: "info"; text: string }
+  | {
+      type: "update_available";
+      request_id: string;
+      version: string;
+      notes: string;
+      text: string;
+    }
+  | { type: "update_install"; request_id: string; version: string; text: string }
+  | { type: "update_check_request"; text: string };
 
 export interface MurmurSocket {
   status: ConnectionStatus;
