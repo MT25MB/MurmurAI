@@ -174,6 +174,6 @@ jobs:
           prerelease: false
           # Sign updater artifacts and publish latest.json for tauri-plugin-updater.
           # Signing keys come from repository secrets (see README/AGENTS.md).
-          includeUpdaterJson: true
-          updaterJsonPreferNgts: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: false
           args: --target ${{ matrix.triple }}

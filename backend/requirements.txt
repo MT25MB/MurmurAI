@@ -11,7 +11,9 @@ httpx>=0.27
 sounddevice>=0.5
 faster-whisper>=1.1
 webrtcvad-wheels>=2.0.14
-openwakeword>=0.5.0
+# openwakeword is optional: wake_word.py falls back to a faster-whisper keyword
+# gate when it is absent. Installing it needs tflite-runtime, which has no
+# wheels on some Python versions, so it is intentionally not a hard dependency.
 kokoro>=0.1.0
 pyttsx3>=2.90
 

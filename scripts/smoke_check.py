@@ -113,8 +113,9 @@ def main() -> None:
             fail(f"unhealthy /health payload: {health}")
         print(f"SMOKE OK: /health {health}")
 
+        # Hardware probing (nvidia-smi) can take a few seconds; give it room.
         status = json.loads(
-            urllib.request.urlopen(f"{BASE}/setup/status", timeout=5).read().decode()
+            urllib.request.urlopen(f"{BASE}/setup/status", timeout=25).read().decode()
         )
         if "recommended_models" not in status or "hardware" not in status:
             fail("/setup/status missing recommended_models or hardware")
