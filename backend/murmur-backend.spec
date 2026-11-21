@@ -34,7 +34,9 @@ binary_name = f"murmur-backend-{triple}"
 if platform.system() == "Windows":
     binary_name += ".exe"
 
-src_dir = os.path.dirname(os.path.abspath(SCRIPT))  # noqa: F821 (PyInstaller global)
+# PyInstaller spec globals like SCRIPT are not available in every version/OS.
+# The release workflow runs pyinstaller from backend/, so cwd is reliable.
+src_dir = os.getcwd()
 
 # ---- collect heavy optional dependencies into the bundle ----
 datas = []
@@ -58,10 +60,11 @@ for package in (
     "onnxruntime",
 ):
     try:
-        pkg_hidden, pkg_datas, pkg_binaries = collect_all(package)
-        hiddenimports.extend(pkg_hidden)
+        # collect_all returns (datas, binaries, hiddenimports) — order matters.
+        pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
         datas.extend(pkg_datas)
         binaries.extend(pkg_binaries)
+        hiddenimports.extend(pkg_hidden)
     except Exception:
         # Optional dependency not installed on this runner — include imports anyway.
         hiddenimports.extend(collect_submodules(package))
