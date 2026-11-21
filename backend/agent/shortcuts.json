@@ -1,0 +1,106 @@
+{
+  "blender": {
+    "match": [
+      "blender"
+    ],
+    "label": "Blender",
+    "workflows": {
+      "Add object": "Shift+A -> pick mesh (Cube, Plane, Sphere...).",
+      "Move object": "G then X/Y/Z to constrain axis.",
+      "Rotate object": "R then X/Y/Z.",
+      "Scale object": "S then X/Y/Z.",
+      "Delete selection": "X then confirm.",
+      "Enter Edit Mode": "Tab.",
+      "Select all / deselect": "A / Alt+A.",
+      "Frame selection": "Numpad . (period).",
+      "Toggle wireframe": "Z.",
+      "Open shader editor": "Switch an area to Shading workspace.",
+      "Render image": "F12.",
+      "Save file": "Ctrl+S.",
+      "Undo": "Ctrl+Z."
+    },
+    "hint": "Prefer keyboard shortcuts; Blender's viewport is keyboard-driven."
+  },
+  "davinci resolve": {
+    "match": [
+      "davinci",
+      "resolve"
+    ],
+    "label": "DaVinci Resolve",
+    "workflows": {
+      "Import media": "Ctrl+I, then drag clips to the timeline.",
+      "Play / pause": "Spacebar.",
+      "Ripple delete": "Ctrl+Backspace or Delete/X.",
+      "Add edit at playhead": "Ctrl+B.",
+      "Split clips": "S at playhead.",
+      "Undo": "Ctrl+Z.",
+      "Zoom timeline": "- / +.",
+      "Open Color page": "Ctrl+PageDown or click Color tab.",
+      "Open Fairlight": "Ctrl+PageDown (audio).",
+      "Render": "Ctrl+R, add to queue.",
+      "Save project": "Ctrl+S."
+    },
+    "hint": "Use Spacebar to play, S to split, Ctrl+B to add edits; avoid dragging when a hotkey exists."
+  },
+  "vs code": {
+    "match": [
+      "visual studio code",
+      "vscode",
+      "code"
+    ],
+    "label": "VS Code",
+    "workflows": {
+      "Quick Open file": "Ctrl+P then type filename.",
+      "Command Palette": "Ctrl+Shift+P.",
+      "Go to line": "Ctrl+G.",
+      "Save": "Ctrl+S.",
+      "Find": "Ctrl+F; Replace Ctrl+H.",
+      "Toggle terminal": "Ctrl+` (backtick).",
+      "Comment line": "Ctrl+/.",
+      "Format document": "Shift+Alt+F.",
+      "Multi-cursor": "Alt+Click or Ctrl+Alt+Down.",
+      "Split editor": "Ctrl+\\."
+    },
+    "hint": "Use the Command Palette (Ctrl+Shift+P) for almost any command."
+  },
+  "file explorer": {
+    "match": [
+      "explorer",
+      "file manager",
+      "finder",
+      "nautilus",
+      "dolphin"
+    ],
+    "label": "File Manager",
+    "workflows": {
+      "Open location": "Ctrl+L (Windows/Linux) or Cmd+Shift+G (macOS), then type path.",
+      "New folder": "Ctrl+Shift+N.",
+      "Rename": "F2.",
+      "Delete": "Delete (to Recycle Bin); Shift+Delete permanently (needs confirmation).",
+      "Select all": "Ctrl+A.",
+      "Go up": "Alt+Up.",
+      "Search": "Ctrl+F."
+    },
+    "hint": "Use the location bar (Ctrl+L) to jump directly to paths instead of clicking through folders."
+  },
+  "browser": {
+    "match": [
+      "chrome",
+      "firefox",
+      "edge",
+      "safari",
+      "browser"
+    ],
+    "label": "Web Browser",
+    "workflows": {
+      "Focus address bar": "Ctrl+L / Cmd+L.",
+      "New tab": "Ctrl+T.",
+      "Close tab": "Ctrl+W.",
+      "Find in page": "Ctrl+F.",
+      "Reload": "Ctrl+R / F5.",
+      "Back / forward": "Alt+Left / Alt+Right.",
+      "Developer tools": "Ctrl+Shift+I."
+    },
+    "hint": "Use Ctrl+L to navigate directly to URLs."
+  }
+}

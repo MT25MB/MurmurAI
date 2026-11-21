@@ -1,0 +1,366 @@
+/**
+ * First-run setup card. Shown inside the Tauri window instead of the HUD pill
+ * whenever Ollama, the required local models, or local weights are missing.
+ * All steps are local; no cloud API keys are ever requested.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import logoUrl from "../assets/logo-blue.png";
+import {
+  completeSetup,
+  fetchPermissions,
+  fetchSetupStatus,
+  installOllama,
+  promptPermissions,
+  pullModel,
+  type PermissionStatus,
+  type SetupStatus,
+} from "../lib/setup";
+
+type Check = { ok: boolean; label: string; detail: string };
+
+export default function OnboardingModal({ onComplete }: { onComplete: () => void }) {
+  const [status, setStatus] = useState<SetupStatus | null>(null);
+  const [permissions, setPermissions] = useState<PermissionStatus | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [installInfo, setInstallInfo] = useState<{ command: string; url: string } | null>(null);
+  const [pull, setPull] = useState<{ model: string; text: string; percent: number | null } | null>(null);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micState, setMicState] = useState<"idle" | "listening" | "error" | "done">("idle");
+  const [busy, setBusy] = useState(false);
+  const closePullRef = useRef<(() => void) | null>(null);
+  const micCleanupRef = useRef<(() => void) | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [s, p] = await Promise.all([fetchSetupStatus(), fetchPermissions()]);
+      setStatus(s);
+      setPermissions(p);
+      setLoadError("");
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Backend unavailable.");
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    return () => {
+      closePullRef.current?.();
+      micCleanupRef.current?.();
+    };
+  }, [refresh]);
+
+  const handleInstallOllama = async () => {
+    setBusy(true);
+    try {
+      const info = await installOllama();
+      setInstallInfo(info);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Install request failed.");
+    } finally {
+      setBusy(false);
+    }
+    // Re-check after a short delay in case the user installs quickly.
+    setTimeout(refresh, 4000);
+  };
+
+  const handlePull = (model: string) => {
+    closePullRef.current?.();
+    setPull({ model, text: "Starting download…", percent: 0 });
+    closePullRef.current = pullModel(
+      model,
+      (text, percent) => setPull({ model, text, percent }),
+      (ok, text) => {
+        setPull({ model, text, percent: ok ? 100 : null });
+        if (ok) setTimeout(refresh, 500);
+      },
+    );
+  };
+
+  const testMic = async () => {
+    micCleanupRef.current?.();
+    setMicState("listening");
+    setMicLevel(0);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+      let raf = 0;
+      const tick = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (const v of data) sum += ((v - 128) / 128) ** 2;
+        const rms = Math.sqrt(sum / data.length);
+        setMicLevel(Math.min(1, rms * 4));
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+      const stop = () => {
+        cancelAnimationFrame(raf);
+        stream.getTracks().forEach((t) => t.stop());
+        ctx.close();
+        setMicState("done");
+      };
+      micCleanupRef.current = stop;
+      // Auto-stop after 5 seconds.
+      setTimeout(() => micCleanupRef.current?.(), 5000);
+    } catch {
+      setMicState("error");
+    }
+  };
+
+  const handlePermissions = async () => {
+    setBusy(true);
+    try {
+      setPermissions(await promptPermissions());
+    } catch {
+      // ignore; user can re-check manually
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    setBusy(true);
+    try {
+      await completeSetup();
+      onComplete();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not save setup state.");
+      setBusy(false);
+    }
+  };
+
+  if (loadError && !status) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-obsidian p-4 text-muted">
+        <div className="w-full max-w-md rounded-2xl border border-red/35 bg-red-deep/30 p-6 text-center">
+          <p className="text-sm font-semibold text-red">Backend not reachable</p>
+          <p className="mt-1 text-xs text-red/80">{loadError}</p>
+          <button
+            onClick={refresh}
+            className="mt-4 rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-white hover:bg-surface-2"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-obsidian text-muted">
+        <p className="text-sm">Checking your local environment…</p>
+      </div>
+    );
+  }
+
+  const checks: Check[] = [
+    {
+      ok: status.ollama.running,
+      label: "Ollama running",
+      detail: status.ollama.running
+        ? "Local inference server is ready."
+        : status.ollama.installed
+          ? "Ollama is installed but not running — start it and retry."
+          : "Ollama is not installed.",
+    },
+    ...status.required_models.map((m) => ({
+      ok: status.models[m],
+      label: m,
+      detail: status.models[m] ? "Ready." : status.model_labels[m] || "Not downloaded.",
+    })),
+    {
+      ok: status.weights_ready,
+      label: "Local voice weights",
+      detail: status.weights_ready
+        ? "Whisper + Kokoro cached."
+        : "Downloading on first launch into your local cache.",
+    },
+  ];
+
+  const allReady = checks.every((c) => c.ok);
+  const permsReady = !permissions || permissions.items.every((p) => p.granted !== false);
+
+  return (
+    <div className="h-full w-full overflow-y-auto bg-obsidian p-5 text-ink">
+      <div className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface/95 p-6 shadow-2xl ring-1 ring-white/5">
+        <div className="flex items-center gap-3">
+          <img src={logoUrl} alt="" aria-hidden="true" className="h-11 w-11 object-contain" />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-white">Welcome to Murmur AI</h1>
+            <p className="text-xs text-muted">One-time local setup. Nothing leaves this device.</p>
+          </div>
+        </div>
+
+        {/* Environment checks */}
+        <section className="mt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Environment
+          </h2>
+          <div className="mt-2 space-y-1.5">
+            {checks.map((c) => (
+              <div
+                key={c.label}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface/60 px-3 py-2"
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                    c.ok ? "bg-blue/20 text-blue" : "bg-red/20 text-red"
+                  }`}
+                >
+                  {c.ok ? "✓" : "!"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-white">{c.label}</p>
+                  <p className="truncate text-[11px] text-muted">{c.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Ollama install */}
+        {!status.ollama.installed && (
+          <button
+            onClick={handleInstallOllama}
+            disabled={busy}
+            className="mt-4 w-full rounded-lg bg-blue-fill px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+          >
+            Install Ollama
+          </button>
+        )}
+        {installInfo && (
+          <p className="mt-2 break-all rounded bg-obsidian p-2 text-[11px] text-muted">
+            Or run: <code className="text-blue">{installInfo.command}</code>
+          </p>
+        )}
+
+        {/* Model pulls */}
+        <section className="mt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Local models
+          </h2>
+          <div className="mt-2 space-y-2">
+            {status.required_models.map((m) => (
+              <div key={m} className="rounded-lg border border-border bg-surface/60 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-white">{m}</p>
+                    <p className="text-[11px] text-muted">{status.model_labels[m]}</p>
+                  </div>
+                  {status.models[m] ? (
+                    <span className="rounded-md bg-blue/15 px-2 py-1 text-[10px] font-semibold text-blue">
+                      Ready
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handlePull(m)}
+                      className="shrink-0 rounded-md bg-blue-fill px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                    >
+                      Pull
+                    </button>
+                  )}
+                </div>
+                {pull?.model === m && (
+                  <div className="mt-2">
+                    <p className="truncate text-[11px] text-blue" title={pull.text}>
+                      {pull.text}
+                    </p>
+                    {pull.percent !== null && (
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                        <div
+                          className="h-full rounded-full bg-blue-fill transition-all duration-200"
+                          style={{ width: `${pull.percent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Microphone test */}
+        <section className="mt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Microphone
+          </h2>
+          <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-surface/60 p-3">
+            <button
+              onClick={testMic}
+              className="shrink-0 rounded-md bg-surface-2 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-surface-2"
+            >
+              Test mic
+            </button>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full bg-blue-fill transition-all duration-75"
+                style={{ width: `${micLevel * 100}%` }}
+              />
+            </div>
+            <span className="w-16 text-right text-[10px] text-muted">
+              {micState === "error" ? "Denied" : micState === "done" ? "Done" : micState === "listening" ? "Speak…" : "Idle"}
+            </span>
+          </div>
+        </section>
+
+        {/* OS permissions */}
+        {permissions && (
+          <section className="mt-6">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Permissions
+            </h2>
+            <div className="mt-2 space-y-1.5">
+              {permissions.items.map((item) => (
+                <div
+                  key={item.key}
+                  className="rounded-lg border border-border bg-surface/60 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-white">{item.label}</p>
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        item.granted === true
+                          ? "text-blue"
+                          : item.granted === false
+                            ? "text-red"
+                            : "text-muted"
+                      }`}
+                    >
+                      {item.granted === true ? "Granted" : item.granted === false ? "Needed" : "Check manually"}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted">{item.hint}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={handlePermissions}
+              disabled={busy}
+              className="mt-2 w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-50"
+            >
+              Check / request permissions
+            </button>
+          </section>
+        )}
+
+        {loadError && <p className="mt-3 text-[11px] text-red-400">{loadError}</p>}
+
+        <button
+          onClick={handleFinish}
+          disabled={busy || !allReady || !permsReady}
+          className="mt-6 w-full rounded-lg bg-blue-fill px-4 py-3 text-sm font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {allReady ? "Finish setup" : "Complete the steps above"}
+        </button>
+      </div>
+    </div>
+  );
+}

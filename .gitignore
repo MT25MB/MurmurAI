@@ -1,0 +1,68 @@
+# ============================================================
+# Murmur AI — repository ignore rules
+# ============================================================
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+.vite/
+*.local
+npm-debug.log*
+yarn-error.log*
+
+# Website build output (separate from app dist, already covered by dist/)
+website/dist/
+
+# ---- Rust / Tauri ----
+src-tauri/target/
+src-tauri/gen/
+*.rs.bk
+
+# Compiled sidecar binaries — produced by PyInstaller in CI.
+# Placeholder files are regenerated locally; never commit real binaries.
+src-tauri/binaries/murmur-backend-*
+
+# ---- Python ----
+.venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- PyInstaller ----
+backend/build/
+backend/dist/
+*.spec.bak
+
+# ---- Model weights & local caches (never commit) ----
+*.gguf
+*.onnx
+*.safetensors
+*.bin
+*.pt
+*.wav
+*.mp3
+.murmur-ai/
+models/
+
+# ---- Runtime data ----
+backend/logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Secrets / environment ----
+.env
+.env.*
+!.env.example
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

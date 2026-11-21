@@ -1,0 +1,126 @@
+name: Release
+
+# Publish installers automatically whenever a version tag (v*) is pushed.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # required for tauri-action to create/upload releases
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            triple: x86_64-pc-windows-msvc
+            tauri_args: --windows
+          # macos-latest runners are Apple Silicon; this produces arm64 .dmg.
+          - platform: macos-latest
+            triple: aarch64-apple-darwin
+            tauri_args: --macos
+          - platform: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            tauri_args: --linux
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---- Rust + Tauri system dependencies ----
+      - name: Install Rust stable (target ${{ matrix.triple }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            portaudio19-dev \
+            python3-tk \
+            xvfb
+
+      - name: Install macOS system dependencies
+        if: matrix.platform == 'macos-latest'
+        run: brew install portaudio || true
+
+      # ---- Node / frontend ----
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # ---- Python backend sidecar (PyInstaller) ----
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build backend sidecar with PyInstaller
+        working-directory: backend
+        env:
+          # The spec uses this to name the binary and place it in
+          # src-tauri/binaries/murmur-backend-<target-triple>.
+          TAURI_TARGET_TRIPLE: ${{ matrix.triple }}
+        run: pyinstaller murmur-backend.spec --noconfirm --clean
+
+      - name: Verify sidecar binary
+        shell: bash
+        env:
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            BIN="src-tauri/binaries/murmur-backend-${TRIPLE}.exe"
+          else
+            BIN="src-tauri/binaries/murmur-backend-${TRIPLE}"
+          fi
+          test -f "$BIN" && echo "Sidecar ready: $BIN" || (echo "Missing $BIN" && exit 1)
+
+      # ---- Tauri build + publish to the GitHub Release ----
+      - name: Build and publish Tauri installer
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Murmur AI ${{ github.ref_name }}"
+          releaseBody: |
+            Murmur AI ${{ github.ref_name }} — 100% local voice-controlled desktop agent.
+
+            Installers: Windows (.msi/.exe), macOS (.dmg, Apple Silicon), Linux (.AppImage/.deb).
+            No cloud APIs, no subscription, no telemetry. See the README for details.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.tauri_args }}

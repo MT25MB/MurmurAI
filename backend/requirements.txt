@@ -1,0 +1,28 @@
+# Core control plane (needed for /health + WebSocket)
+fastapi>=0.115
+uvicorn[standard]>=0.34
+websockets>=14
+pydantic>=2.9
+python-dotenv>=1.0
+numpy>=1.26
+httpx>=0.27
+
+# Voice pipeline (local only) — install with: pip install -r requirements.txt
+sounddevice>=0.5
+faster-whisper>=1.1
+webrtcvad-wheels>=2.0.14
+kokoro>=0.1.0
+pyttsx3>=2.90
+
+# OS automation (local only)
+pyautogui>=0.9.54
+mss>=10.0
+Pillow>=10.0
+
+# SoM visual grounding (local only)
+opencv-python-headless>=4.9
+pygetwindow>=0.0.9
+# Platform-specific accessibility (install the one for your OS):
+#   Windows: pywinauto>=0.6.8
+#   macOS:   atomac  / pyobjc
+#   Linux:   pyatspi
