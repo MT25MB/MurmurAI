@@ -103,11 +103,17 @@ def test_undo_last_action_uses_shortcut(monkeypatch):
 
     seen = []
     monkeypatch.setattr(os_tools, "_undo_last_file_move", lambda: False)
-    monkeypatch.setattr("pyautogui.hotkey", lambda *keys: seen.append(keys), raising=False)
+    # Patch the module's own reference: in CI pyautogui is an optional dep and
+    # may be None, so patching the global module would not affect this code.
+    monkeypatch.setattr(
+        os_tools, "pyautogui",
+        type("P", (), {"hotkey": staticmethod(lambda *keys: seen.append(keys))})(),
+        raising=False,
+    )
 
     result = os_tools.dispatch_tool("undo_last_action", {}, None)
     assert "undo" in result.lower()
-    assert seen and ("ctrl", "z") in seen or ("command", "z") in seen
+    assert ("ctrl", "z") in seen or ("command", "z") in seen
 
 
 def test_undo_reverses_last_file_move(tmp_path, monkeypatch):
