@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version={{VERSION}}
+Name=Murmur AI
+GenericName=Voice Control Assistant
+Comment=Talk to your computer and have it do the work, entirely locally
+Exec=murmur-ai
+TryExec=murmur-ai
+Icon=com.murmurai.MurmurAI
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=voice;accessibility;screenreader;automation;
+StartupNotify=true
+NoDisplay=false

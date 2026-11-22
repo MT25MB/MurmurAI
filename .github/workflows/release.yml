@@ -201,6 +201,11 @@ jobs:
           gh release download "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" --dir release-assets
 
+      # The committed manifests are rendered output. Always start from the
+      # placeholder templates so a second release can fill them again.
+      - name: Restore manifest templates
+        run: cp -r packaging/templates/. packaging/
+
       - name: Update versions and SHA256 checksums in packaging/
         run: |
           python scripts/sync_packaging.py \

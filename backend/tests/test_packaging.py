@@ -129,6 +129,16 @@ def test_release_workflow_syncs_packages():
     text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "SHA256SUMS.txt" in text
     assert "sync_packaging.py" in text
+    assert "packaging/templates" in text, "release must restore placeholder templates"
+
+
+def test_manifest_templates_keep_placeholders():
+    templates = PACKAGING / "templates"
+    for path in templates.rglob("*"):
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            assert "{{VERSION}}" in text, path
+    assert templates.exists()
 
 
 def test_readme_documents_one_line_installs():
