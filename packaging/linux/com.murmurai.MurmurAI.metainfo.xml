@@ -34,7 +34,7 @@
     <binary>murmur-ai</binary>
   </provides>
   <releases>
-    <release version="{{VERSION}}" date="{{DATE}}">
+    <release version="1.0.0" date="2026-11-22">
       <description>
         <p>See the GitHub release notes for changes in this version.</p>
       </description>
