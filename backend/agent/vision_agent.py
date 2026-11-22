@@ -708,6 +708,7 @@ class VisionAgent:
                 f"[{eid}] at ({int(x)},{int(y)})" for eid, (x, y) in element_map.items()
             )
         system = SYSTEM_PROMPT + "\n" + elements_desc
+        system += a11y_context(width, height)
         if app_section:
             system += "\n" + app_section
         if plan is not None:
@@ -877,6 +878,19 @@ class VisionAgent:
             logger.debug("Could not save description log", exc_info=True)
 
         return description
+
+
+def a11y_context(width: int, height: int) -> str:
+    """Compact accessibility context for the VLM, empty when unavailable."""
+    from tools.a11y_tree import a11y_table, capture_tree
+
+    tree = capture_tree(int(width), int(height))
+    if tree.available and tree.elements:
+        return (
+            "\nNative accessibility controls (prefer these by name for "
+            "buttons, menus and inputs):\n" + a11y_table(tree.elements, limit=12)
+        )
+    return ""
 
 
 def describe_screen(focus: str = "overview") -> str:

@@ -87,91 +87,19 @@ def _try_import_accessibility():
 
 
 def _accessibility_elements() -> list[tuple[float, float, float, float, str]]:
-    """Return [(x1, y1, x2, y2, label)] in normalized 0-1000 screen coords."""
-    backend, cls = _try_import_accessibility()
-    if backend is None:
-        return []
+    """Return [(x1, y1, x2, y2, label)] in normalized 0-1000 screen coords.
 
-    elements: list[tuple[float, float, float, float, str]] = []
-    try:
-        if backend == "pywinauto":
-            desktop = cls(backend="uia")
-            window = desktop.active()
-            for ctrl in window.descendants():
-                try:
-                    rect = ctrl.rectangle()
-                    label = (ctrl.window_text() or ctrl.friendly_class_name() or "").strip()
-                    if not label:
-                        continue
-                    elements.append(
-                        (
-                            round(rect.left / 1000 * 1000),  # placeholder; real scale below
-                            round(rect.top / 1000 * 1000),
-                            round(rect.right / 1000 * 1000),
-                            round(rect.bottom / 1000 * 1000),
-                            label[:40],
-                        )
-                    )
-                except Exception:
-                    continue
-        elif backend in ("atomac", "pyobjc"):
-            # macOS: enumerate the frontmost app's UI elements.
-            app = cls.getFocusedApplication()
-            for el in app.AXChildren or []:
-                try:
-                    pos = el.AXPosition
-                    size = el.AXSize
-                    label = (el.AXTitle or el.AXRole or "").strip()
-                    elements.append(
-                        (int(pos.x), int(pos.y), int(pos.x + size.width), int(pos.y + size.height), label[:40])
-                    )
-                except Exception:
-                    continue
-        elif backend == "pyatspi":
-            desktop = cls.Desktop
-            for app in desktop:
-                for win in app:
-                    try:
-                        for el in win:
-                            try:
-                                bbox = el.queryComponent().getPositionAndSize()
-                                label = (el.name or el.roleName or "").strip()
-                                elements.append(
-                                    (bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3], label[:40])
-                                )
-                            except Exception:
-                                continue
-                    except Exception:
-                        continue
-    except Exception:  # pragma: no cover - platform dependent
-        logger.exception("Accessibility enumeration failed, falling back to OpenCV")
+    Backed by the shared native accessibility fast-path; when no native API is
+    available the caller still has OpenCV detection to fall back on.
+    """
+    from tools.a11y_tree import capture_tree
 
-    # Normalize to 0-1000 using screen size if available.
-    normalized: list[tuple[float, float, float, float, str]] = []
-    try:
-        import platform as _plat
-        import tkinter
-
-        root = tkinter.Tk()
-        root.withdraw()
-        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        root.destroy()
-        for x1, y1, x2, y2, label in elements:
-            normalized.append(
-                (
-                    round(x1 / sw * 1000),
-                    round(y1 / sh * 1000),
-                    round(x2 / sw * 1000),
-                    round(y2 / sh * 1000),
-                    label,
-                )
-            )
-    except Exception:
-        normalized = elements  # already-ish normalized best-effort
-
-    return normalized
-
-
+    tree = capture_tree()
+    return [
+        (element.box[0], element.box[1], element.box[2], element.box[3],
+         element.name or element.role)
+        for element in tree.elements
+    ]
 def _opencv_elements(png_bytes: bytes, screen_w: int, screen_h: int) -> list[tuple[float, float, float, float, str]]:
     """Detect UI-ish rectangular regions via edge/contour detection."""
     if cv2 is None or np is None:

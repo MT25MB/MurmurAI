@@ -144,8 +144,13 @@ OS_TOOLS = [
 
 def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     """Call a registered OS tool by name with the given arguments."""
+    from .a11y_tree import handle_a11y_tool
     from .memory_tools import handle_memory_tool
     from .tool_recipes import handle_recipe_tool
+
+    a11y_result = handle_a11y_tool(name, arguments)
+    if a11y_result is not None:
+        return a11y_result
 
     recipe_result = handle_recipe_tool(name, arguments)
     if recipe_result is not None:
