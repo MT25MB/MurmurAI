@@ -15,6 +15,36 @@ export default function App() {
       .catch(() => setReady(false)); // if backend is down, show onboarding retry
   }, []);
 
+  // The HUD is a tiny pill when setup is complete, but onboarding/error screens
+  // need room for their controls (including the Retry button). Resize the native
+  // window so those controls are never clipped or unreachable.
+  useEffect(() => {
+    let disposed = false;
+    (async () => {
+      try {
+        const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
+          import("@tauri-apps/api/window"),
+          import("@tauri-apps/api/dpi"),
+        ]);
+        if (disposed) return;
+        const window = getCurrentWindow();
+        if (ready === false) {
+          await window.setResizable(true);
+          await window.setSize(new LogicalSize(520, 620));
+        } else if (ready === true) {
+          await window.setResizable(false);
+          await window.setSize(new LogicalSize(400, 84));
+        }
+        await window.center();
+      } catch {
+        // Browser dev mode: no native window to resize.
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [ready]);
+
   // Ctrl+, / Cmd+, opens settings from anywhere in the HUD.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

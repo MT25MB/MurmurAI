@@ -20,6 +20,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agent.brain import Brain
@@ -180,6 +181,30 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Murmur AI Local Voice Sidecar", lifespan=lifespan)
+
+# The Tauri webview runs on a different origin (tauri://localhost on macOS/Linux,
+# http://tauri.localhost on Windows) than this localhost API. Without CORS the
+# browser blocks every /setup/* fetch with "Failed to fetch". The server only
+# binds 127.0.0.1, so allowing the local webview origins is safe.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "http://localhost:8765",
+        "http://127.0.0.1:8765",
+    ],
+    allow_origin_regex=(
+        r"^(tauri://localhost|https?://tauri\.localhost|"
+        r"https?://(localhost|127\.0\.0\.1)(:\d+)?)$"
+    ),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---- HTTP ----

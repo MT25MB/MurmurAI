@@ -27,6 +27,22 @@ let posts: Array<Record<string, unknown>> = [];
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 
+const windowMock = vi.hoisted(() => ({
+  setSize: vi.fn().mockResolvedValue(undefined),
+  setResizable: vi.fn().mockResolvedValue(undefined),
+  center: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => windowMock,
+}));
+
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalSize: class {
+    constructor(public width: number, public height: number) {}
+  },
+}));
+
 function mockFetch() {
   return vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -71,6 +87,9 @@ describe("SettingsDrawer", () => {
   beforeEach(() => {
     current = { ...defaults };
     posts = [];
+    windowMock.setSize.mockClear();
+    windowMock.setResizable.mockClear();
+    windowMock.center.mockClear();
     vi.stubGlobal("fetch", mockFetch());
   });
 
@@ -153,5 +172,26 @@ describe("SettingsDrawer", () => {
     render(<App />);
     await user.keyboard("{Control>},{/Control}");
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shrinks the native window to the HUD size when setup is complete", async () => {
+    render(<App />);
+    await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());
+    const size = windowMock.setSize.mock.calls.at(-1)?.[0];
+    expect(size.width).toBe(400);
+    expect(size.height).toBe(84);
+    expect(windowMock.setResizable).toHaveBeenCalledWith(false);
+  });
+
+  it("enlarges the native window so the Retry button is reachable on backend failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("Failed to fetch"))));
+    render(<App />);
+    await screen.findByRole("alert");
+    await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());
+    const size = windowMock.setSize.mock.calls.at(-1)?.[0];
+    expect(size.width).toBe(520);
+    expect(size.height).toBe(620);
+    expect(windowMock.setResizable).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: /try connecting/i })).toBeInTheDocument();
   });
 });
