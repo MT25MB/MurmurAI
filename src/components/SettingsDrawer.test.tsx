@@ -200,6 +200,17 @@ describe("SettingsDrawer", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
+  it("gives the connecting message room before setup status is known", async () => {
+    // A never-resolving probe keeps App in its connecting state.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<App />);
+    await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());
+    const size = windowMock.setSize.mock.calls.at(-1)?.[0];
+    expect(size.width).toBe(520);
+    expect(size.height).toBeGreaterThan(84);
+    expect(screen.getByText("Connecting to the local backend…")).toBeInTheDocument();
+  });
+
   it("shrinks the native window to the HUD size when setup is complete", async () => {
     render(<App />);
     await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());

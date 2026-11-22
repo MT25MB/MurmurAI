@@ -50,10 +50,15 @@ export default function App() {
         ]);
         if (disposed) return;
         const window = getCurrentWindow();
-        if (ready === false) {
+        if (ready === null) {
+          // "Connecting…" shows a two-line progress message plus a hint; the
+          // 400x84 pill would clip it. Give it room until status is known.
+          await window.setResizable(false);
+          await window.setSize(new LogicalSize(520, 220));
+        } else if (ready === false) {
           await window.setResizable(true);
           await window.setSize(new LogicalSize(520, 620));
-        } else if (ready === true) {
+        } else {
           await window.setResizable(false);
           await window.setSize(new LogicalSize(400, 84));
         }
@@ -102,11 +107,11 @@ export default function App() {
   let content: ReactNode;
   if (ready === null) {
     content = (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-obsidian text-sm text-muted" role="status" aria-live="polite">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-obsidian px-4 text-center text-sm text-muted" role="status" aria-live="polite">
         <p>Connecting to the local backend…</p>
         {connectAttempt > 2 && (
           <p className="text-xs text-muted/70">
-            Starting the local engine can take up to 30 seconds on first launch (attempt {connectAttempt}).
+            First launch can take ~30s (attempt {connectAttempt}).
           </p>
         )}
       </div>
