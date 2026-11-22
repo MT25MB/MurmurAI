@@ -51,6 +51,7 @@ from agent.state import ServerMessage
 from agent.abort import abort_controller
 from agent.task_plan import TaskPlan, build_plan, format_history
 from agent.loop_detector import LoopDetector, action_fingerprint, screen_hash
+from agent.offscreen_search import ScrollSearch
 
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
 
@@ -60,7 +61,10 @@ LOGS_DIR = Path(__file__).resolve().parents[1] / "logs"
 MAX_STEPS_DEFAULT = 15
 STEP_SETTLE_S = 1.5  # let heavy apps render after each action
 
-VALID_ACTIONS = {"CLICK", "DOUBLE_CLICK", "DRAG", "TYPE", "KEY", "WAIT", "FINISH"}
+VALID_ACTIONS = {
+    "CLICK", "DOUBLE_CLICK", "DRAG", "SCROLL_DOWN", "SCROLL_UP",
+    "SCROLL_HORIZONTAL", "SCROLL_SEARCH", "ZOOM_CLICK", "TYPE", "KEY", "WAIT", "FINISH",
+}
 
 # Global capture target shared by every ScreenController. None means "follow
 # the monitor containing the focused window" (the default).
@@ -121,7 +125,7 @@ object per turn with these keys:
 
 {
   "thought": "Brief reasoning about what is visible and the next action.",
-  "action": "CLICK | DOUBLE_CLICK | DRAG | TYPE | KEY | WAIT | FINISH",
+  "action": "CLICK | DOUBLE_CLICK | DRAG | SCROLL_DOWN | SCROLL_UP | SCROLL_HORIZONTAL | SCROLL_SEARCH | ZOOM_CLICK | TYPE | KEY | WAIT | FINISH",
   "element_id": 3,          // optional: number of the marked box to target (preferred when a box exists)
   "coordinates": [x, y],    // fallback: 0-1000 normalized screen coords if no box fits
   "drag_to": [x2, y2],      // 0-1000 normalized end coords for DRAG
@@ -133,6 +137,8 @@ Rules:
 - PREFER element_id when the target has a marked box: it gives exact clicking.
 - If no box matches, use normalized coordinates.
 - Keep thoughts short and grounded in what you see.
+- Use SCROLL_SEARCH with "text" naming a control when it is not visible; the agent scrolls the pane within bounds and stops at the end.
+- Use ZOOM_CLICK with "coordinates" at a tight cluster and "text" describing the target when icons are ambiguous; the agent crops and re-grounds on a crisp zoom.
 - Use FINISH when the goal is complete or you are stuck.
 - Prefer keyboard shortcuts (KEY) when the active app cheat sheet provides one.
 - Do not click the same spot three times in a row; try something different.
@@ -392,6 +398,22 @@ class ScreenController:
         pyautogui.moveTo(sx, sy)
         pyautogui.dragTo(ex, ey)
 
+    def scroll(self, direction: str, amount: int = 3) -> None:
+        """Scroll the active pane: down/up vertically, left/right horizontally."""
+        direction = (direction or "down").lower()
+        if direction in {"down", "up"}:
+            delta = -abs(int(amount)) if direction == "down" else abs(int(amount))
+            pyautogui.scroll(delta)
+        elif direction in {"horizontal", "left", "right"}:
+            key = "right" if direction == "right" else "left"
+            for _ in range(max(1, abs(int(amount)))):
+                pyautogui.press(key)
+
+    def click_global(self, x: int, y: int) -> None:
+        """Click an absolute monitor pixel (used after crop-to-global mapping)."""
+        self._action_cue(x, y)
+        pyautogui.click(x, y)
+
     def type_text(self, text: str) -> None:
         pyautogui.write(text)
 
@@ -607,6 +629,30 @@ class VisionAgent:
                 self._speak("Task complete.")
                 return f"Task finished after {step} step(s): {thought}"
 
+            # --- bounded off-screen search and zoom re-grounding ---
+            if action == "SCROLL_SEARCH":
+                result = self._search_offscreen(text or (active.text if active else "target"))
+                record.result = "searched:" + result.reason
+                record.text = text
+                self.history.append(record)
+                time.sleep(STEP_SETTLE_S)
+                continue
+
+            if action == "ZOOM_CLICK":
+                point = coords or [500, 500]
+                global_point = self._zoom_ground(
+                    png_bytes, (point[0], point[1]), reason=text or "dense cluster"
+                )
+                if global_point is not None:
+                    self.controller.click_global(*global_point)
+                    record.result = "clicked:zoom"
+                else:
+                    record.result = "zoom:no-target"
+                record.coordinates = list(global_point) if global_point else coords
+                self.history.append(record)
+                time.sleep(STEP_SETTLE_S)
+                continue
+
             # --- loop detection on the action BEFORE executing ---
             fp = action_fingerprint(action, element_id, coords, text)
             scr_hash = screen_hash(png_bytes)
@@ -689,6 +735,99 @@ class VisionAgent:
                 )
         except Exception:  # pragma: no cover - verification must not break the loop
             logger.debug("Post-action verification failed", exc_info=True)
+
+    def _search_offscreen(
+        self,
+        target: str,
+        direction: str = "down",
+        names: set[str] | None = None,
+        max_scrolls: int = 6,
+    ):
+        """Scroll the active pane looking for a control not currently visible."""
+        def observe() -> set[str]:
+            if names is not None:
+                return set(names)
+            from tools.a11y_tree import capture_tree
+
+            tree = capture_tree()
+            return {element.name for element in tree.elements}
+
+        def scroll(which: str) -> None:
+            self.controller.scroll(which, 3)
+            time.sleep(STEP_SETTLE_S)
+
+        search = ScrollSearch(
+            observe=observe,
+            scroll=scroll,
+            speak=self._speak,
+            max_scrolls=max_scrolls,
+        )
+        return search.find(target, direction=direction)
+
+    def _zoom_ground(
+        self,
+        png: bytes,
+        point: tuple[float, float],
+        reason: str = "",
+        zoom: int = 2,
+    ) -> tuple[int, int] | None:
+        """Re-ground on a zoomed crop and translate the result to global coords."""
+        import base64
+
+        from agent.crop_zoom import crop_region, crop_to_global, quadrant_region
+
+        monitor = self.controller.monitor
+        region = quadrant_region(point, (monitor["width"], monitor["height"]))
+        crop = crop_region(png, region, zoom=zoom)
+        b64 = base64.b64encode(crop.png).decode("ascii")
+
+        # Fresh Set-of-Marks on the crisp crop gives local IDs and boxes.
+        from agent.som_overlay import annotate_screenshot
+
+        som_result = annotate_screenshot(crop.png)
+        label = ", ".join(
+            f"[{eid}] {el.label}" for eid, el in list(som_result.elements.items())[:12]
+        )
+        prompt = (
+            "Click the target in this zoomed region. "
+            + (f"Reason: {reason}. " if reason else "")
+            + f"Marked controls: {label}. "
+            "Reply with one JSON object: {\"action\":\"CLICK\",\"coordinates\":[x,y]} "
+            "using 0-1000 coords inside this crop."
+        )
+        try:
+            response = self._client.post(
+                "/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url",
+                             "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                        ],
+                    }],
+                    "stream": False,
+                },
+            )
+            response.raise_for_status()
+            content = (response.json().get("message") or {}).get("content") or ""
+            parsed = self._parse_vlm_json(content)
+            coords = parsed[3]  # (thought, action, element_id, coordinates, ...)
+            if not coords:
+                return None
+            return crop_to_global(
+                (coords[0], coords[1]),
+                crop.region,
+                crop.source_size,
+                monitor["left"],
+                monitor["top"],
+                (monitor["width"], monitor["height"]),
+            )
+        except Exception:  # pragma: no cover - VLM/backend dependent
+            logger.debug("Zoom grounding failed", exc_info=True)
+            return None
 
     def _recover(self, subgoal_idx: int, status, active) -> str:
         """Recovery policy: try an alternative path, then ask the user verbally."""
@@ -832,6 +971,9 @@ class VisionAgent:
                 logger.warning("DRAG requires both coordinates and drag_to")
                 return
             self.controller.move_and_drag(coords[0], coords[1], drag_to[0], drag_to[1])
+        elif action in {"SCROLL_DOWN", "SCROLL_UP", "SCROLL_HORIZONTAL"}:
+            direction = action.replace("SCROLL_", "").lower()
+            self.controller.scroll(direction, 3)
         elif action == "TYPE" and text:
             self.controller.type_text(text)
         elif action == "KEY" and text:
