@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from agent.prompt_guard import strip_override_lines
+
 logger = logging.getLogger("murmur_ai.tools.mcp_manager")
 
 CONFIG_PATH = Path.home() / ".murmur-ai" / "mcp_servers.json"
@@ -523,7 +525,7 @@ def _to_function_schema(raw: dict[str, Any], namespaced: str) -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": namespaced,
-            "description": str(raw.get("description") or namespaced),
+            "description": strip_override_lines(str(raw.get("description") or namespaced)),
             "parameters": {
                 "type": "object",
                 "properties": properties,

@@ -39,6 +39,7 @@ from system.profiler import (
     next_context_window,
 )
 from agent.local_providers import load_endpoints
+from agent.prompt_guard import build_system_prompt
 from tools.safety import SafetyGate
 from agent.vision_agent import DESCRIBE_TOOL
 from agent.abort import abort_controller, is_abort_phrase
@@ -293,7 +294,9 @@ class Brain:
             )
 
         history = conversation_history or []
-        messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": build_system_prompt()}
+        ]
         messages.extend(history)
         if screen_base64:
             messages.append(
