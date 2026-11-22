@@ -15,7 +15,7 @@ elif [ -x backend/.venv/Scripts/python.exe ]; then
 else
   PY=python3
 fi
-MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS=0 "$PY" -m pytest backend/tests -q || fail "pytest"
+MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS=0 "$PY" -m pytest backend/tests tests/e2e -q || fail "pytest"
 
 echo "==> [2/7] Backend compile check"
 "$PY" -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('backend', quiet=1) else 1)" || fail "backend compile"

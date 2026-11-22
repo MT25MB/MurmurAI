@@ -31,6 +31,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "echo_guard": True,                  # ignore our own TTS during listening
     "echo_guard_tail_ms": 250,           # extra quiet after TTS stops
     "loopback_guard": False,             # optional system-audio check
+    "spatial_audio_cues": True,          # panned/pitched action sonification
+    "voice_profile": "default",          # default | clear | fast | quiet
     "chat_model": "",
     "vision_model": "",
 }
@@ -91,7 +93,16 @@ def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
 
 def update_settings(changes: dict[str, Any]) -> dict[str, Any]:
     settings = load_settings()
-    for key, value in (changes or {}).items():
+    changes = dict(changes or {})
+    if "voice_profile" in changes:
+        from audio.voice_profiles import profile_settings
+
+        profile = profile_settings(str(changes["voice_profile"]))
+        if profile is not None:
+            changes = {**profile, **{
+                k: v for k, v in changes.items() if k != "voice_profile"
+            }}
+    for key, value in changes.items():
         if key in settings and value is not None:
             settings[key] = value
     settings = _coerce(settings)
@@ -104,7 +115,8 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
     settings["speech_rate"] = min(2.0, max(0.5, float(settings.get("speech_rate", 1.0))))
     settings["mic_threshold"] = min(1.0, max(0.0, float(settings.get("mic_threshold", 0.5))))
     for key in (
-        "earcons", "screen_reader_friendly", "media_ducking", "echo_guard", "loopback_guard"
+        "earcons", "screen_reader_friendly", "media_ducking", "echo_guard",
+        "loopback_guard", "spatial_audio_cues",
     ):
         settings[key] = bool(settings.get(key, DEFAULT_SETTINGS[key]))
     try:
@@ -115,6 +127,8 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
         settings["description_verbosity"] = "concise"
     if settings.get("listening_mode") not in ("active", "wake"):
         settings["listening_mode"] = "active"
+    if settings.get("voice_profile") not in ("default", "clear", "fast", "quiet"):
+        settings["voice_profile"] = "default"
     return settings
 
 
@@ -146,6 +160,13 @@ def apply_settings(settings: Optional[dict[str, Any]] = None) -> None:
                 speaker.set_media_ducking(settings["media_ducking"])
     except Exception:
         logger.debug("Speaker settings apply failed", exc_info=True)
+
+    try:
+        from audio import earcons
+
+        earcons.set_enabled(settings["spatial_audio_cues"])
+    except Exception:
+        logger.debug("Spatial cue settings apply failed", exc_info=True)
 
     try:
         import main
@@ -196,10 +217,34 @@ def _voice_reply(text: str) -> str:
 
 def handle_voice_command(text: str) -> Optional[str]:
     """Return a spoken reply for a settings command, or None if not a match."""
-    value = (text or "").strip().lower()
+    original = (text or "").strip()
+    value = original.lower()
     if not value:
         return None
     settings = load_settings()
+
+    pronounce = re.search(
+        r"pronounce\s+['\"\u2018\u2019]?([\w.+-]+)['\"\u2018\u2019]?\s+as\s+"
+        r"['\"\u2018\u2019]?([\w .+\u2018\u2019'-]+?)['\"\u2018\u2019]?\s*$",
+        original,
+        re.IGNORECASE,
+    )
+    if pronounce:
+        from audio.pronunciation import add_pronunciation
+
+        return _voice_reply(
+            add_pronunciation(pronounce.group(1), pronounce.group(2).strip())
+        )
+
+    profile_match = re.search(
+        r"(?:switch to|use|set|apply) (?:my )?(?:the )?(default|clear|fast|quiet)"
+        r"(?: voice)? profile",
+        value,
+    )
+    if profile_match:
+        from audio.voice_profiles import apply_voice_profile
+
+        return _voice_reply(apply_voice_profile(profile_match.group(1)))
 
     if re.search(r"\b(be quiet|stop talking|hush|silence yourself|shut up)\b", value):
         try:
@@ -244,6 +289,13 @@ def handle_voice_command(text: str) -> Optional[str]:
         voice = voice_match.group(1) if voice_match else "af_heart"
         update_settings({"voice": voice})
         return _voice_reply(f"Voice changed to {voice}.")
+
+    if re.search(r"spatial (audio|cues?)\b.*\bon\b|\benable\b.*spatial (audio|cues?)", value):
+        update_settings({"spatial_audio_cues": True})
+        return _voice_reply("Spatial audio cues are on.")
+    if re.search(r"spatial (audio|cues?)\b.*\boff\b|\bdisable\b.*spatial (audio|cues?)", value):
+        update_settings({"spatial_audio_cues": False})
+        return _voice_reply("Spatial audio cues are off.")
 
     if re.search(r"\b(chimes?|sounds?|earcons?)\b.*\bon\b|\benable\b.*\b(chimes?|sounds?|earcons?)\b", value):
         update_settings({"earcons": True})

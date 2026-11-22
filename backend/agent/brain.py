@@ -24,6 +24,10 @@ from tools.installer_tool import INSTALL_TOOLS
 from tools.browser_tool import BROWSER_TOOLS
 from tools.window_tools import WINDOW_TOOLS
 from tools.context_tools import CONTEXT_TOOLS
+from tools.file_tools import FILE_TOOLS
+from audio.pronunciation import PRONUNCIATION_TOOLS
+from audio.voice_profiles import VOICE_PROFILE_TOOLS
+from system.demo import DEMO_TOOLS
 from tools.mcp_manager import MANAGEMENT_TOOLS
 from system.settings_tools import SETTINGS_TOOLS
 from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
@@ -61,7 +65,9 @@ STOP_TOOL = [
 # browser + abort).
 ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
-    + CONTEXT_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS + DIAGNOSTICS_TOOLS + STOP_TOOL
+    + CONTEXT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
+    + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
+    + STOP_TOOL
 )
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
@@ -105,6 +111,16 @@ Available local tools:
 - write_clipboard(text): copy a result to the local clipboard.
 - inspect_recent_files(directory, limit): list recent downloads/files with
   sizes and types. Use for "what did I just download" or finding a recent PDF.
+- add_pronunciation(word, spoken_as): teach Murmur how to say a word/acronym.
+- start_demo(): begin a safe, eyes-free practice walkthrough with four tasks.
+- set_voice_profile(profile): switch named voice profiles (default, clear,
+  fast, quiet) that combine rate, voice, chimes and verbosity.
+- find_files(query, location, extension, limit): search local files by name and
+  speak the top matches with folders and modified dates.
+- read_document_aloud(file_path, section_or_query): read a local txt/md/pdf/docx
+  document aloud, or a specific section, without opening a heavy viewer.
+- organize_files(pattern_or_paths, destination_folder, action): move, copy or
+  rename files. Overwrites always need spoken confirmation; never deletes.
 - list_mcp_tools(): list active MCP/plugin servers and their tools. Use when
   the user asks what plugins or MCP tools are active.
 - reload_mcp_plugins(): reload ~/.murmur-ai/mcp_servers.json and reconnect to

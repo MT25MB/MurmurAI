@@ -81,6 +81,7 @@ class VoiceListener:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._buffer = bytearray()
+        self._utterance_buffer = bytearray()  # frames captured for the current turn
         self._silence_frames = 0
         self._speaking = False
         self._utterance_start = 0.0
@@ -182,6 +183,7 @@ class VoiceListener:
             # Drop anything captured while Murmur (or loud media) was playing.
             # Resetting the utterance prevents TTS bleed becoming a false command.
             self._buffer.clear()
+            self._utterance_buffer.clear()
             self._speaking = False
             self._silence_frames = 0
             return
@@ -196,11 +198,13 @@ class VoiceListener:
                 self._speaking = True
                 self._utterance_start = now
                 self._silence_frames = 0
+                self._utterance_buffer = bytearray(frame)
                 logger.debug("Speech started")
 
             if self._speaking:
                 if is_speech:
                     self._silence_frames = 0
+                    self._utterance_buffer.extend(frame)
                 else:
                     self._silence_frames += FRAME_MS
 
@@ -219,7 +223,8 @@ class VoiceListener:
 
     def _finalize_utterance(self) -> None:
         """Transcribe the captured utterance and hand it off."""
-        pcm = bytes(self._buffer[:])  # everything captured so far for this turn
+        pcm = bytes(self._utterance_buffer)  # frames captured for this turn
+        self._utterance_buffer = bytearray()
         self._buffer = bytearray()
         self._speaking = False
         self._silence_frames = 0

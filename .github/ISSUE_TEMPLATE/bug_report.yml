@@ -1,0 +1,73 @@
+name: Bug report
+description: Report something that is broken or behaving unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Murmur AI. Everything runs locally, so logs
+        never leave your machine unless you choose to attach them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+      placeholder: Murmur did not respond after I said...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        ### Attach a diagnostics bundle
+
+        Say **"Export diagnostics"** to Murmur (or use the settings panel). It
+        creates a privacy-safe zip on your Desktop, for example
+        `~/Desktop/murmur-diagnostics-20260101-120000.zip`, and speaks the exact
+        path. Logs, paths and credentials are redacted. Attach that zip below.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste the spoken bundle path here and attach the zip file.
+      placeholder: /home/me/Desktop/murmur-diagnostics-20260101-120000.zip
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Murmur AI version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: compute
+    attributes:
+      label: Hardware backend
+      options:
+        - CPU
+        - Apple Silicon (Metal)
+        - NVIDIA (CUDA)
+        - Not sure
+    validations:
+      required: false

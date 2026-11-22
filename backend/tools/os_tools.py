@@ -222,6 +222,39 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
             arguments.get("directory", "downloads"),
             int(arguments.get("limit", 5) or 5),
         )
+    if name in ("find_files", "read_document_aloud", "organize_files"):
+        from .file_tools import find_files, organize_files, read_document_aloud
+
+        if name == "find_files":
+            return find_files(
+                arguments.get("query", ""),
+                arguments.get("location", "home"),
+                arguments.get("extension"),
+                int(arguments.get("limit", 10) or 10),
+            )
+        if name == "read_document_aloud":
+            return read_document_aloud(
+                arguments.get("file_path", ""), arguments.get("section_or_query")
+            )
+        return organize_files(
+            arguments.get("pattern_or_paths", []),
+            arguments.get("destination_folder", ""),
+            arguments.get("action", "move"),
+        )
+    if name == "add_pronunciation":
+        from audio.pronunciation import add_pronunciation
+
+        return add_pronunciation(
+            arguments.get("word", ""), arguments.get("spoken_as", "")
+        )
+    if name == "start_demo":
+        from system.demo import start_demo
+
+        return start_demo()
+    if name == "set_voice_profile":
+        from audio.voice_profiles import apply_voice_profile
+
+        return apply_voice_profile(arguments.get("profile", "default"))
     if name == "export_diagnostics":
         from system.diagnostics_bundle import export_diagnostics
 

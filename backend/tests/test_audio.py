@@ -305,7 +305,7 @@ async def test_enter_sleep_broadcasts_sleeping_and_sets_mode(monkeypatch):
 
     await main.enter_sleep(SessionState(), send)
     assert main.app_state.listening_mode == "sleep"
-    assert sent[-1].type == "state" and sent[-1].status == "SLEEPING"
+    assert any(m.type == "state" and m.status == "SLEEPING" for m in sent)
     assert chimes == ["sleep"]
     assert "hey murmur" in spoken[0].lower()
 
@@ -394,7 +394,7 @@ async def test_verbal_sleep_phrase_bypasses_brain(monkeypatch):
 
     await main._on_utterance_async(SessionState(), send, "go to sleep")
     assert main.app_state.listening_mode == "sleep"
-    assert sent[-1].status == "SLEEPING"
+    assert any(getattr(m, "status", None) == "SLEEPING" for m in sent)
 
     if main.app_state.wake_task:
         main.app_state.wake_task.cancel()
@@ -439,8 +439,9 @@ def test_ws_set_listening_mode_sleep_and_active(monkeypatch):
     with client.websocket_connect("/ws") as ws:
         ws.receive_json()  # greeting
         ws.send_text('{"type":"set_listening_mode","mode":"sleep"}')
-        msg = ws.receive_json()
-        assert msg["type"] == "state" and msg["status"] == "SLEEPING"
+        messages = [ws.receive_json(), ws.receive_json()]
+        states = [m for m in messages if m["type"] == "state"]
+        assert states and states[0]["status"] == "SLEEPING"
         assert main.app_state.listening_mode == "sleep"
 
         ws.send_text('{"type":"set_listening_mode","mode":"active"}')

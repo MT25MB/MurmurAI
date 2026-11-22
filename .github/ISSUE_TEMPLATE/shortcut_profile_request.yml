@@ -1,0 +1,45 @@
+name: New app shortcut profile request
+description: Request built-in hotkeys for an application we do not know yet
+title: "[Shortcuts]: "
+labels: ["enhancement", "shortcuts"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Murmur prefers an app's own shortcuts over pixel clicks. Tell us which
+        app and actions you use so we can add a local shortcut profile.
+  - type: input
+    id: app
+    attributes:
+      label: Application name
+      description: Include the exact window title if possible.
+      placeholder: "Blender 4.2 - scene.blend"
+    validations:
+      required: true
+  - type: textarea
+    id: actions
+    attributes:
+      label: Actions and shortcuts
+      description: One action and its keystroke per line.
+      value: |
+        Open add menu - Shift+A
+        Delete selected - X
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
+      description: Menu-only actions, canvas-heavy areas, or accessibility quirks.
+    validations:
+      required: false

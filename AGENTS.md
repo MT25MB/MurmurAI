@@ -107,6 +107,35 @@ This file is the source of truth for every coding agent and human contributor.
   and sidecar artifacts, brain tool schemas, a localhost-only sidecar startup,
   `/health`, `/setup/status` and the `/ws` handshake. `verify-all` runs it as
   its final step. No microphone or external network is needed.
+- `audio/earcons.py` synthesizes stereo action cues with numpy/sounddevice:
+  equal-power panning by screen X, pitch shifted by screen Y, plus distinct
+  `wake_up`/`sleep`/`action_success`/`confirmation_needed`/`error_recovery`
+  chimes. `ScreenController` plays a cue before click/drag; config key
+  `spatial_audio_cues` (voice: "turn spatial audio cues off") mutes them.
+- `packaging/` holds WinGet/Homebrew/Linux manifest templates with `{{VERSION}}`
+  and `{{*_SHA256}}` placeholders. `scripts/sync_packaging.py` (called by the
+  release workflow's `package-sync` job) fills them from downloaded release
+  assets and attaches `SHA256SUMS.txt` to the release, then commits the updated
+  manifests to main.
+- `scripts/benchmark.py` runs the local-only latency harness from
+  `system/benchmark.py` (Whisper, Ollama tool routing, SoM, VLM grounding,
+  Kokoro TTFA) and writes `BENCHMARKS.md` for CPU/Apple Silicon/NVIDIA comparison.
+  `scripts/demo.py --demo` and the "start tutorial" voice command run a four-step
+  eyes-free practice sandbox that never modifies files or settings.
+- `.github/ISSUE_TEMPLATE/` has YAML forms for bug reports (with "Export
+  diagnostics" zip instructions), accessibility feedback and shortcut profile
+  requests; `.github/PULL_REQUEST_TEMPLATE.md` tracks verification and a11y.
+- `audio/pronunciation.py` normalizes spoken text before TTS using a user-editable
+  `~/.murmur-ai/pronunciations.json` (GUI→gooey, sudo→soo-doo, Ctrl→Control,
+  bpy→B-P-Y, VRAM→V-ram, plus accessibility/dev terms). Voice: "pronounce X as Y".
+  `audio/voice_profiles.py` switches named profiles (default/clear/fast/quiet);
+  "clear" is screen-reader tuned. `main.py` emits clean `transcript` WS messages
+  for every reply/action summary, rendered by `TranscriptStream.tsx` in a
+  dedicated polite live log for screen readers and refreshable Braille.
+- `tools/file_tools.py` adds local file search (`mdfind`/Windows Search with a
+  scandir fallback and ignore list), spoken document reading for txt/md/pdf/docx
+  (pypdf, python-docx), and move/copy/rename batch tools. Overwrites always go
+  through `tool_bus.request_confirmation`; no tool deletes files.
 - `tools/context_tools.py` provides local clipboard access (pyperclip with
   native fallbacks) and recent-file inspection (Downloads/Desktop/Documents or
   an explicit path) with spoken size/type/age summaries. `SessionState.context`
@@ -178,7 +207,7 @@ Murmur AI/
 │  ├─ main.tsx
 │  ├─ App.tsx
 │  ├─ index.css
-│  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx}
+│  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
 │  └─ components/*.test.tsx    # Vitest + Testing Library (12 tests)
 ├─ src-tauri/                # Rust shell
@@ -188,25 +217,33 @@ Murmur AI/
 │  ├─ capabilities/default.json
 │  ├─ icons/{icon.png,icon.ico}
 │  └─ src/{main.rs,lib.rs}   # tray menu + Python sidecar spawn/kill
+├─ scripts/                  # verify-all, smoke-test, benchmark, demo, prepare-sidecar
+├─ tests/e2e/                # headless synthetic voice-to-action E2E harness
+├─ BENCHMARKS.md             # generated local latency table
+├─ packaging/                # WinGet, Homebrew Cask, Linux desktop/AppStream templates
 └─ backend/                  # Python sidecar
    ├─ pyproject.toml
    ├─ requirements.txt
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 322 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 411 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
    │                         #    test_server_setup.py, test_profiler.py,
    │                         #    test_browser_tool.py, test_updates.py,
    │                         #    test_mcp_manager.py, test_context_tools.py,
-   │                         #    test_diagnostics_bundle.py + fixtures/)
+   │                         #    test_diagnostics_bundle.py, test_file_tools.py,
+   │                         #    test_pronunciation.py, test_transcript.py,
+   │                         #    test_benchmark.py, test_demo.py,
+   │                         #    test_community_templates.py, test_earcons.py,
+   │                         #    test_packaging.py + fixtures/)
    ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
    ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py}  # offline wake word + sleep/wake
    ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,shortcuts.json}
-   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,mcp_manager.py}
+   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py}
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec
    └─ logs/                  # visual-agent step replay (screenshots + JSON)

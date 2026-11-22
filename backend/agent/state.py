@@ -52,6 +52,7 @@ class ServerMessage(BaseModel):
         "update_available",
         "update_install",
         "update_check_request",
+        "transcript",
     ]
     ts: float | None = None
     status: str | None = None
@@ -65,6 +66,7 @@ class ServerMessage(BaseModel):
     command: str | None = None
     model: str | None = None
     detail: str | None = None
+    role: str | None = None      # transcript speaker (assistant | system)
     version: str | None = None   # update notification
     notes: str | None = None     # spoken release summary
 

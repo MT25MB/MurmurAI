@@ -1,0 +1,19 @@
+# WinGet manifest template for Murmur AI.
+# Placeholders are filled by scripts/sync_packaging.py on every release.
+PackageIdentifier: MT25MB.MurmurAI
+PackageVersion: "{{VERSION}}"
+PackageLocale: en-US
+Publisher: Murmur AI contributors
+PublisherUrl: https://github.com/MT25MB/MurmurAI
+PackageName: Murmur AI
+PackageShortDescription: A 100% local voice-controlled desktop agent
+PackageLicense: MIT
+InstallerType: msi
+Installers:
+  - Arch: x64
+    InstallerType: msi
+    InstallerUrl: "{{MSI_URL}}"
+    InstallerSha256: "{{MSI_SHA256}}"
+    Scope: machine
+ManifestType: singleton
+ManifestVersion: 1.6.0

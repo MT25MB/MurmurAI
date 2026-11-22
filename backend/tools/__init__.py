@@ -13,6 +13,9 @@ from .context_tools import (
     CONTEXT_TOOLS, FileInfo, read_clipboard, write_clipboard, inspect_recent_files,
     handle_context_phrase, record_context, resolve_reference,
 )
+from .file_tools import (
+    FILE_TOOLS, find_files, read_document_aloud, organize_files, extract_document,
+)
 from .mcp_manager import (
     McpManager, McpTool, ServerConfig, StdioMcpClient, manager as mcp_plugin_manager,
     list_plugins, reload_plugins, call_mcp_tool, tool_risk,
@@ -36,6 +39,11 @@ __all__ = [
     "handle_context_phrase",
     "record_context",
     "resolve_reference",
+    "FILE_TOOLS",
+    "find_files",
+    "read_document_aloud",
+    "organize_files",
+    "extract_document",
     "BROWSER_TOOLS",
     "open_url",
     "read_page_summary",

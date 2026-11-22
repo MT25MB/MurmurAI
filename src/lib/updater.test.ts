@@ -16,7 +16,7 @@ const available = {
   available: true,
   version: "9.9.9",
   notes: "Faster startup",
-  currentVersion: "0.1.0",
+  currentVersion: "1.0.0",
   error: null,
 };
 

@@ -16,6 +16,8 @@ const defaults = {
   echo_guard: true,
   echo_guard_tail_ms: 250,
   loopback_guard: false,
+  spatial_audio_cues: true,
+  voice_profile: "default",
   chat_model: "",
   vision_model: "",
 };

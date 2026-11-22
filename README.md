@@ -51,6 +51,7 @@ Murmur AI looks at the screen instead.
 * **Shortcuts first.** It checks which app is in front and uses that app's own hotkeys where it can. Fewer clicks, fewer mistakes.
 * **Installing apps.** Say *"Install VLC"* or *"Install Blender"*. It searches `winget`, `brew`, `flatpak`, `snap`, `apt`, `dnf`, or `pacman`, shows you the command, and waits for your OK. If no package exists, it falls back to the browser.
 * **Clipboard and recent files.** Ask *"What did I just copy?"*, *"Summarize my clipboard"*, or *"Copy that result to my clipboard"*. Say *"What did I just download?"* to hear recent files with sizes and types. Words like *"this"* and *"it"* resolve against the last file or app you mentioned in the session.
+* **Files and documents by voice.** Ask *"Find my passport scan"* to hear matching filenames, folders and dates. Say *"Read report.pdf aloud"* or ask for a section of a text, Markdown, PDF or Word document. Batch move/copy/rename runs only after a spoken confirmation if anything would be overwritten, and never deletes files.
 
 ---
 
@@ -81,6 +82,10 @@ The desktop shell is **Tauri v2** (Rust with React and TypeScript). A Python sid
 - **Network:** the only listeners are `127.0.0.1:8765` and Ollama at `127.0.0.1:11434`. Nothing phones home.
 
 ### Settings and self-diagnostics
+
+Optional spatial audio cues give a short stereo blip positioned where Murmur is about to click (left/right by screen X, higher/lower by Y), with distinct chimes for waking, sleeping, success, confirmation and recovery. Toggle them with *"Turn spatial audio cues off"*.
+
+Murmur pronounces acronyms naturally with a user-editable dictionary at `~/.murmur-ai/pronunciations.json` (`GUI` → "gooey", `sudo` → "soo-doo", `bpy` → "B-P-Y"). Say *"Pronounce 'nvda' as 'N-V-D-A'"* to add one on the fly. Named voice profiles (*default*, *clear*, *fast*, *quiet*) set rate, voice and chimes together; *clear* is tuned for screen readers. Every reply is also emitted as clean plain text into a dedicated polite live log for Braille displays.
 
 Press **Ctrl+,** (or **Cmd+,** on macOS), or use the tray menu, to open the accessible settings panel. It stays in sync with `~/.murmur-ai/config.json` and controls speech rate, voice, chimes, screen-description detail, listening mode, microphone threshold and model selection. You can also just say **"Speak faster"**, **"Change your voice"**, **"Turn chimes off"**, **"Switch to detailed screen descriptions"**, **"Switch to wake-word mode"**, **"Increase mic threshold"**, **"Switch vision model to qwen3-vl"**, or **"Show current models"**.
 
@@ -126,6 +131,28 @@ Download the installer for your platform from the **[latest release](https://git
 
 Every installer is built from source by GitHub Actions in `.github/workflows/release.yml`.
 
+One-line installs (manifests in `packaging/` are version/hash-synced by the release workflow):
+
+```bash
+# Windows (WinGet, once the manifest is in the WinGet repository)
+winget install --id MT25MB.MurmurAI -e
+
+# macOS (Homebrew, after tapping this repository)
+brew tap MT25MB/murmur-ai https://github.com/MT25MB/MurmurAI
+brew install --cask murmur-ai
+
+# Linux (AppImage from the latest release)
+curl -L -o MurmurAI.AppImage \
+  https://github.com/MT25MB/MurmurAI/releases/latest/download/Murmur.AI_1.0.0_amd64.AppImage
+chmod +x MurmurAI.AppImage && ./MurmurAI.AppImage
+```
+
+Every release also attaches `SHA256SUMS.txt`. Verify a downloaded installer with:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
 ---
 
 ## Quick start
@@ -168,6 +195,10 @@ First launch also saves Whisper and Kokoro weights under `~/.murmur-ai/models/`.
 ---
 
 ## Development
+
+New to eyes-free use? Run `python scripts/demo.py --demo`, or just say **"Start tutorial"** to Murmur. It walks through four safe practice tasks and never changes files or settings.
+
+Want to compare performance across a CPU, Apple Silicon Mac, or NVIDIA GPU? Run `python scripts/benchmark.py`. It writes a clean latency table to `BENCHMARKS.md`; missing models are reported as skipped rather than failing.
 
 ```bash
 # App

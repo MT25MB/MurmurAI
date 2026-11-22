@@ -15,6 +15,9 @@ from .diagnostics_bundle import (
     sanitize_config,
     sanitize_value,
 )
+from .demo import DEMO_TOOLS, DemoSession, start_demo
+from .benchmark import BenchmarkReport, BenchmarkResult, run_all
+from .packaging_sync import collect_artifacts, sync_manifests, write_sha256sums
 from .settings_tools import (
     SETTINGS_TOOLS,
     apply_settings,
@@ -32,6 +35,15 @@ __all__ = [
     "configure_from_hardware",
     "downscale_png",
     "prewarm_audio",
+    "DEMO_TOOLS",
+    "DemoSession",
+    "start_demo",
+    "BenchmarkReport",
+    "BenchmarkResult",
+    "run_all",
+    "collect_artifacts",
+    "sync_manifests",
+    "write_sha256sums",
     "DIAGNOSTICS_TOOLS",
     "build_manifest",
     "export_diagnostics",

@@ -356,19 +356,37 @@ class ScreenController:
         local_x, local_y = self._norm_to_px([x, y], self._width, self._height)
         return self._left + local_x, self._top + local_y
 
+    @staticmethod
+    def _action_cue(x: float, y: float) -> None:
+        """Play a positioned cue right before acting on a UI element."""
+        try:
+            from system.settings_tools import load_settings
+
+            if not load_settings().get("spatial_audio_cues", True):
+                return
+            from audio.earcons import play_spatial_cue
+
+            play_spatial_cue(x, y)
+        except Exception:  # pragma: no cover - optional audio
+            pass
+
     def click(self, x: float, y: float) -> None:
+        self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
         pyautogui.click(px, py)
 
     def double_click(self, x: float, y: float) -> None:
+        self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
         pyautogui.doubleClick(px, py)
 
     def right_click(self, x: float, y: float) -> None:
+        self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
         pyautogui.rightClick(px, py)
 
     def move_and_drag(self, start_x: float, start_y: float, end_x: float, end_y: float) -> None:
+        self._action_cue(start_x, start_y)
         sx, sy = self.norm_to_global(start_x, start_y)
         ex, ey = self.norm_to_global(end_x, end_y)
         pyautogui.moveTo(sx, sy)

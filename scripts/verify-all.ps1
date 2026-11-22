@@ -9,7 +9,7 @@ Write-Host "==> [1/7] Python tests (backend)"
 $py = "backend\.venv\Scripts\python.exe"
 if (-not (Test-Path $py)) { $py = "python" }
 $env:MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS = "0"
-& $py -m pytest backend/tests -q
+& $py -m pytest backend/tests tests/e2e -q
 if ($LASTEXITCODE -ne 0) { Fail "pytest" }
 
 Write-Host "==> [2/7] Backend compile check"

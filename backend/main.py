@@ -69,6 +69,7 @@ class AppState:
         self.warm_task: Optional[asyncio.Task] = None
         self.prewarm_task: Optional[asyncio.Task] = None
         self.plugin_task: Optional[asyncio.Task] = None
+        self.demo: Optional[object] = None  # active guided practice session
         self._shutting_down = False
 
     def session_for(self, websocket: WebSocket) -> SessionState:
@@ -343,6 +344,14 @@ async def broadcast_to_huds(message: ServerMessage) -> None:
             logger.debug("Failed to broadcast to a HUD", exc_info=True)
 
 
+async def emit_transcript(session: SessionState, send, text: str, role: str = "assistant") -> None:
+    """Emit a clean plain-text turn for screen readers / refreshable Braille."""
+    clean = " ".join(str(text or "").split())
+    if not clean:
+        return
+    await send(ServerMessage(type="transcript", text=clean, role=role))
+
+
 # ---- WebSocket control plane ----
 
 @app.websocket("/ws")
@@ -503,6 +512,8 @@ async def handle_text_input(
     if await _try_update_verbal_confirmation(session, send, text):
         return
     if await _try_plugin_phrase(session, send, text):
+        return
+    if await _try_demo_phrase(session, send, text):
         return
     if await _try_settings_phrase(session, send, text):
         return
@@ -666,6 +677,7 @@ async def enter_sleep(session: SessionState, send) -> None:
     _chime("sleep")
     _announce("Going to sleep. Say hey Murmur to wake me.")
     await send(ServerMessage(type="state", status="SLEEPING", uptime_s=session.uptime()))
+    await emit_transcript(session, send, "Going to sleep. Say hey Murmur to wake me.", "system")
     # Ensure any active wake task is running.
     if app_state.wake_task is None or app_state.wake_task.done():
         app_state.wake_task = asyncio.create_task(_wake_monitor(session, send))
@@ -779,6 +791,7 @@ async def _try_update_check_phrase(session: SessionState, send, text: str) -> bo
     if not _UPDATE_CHECK_RE.search(text or ""):
         return False
     await send(ServerMessage(type="update_check_request", text="Checking for updates…"))
+    await emit_transcript(session, send, "Let me check for updates.", "system")
     _announce("Let me check for updates.")
     return True
 
@@ -827,6 +840,44 @@ async def _try_plugin_phrase(session: SessionState, send, text: str) -> bool:
     return False
 
 
+# ---- guided eyes-free demo ----
+
+_DEMO_START_RE = re.compile(
+    r"\b(start|begin|run|open)\b.*\b(tutorial|demo|practice mode)\b|\bstart tutorial\b",
+    re.IGNORECASE,
+)
+_DEMO_NEXT_RE = re.compile(r"^(next|continue|done|go on)\b", re.IGNORECASE)
+_DEMO_STOP_RE = re.compile(r"\b(stop|exit|quit|end)\b.*\b(tutorial|demo|practice)\b", re.IGNORECASE)
+
+
+async def _try_demo_phrase(session: SessionState, send, text: str) -> bool:
+    """Drive the four-step practice walkthrough entirely by voice."""
+    from system.demo import DemoSession
+
+    value = (text or "").strip()
+    if _DEMO_START_RE.search(value) or (
+        app_state.demo is None and value.lower() == "tutorial"
+    ):
+        app_state.demo = DemoSession()
+        reply = app_state.demo.next_step()
+        await _speak_and_return(session, send, reply)
+        return True
+    if app_state.demo is None:
+        return False
+    if _DEMO_STOP_RE.search(value):
+        reply = app_state.demo.finish()
+        app_state.demo = None
+        await _speak_and_return(session, send, reply)
+        return True
+    if _DEMO_NEXT_RE.search(value):
+        reply = app_state.demo.next_step()
+        if not app_state.demo.active:
+            app_state.demo = None
+        await _speak_and_return(session, send, reply)
+        return True
+    return False
+
+
 # ---- local settings / diagnostics phrases ----
 
 async def _try_settings_phrase(session: SessionState, send, text: str) -> bool:
@@ -837,6 +888,7 @@ async def _try_settings_phrase(session: SessionState, send, text: str) -> bool:
     if reply is None:
         return False
     await send(ServerMessage(type="info", text=reply))
+    await emit_transcript(session, send, reply, "system")
     await _set_state(send, session, "IDLE")
     return True
 
@@ -852,6 +904,7 @@ async def _try_context_phrase(session: SessionState, send, text: str) -> bool:
     if reply is None:
         return False
     await send(ServerMessage(type="info", text=reply))
+    await emit_transcript(session, send, reply, "system")
     await _set_state(send, session, "IDLE")
     return True
 
@@ -894,6 +947,7 @@ async def _set_state(send, session: SessionState, status: str) -> None:
 
 async def _speak_and_return(session: SessionState, send, reply: str) -> None:
     """Speak the reply, then return to IDLE (listening)."""
+    await emit_transcript(session, send, reply)
     await _set_state(send, session, "SPEAKING")
     if app_state.speaker:
         try:
@@ -949,6 +1003,8 @@ async def _on_utterance_async(session, send, text: str) -> None:
     if await _try_update_verbal_confirmation(session, send, text):
         return
     if await _try_plugin_phrase(session, send, text):
+        return
+    if await _try_demo_phrase(session, send, text):
         return
     if await _try_settings_phrase(session, send, text):
         return

@@ -111,7 +111,7 @@ async def test_update_check_phrase_requests_check(monkeypatch, captured_broadcas
         sent.append(message)
 
     assert await main._try_update_check_phrase(session, send, "Check for updates") is True
-    assert sent[-1].type == "update_check_request"
+    assert any(m.type == "update_check_request" for m in sent)
     assert spoken and "check for updates" in spoken[0].lower()
 
 

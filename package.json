@@ -1,9 +1,9 @@
 {
   "name": "murmur-ai",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
-  "description": "Murmur AI — 100% local voice-controlled desktop agent",
+  "description": "Murmur AI \u2014 100% local voice-controlled desktop agent",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

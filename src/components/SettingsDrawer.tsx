@@ -150,6 +150,23 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
               </legend>
 
               <div>
+                <label htmlFor="settings-profile" className="block text-xs font-medium">
+                  Voice profile
+                </label>
+                <select
+                  id="settings-profile"
+                  value={settings.voice_profile}
+                  onChange={(e) => change({ voice_profile: e.target.value as Settings["voice_profile"] })}
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-ink"
+                >
+                  <option value="default">Default</option>
+                  <option value="clear">Clear (screen-reader friendly)</option>
+                  <option value="fast">Fast</option>
+                  <option value="quiet">Quiet</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="settings-voice" className="block text-xs font-medium">
                   Voice
                 </label>
@@ -319,6 +336,19 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   className="mt-1 w-full accent-blue"
                   aria-valuetext={`${settings.echo_guard_tail_ms} milliseconds after speech stops`}
                 />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="settings-spatial-cues"
+                  type="checkbox"
+                  checked={settings.spatial_audio_cues}
+                  onChange={(e) => change({ spatial_audio_cues: e.target.checked })}
+                  className="h-4 w-4 accent-blue"
+                />
+                <label htmlFor="settings-spatial-cues" className="text-xs font-medium">
+                  Spatial audio cues (positioned clicks)
+                </label>
               </div>
             </fieldset>
 

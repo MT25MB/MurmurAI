@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the documentation
+    url: https://github.com/MT25MB/MurmurAI#readme
+    about: Setup, voice commands, accessibility and privacy details.
+  - name: Website
+    url: https://MT25MB.github.io/MurmurAI/
+    about: Product overview and downloads.

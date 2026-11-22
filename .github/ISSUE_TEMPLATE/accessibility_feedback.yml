@@ -1,0 +1,55 @@
+name: Accessibility / screen-reader feedback
+description: Tell us how Murmur works with your screen reader or Braille display
+title: "[A11y]: "
+labels: ["accessibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Murmur AI is built for eyes-free use. Your feedback helps us make the
+        live transcript, spoken confirmations and keyboard controls clearer.
+  - type: dropdown
+    id: assistive-tech
+    attributes:
+      label: What do you use?
+      options:
+        - NVDA
+        - JAWS
+        - VoiceOver
+        - Orca
+        - Refreshable Braille display
+        - Built-in screen reader
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: What worked and what did not?
+      description: Include the exact phrase you said and what you heard back.
+    validations:
+      required: true
+  - type: textarea
+    id: desired
+    attributes:
+      label: What would make it clearer?
+      placeholder: Please announce the focused control before asking for confirmation...
+    validations:
+      required: false
+  - type: checkboxes
+    id: areas
+    attributes:
+      label: Which areas does this affect?
+      options:
+        - label: Spoken replies / live transcript
+        - label: Confirmation prompts (CONFIRMATION_REQUIRED)
+        - label: Settings panel keyboard access
+        - label: Onboarding / first-run setup
+        - label: Braille output
+  - type: input
+    id: version
+    attributes:
+      label: Murmur AI version
+      placeholder: "1.0.0"
+    validations:
+      required: false

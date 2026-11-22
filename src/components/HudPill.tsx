@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMurmurSocket } from "../lib/websocket";
 import { useSleepWakeHotkey } from "../lib/useSleepWakeHotkey";
 import { useAutoUpdater } from "../lib/updater";
+import TranscriptStream from "./TranscriptStream";
 import { Waveform } from "./Waveform";
 import logoUrl from "../assets/logo-blue.png";
 
@@ -216,6 +217,7 @@ export default function HudPill() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
+      <TranscriptStream lastMessage={lastMessage} />
 
       <div className="flex items-center gap-2.5">
         <img

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.murmurai.MurmurAI</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Murmur AI</name>
+  <summary>A 100% local voice-controlled desktop agent</summary>
+  <description>
+    <p>
+      Murmur AI listens through your microphone, talks back with local speech
+      synthesis, and performs computer-control tasks on your behalf. Nothing
+      leaves your machine: no cloud APIs, no telemetry, no subscription.
+    </p>
+    <p>
+      Built for eyes-free use: screen-reader-friendly spoken confirmations, a
+      plain-text live transcript, and spatial audio cues.
+    </p>
+  </description>
+  <launchable type="desktop-id">murmur-ai.desktop</launchable>
+  <url type="homepage">https://MT25MB.github.io/MurmurAI/</url>
+  <url type="bugtracker">https://github.com/MT25MB/MurmurAI/issues</url>
+  <developer_name>Murmur AI contributors</developer_name>
+  <categories>
+    <category>Utility</category>
+    <category>Accessibility</category>
+  </categories>
+  <keywords>
+    <keyword>voice</keyword>
+    <keyword>accessibility</keyword>
+    <keyword>screen reader</keyword>
+    <keyword>automation</keyword>
+  </keywords>
+  <provides>
+    <binary>murmur-ai</binary>
+  </provides>
+  <releases>
+    <release version="{{VERSION}}" date="{{DATE}}">
+      <description>
+        <p>See the GitHub release notes for changes in this version.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

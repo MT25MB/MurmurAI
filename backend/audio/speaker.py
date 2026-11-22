@@ -27,6 +27,13 @@ logger = logging.getLogger("murmur_ai.audio.speaker")
 SAMPLE_RATE = 22050  # kokoro/piper typical output rate
 
 
+def _spoken_text(text: str) -> str:
+    """Apply the user's pronunciation dictionary before TTS synthesis."""
+    from audio.pronunciation import normalize
+
+    return normalize(text)
+
+
 class LocalSpeaker:
     """Local TTS speaker with barge-in (interrupt) support."""
 
@@ -196,6 +203,14 @@ class LocalSpeaker:
         if not self.earcons_enabled or sd is None or self.screen_reader_friendly:
             # Screen readers already announce state changes; avoid double chatter.
             return
+        try:
+            from audio import earcons
+
+            if kind in earcons.CHIMES:
+                earcons.play_chime(kind)
+                return
+        except Exception:  # pragma: no cover - defensive
+            pass
         notes = self.EARCON_NOTES.get(kind)
         if not notes:
             return
@@ -234,6 +249,7 @@ class LocalSpeaker:
         text = (text or "").strip()
         if not text:
             return
+        text = _spoken_text(text)
         self.interrupt()  # cut anything currently playing
         self._stop.clear()
         self._interrupted = False
