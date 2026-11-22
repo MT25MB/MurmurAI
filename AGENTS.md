@@ -192,6 +192,27 @@ This file is the source of truth for every coding agent and human contributor.
 
 ---
 
+### Agent/tool loop discipline (Capri-inspired)
+- Approvals are single-use and bound to one exact request: only one may be held, a
+  "yes" cannot be replayed, and unrelated speech drops the held action
+  (`tools/event_bus.py`). Spoken yes/no is ignored while `audio/echo_guard.py`
+  reports echo; physical stop phrases always abort.
+- Tool output is fenced as untrusted data (12K cap) and code-owned safety is the
+  final system-prompt block; override-style lines in plugin descriptions are
+  stripped before their schemas reach the brain (`agent/prompt_guard.py`).
+- The brain never claims an action unless a tool actually ran
+  (`guard_unverified_claim`), and Ollama's context window starts from RAM/VRAM
+  and grows once on an overflow (override: `MURMUR_CONTEXT_WINDOW`).
+- A fast local head handles stop/status mid-job without a model call
+  (`agent/mid_job.py`). Screen questions stay on the brain's `describe_screen`
+  tool path, which reports missing vision dependencies cleanly.
+- MCP plugins support per-tool `always`/`ask`/`off` modes and a payload-free
+  decision audit at `~/.murmur-ai/logs/tool_audit.jsonl`; idle servers stop after
+  10 minutes. Declarative look-up recipes (`~/.murmur-ai/tool_recipes.json`) are
+  HTTPS-GET-only, domain-allowlisted and start disabled until reviewed.
+- Optional extra providers are strictly loopback OpenAI-compatible endpoints
+  named by `MURMUR_LOCAL_ENDPOINT`; Ollama remains the default. No cloud keys.
+
 ## 2. Repository layout
 
 ```
@@ -209,7 +230,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (12 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (40 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -227,7 +248,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 411 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 489 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -242,8 +263,9 @@ Murmur AI/
    ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
    ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py}  # offline wake word + sleep/wake
-   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,shortcuts.json}
-   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py}
+   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
+   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py}
+   ├─ memory.py               # private-filtered local memory vault (forget/undo)
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec
    └─ logs/                  # visual-agent step replay (screenshots + JSON)
