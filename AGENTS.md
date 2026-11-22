@@ -226,7 +226,11 @@ This file is the source of truth for every coding agent and human contributor.
 - Native accessibility trees (`tools/a11y_tree.py`, UIA/AT-SPI/AX with graceful
   fallback) are the fast path for named controls; the brain can call
   `list_a11y_controls` and the VLM receives a bounded a11y table. Canvas-heavy
-  apps still use Set-of-Marks + the VLM.
+  apps still use Set-of-Marks + the VLM. Startup is resilient to the onefile
+  sidecar's ~27s cold start: the HUD polls `src/lib/backendReady.ts` with bounded
+  backoff (showing progress) instead of failing on one early fetch, and Retry
+  polls too. `/setup/status` shares a cached, 0.8s Ollama tags probe (failures
+  cached for 2s) so it returns in <1s instead of ~8s.
 - Set-of-Marks uses a compact token-efficient manifest (`agent/som_manifest.py`)
   with one shared ID space, contained-duplicate merging and geometry in a side
   map, so small 7B VLMs stay fast. Post-action verification
@@ -264,7 +268,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (41 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (44 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -282,7 +286,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 574 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 576 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,

@@ -2,17 +2,39 @@ import { useEffect, useState, type ReactNode } from "react";
 import HudPill from "./components/HudPill";
 import OnboardingModal from "./components/OnboardingModal";
 import SettingsDrawer from "./components/SettingsDrawer";
-import { fetchSetupStatus } from "./lib/setup";
+import { fetchSetupStatus, type SetupStatus } from "./lib/setup";
+import { waitForBackend } from "./lib/backendReady";
 
 export default function App() {
   // null = still checking; true = setup complete (show HUD); false = onboarding.
   const [ready, setReady] = useState<boolean | null>(null);
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
-    fetchSetupStatus()
-      .then((s) => setReady(s.complete))
-      .catch(() => setReady(false)); // if backend is down, show onboarding retry
+    let disposed = false;
+    (async () => {
+      const state: { status: SetupStatus | null } = { status: null };
+      const result = await waitForBackend(
+        async () => {
+          state.status = await fetchSetupStatus();
+          return state.status;
+        },
+        {
+          attempts: 40,
+          baseDelayMs: 500,
+          maxDelayMs: 2000,
+          onAttempt: (n) => {
+            if (!disposed) setConnectAttempt(n);
+          },
+        },
+      );
+      if (disposed) return;
+      setReady(result.ready ? (state.status?.complete ?? false) : false);
+    })();
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   // The HUD is a tiny pill when setup is complete, but onboarding/error screens
@@ -80,8 +102,13 @@ export default function App() {
   let content: ReactNode;
   if (ready === null) {
     content = (
-      <div className="flex h-full w-full items-center justify-center bg-obsidian text-sm text-muted" role="status" aria-live="polite">
-        Checking setup…
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-obsidian text-sm text-muted" role="status" aria-live="polite">
+        <p>Connecting to the local backend…</p>
+        {connectAttempt > 2 && (
+          <p className="text-xs text-muted/70">
+            Starting the local engine can take up to 30 seconds on first launch (attempt {connectAttempt}).
+          </p>
+        )}
       </div>
     );
   } else if (!ready) {

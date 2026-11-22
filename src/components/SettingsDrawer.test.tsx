@@ -28,6 +28,18 @@ let posts: Array<Record<string, unknown>> = [];
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 
+// Keep App's bounded backend polling instantaneous in tests.
+vi.mock("../lib/backendReady", () => ({
+  waitForBackend: async (probe: () => Promise<unknown>) => {
+    try {
+      await probe();
+      return { ready: true, attempts: 1 };
+    } catch {
+      return { ready: false, attempts: 1 };
+    }
+  },
+}));
+
 const windowMock = vi.hoisted(() => ({
   setSize: vi.fn().mockResolvedValue(undefined),
   setResizable: vi.fn().mockResolvedValue(undefined),

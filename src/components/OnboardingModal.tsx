@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import logoUrl from "../assets/logo-blue.png";
+import { waitForBackend } from "../lib/backendReady";
 import {
   completeSetup,
   fetchPermissions,
@@ -23,6 +24,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [permissions, setPermissions] = useState<PermissionStatus | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [retrying, setRetrying] = useState(false);
   const [installInfo, setInstallInfo] = useState<{ command: string; url: string } | null>(null);
   const [pull, setPull] = useState<{ model: string; text: string; percent: number | null } | null>(null);
   const [micLevel, setMicLevel] = useState(0);
@@ -31,16 +33,31 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   const closePullRef = useRef<(() => void) | null>(null);
   const micCleanupRef = useRef<(() => void) | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     try {
       const [s, p] = await Promise.all([fetchSetupStatus(), fetchPermissions()]);
       setStatus(s);
       setPermissions(p);
       setLoadError("");
+      return true;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Backend unavailable.");
+      return false;
     }
   }, []);
+
+  // Retry must survive the sidecar's cold start, so poll briefly with feedback
+  // instead of firing one fetch that fails instantly and looks unclickable.
+  const retry = useCallback(async () => {
+    setRetrying(true);
+    await waitForBackend(
+      async () => {
+        if (!(await refresh())) throw new Error("Backend not ready");
+      },
+      { attempts: 12, baseDelayMs: 300, maxDelayMs: 1500 },
+    );
+    setRetrying(false);
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
@@ -143,12 +160,16 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
           <p className="mt-1 text-xs text-red/80">{loadError}</p>
           <button
             type="button"
-            onClick={refresh}
+            onClick={retry}
+            disabled={retrying}
             aria-label="Try connecting to the local backend again"
-            className="mt-4 rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-white hover:bg-surface-2"
+            className="mt-4 cursor-pointer rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-fill active:bg-blue-deep disabled:cursor-wait disabled:opacity-70"
           >
-            Retry
+            {retrying ? "Retrying…" : "Retry"}
           </button>
+          <p className="mt-2 text-[11px] text-muted/70">
+            The local engine starts on first launch and can take up to 30 seconds.
+          </p>
         </div>
       </div>
     );

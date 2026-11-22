@@ -23,6 +23,12 @@ def _no_model_download(monkeypatch):
     """Never trigger first-run weight/model downloads during tests."""
     monkeypatch.setenv("MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS", "0")
     monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    try:
+        import setup
+
+        setup.invalidate_ollama_cache()
+    except Exception:  # pragma: no cover - setup is optional in some tests
+        pass
     yield
 
 

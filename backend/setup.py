@@ -33,7 +33,7 @@ from system.profiler import (
 
 logger = logging.getLogger("murmur_ai.setup")
 
-OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")).rstrip("/")
 
 # Models required for a fully functional Murmur AI.
 REQUIRED_MODELS: list[str] = ["qwen2.5:7b", "qwen2.5-vl:7b"]
@@ -84,6 +84,30 @@ def _ollama_binary_path() -> Optional[str]:
     return None
 
 
+OLLAMA_TIMEOUT_S = 0.8
+_TAGS_CACHE: dict[str, Any] = {"valid": False, "data": None, "at": 0.0}
+
+
+def _ollama_tags() -> dict[str, Any] | None:
+    """Fetch /api/tags once per status snapshot; cache failures too."""
+    now = time.monotonic()
+    if _TAGS_CACHE["valid"] and now - _TAGS_CACHE["at"] < 2.0:
+        return _TAGS_CACHE["data"]
+    data: dict[str, Any] | None = None
+    try:
+        resp = httpx.get(f"{OLLAMA_HOST}/api/tags", timeout=OLLAMA_TIMEOUT_S)
+        if resp.status_code == 200:
+            data = resp.json()
+    except Exception:  # pragma: no cover - network dependent
+        pass
+    _TAGS_CACHE.update(valid=True, data=data, at=time.monotonic())
+    return data
+
+
+def invalidate_ollama_cache() -> None:
+    _TAGS_CACHE.update(valid=False, data=None, at=0.0)
+
+
 def ollama_status() -> dict[str, Any]:
     """Return {installed, running, version?, error?} for Ollama."""
     installed = _ollama_binary_path() is not None
@@ -92,14 +116,12 @@ def ollama_status() -> dict[str, Any]:
         "running": False,
         "install_path": _ollama_binary_path(),
     }
-    try:
-        resp = httpx.get(f"{OLLAMA_HOST}/api/tags", timeout=2.0)
-        if resp.status_code == 200:
-            result["running"] = True
-            data = resp.json()
-            result["version"] = data.get("version")
-    except Exception as exc:  # pragma: no cover - network dependent
-        result["error"] = str(exc)
+    data = _ollama_tags()
+    if data is not None:
+        result["running"] = True
+        result["version"] = data.get("version")
+    else:
+        result["error"] = "Ollama is not reachable"
     return result
 
 
@@ -107,11 +129,11 @@ def pulled_models(models: Optional[list[str]] = None) -> dict[str, bool]:
     """Return {model_name: is_pulled}. Defaults to the required model set."""
     names = models if models is not None else REQUIRED_MODELS
     status = {name: False for name in names}
+    data = _ollama_tags()
+    if data is None:
+        return status
     try:
-        resp = httpx.get(f"{OLLAMA_HOST}/api/tags", timeout=2.0)
-        if resp.status_code != 200:
-            return status
-        models_data = resp.json().get("models", [])
+        models_data = data.get("models", [])
         available = {m.get("name", "").lower() for m in models_data if isinstance(m, dict)}
         for name in names:
             base = name.split(":")[0]
