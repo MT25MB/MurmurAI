@@ -33,6 +33,7 @@ from tools.mcp_manager import MANAGEMENT_TOOLS
 from system.settings_tools import SETTINGS_TOOLS
 from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
 from tools.memory_tools import MEMORY_TOOLS
+from tools.tool_recipes import RECIPE_TOOLS
 from system.profiler import (
     initial_context_window,
     load_profile,
@@ -77,7 +78,7 @@ ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
     + CONTEXT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
     + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
-    + MEMORY_TOOLS + STOP_TOOL
+    + MEMORY_TOOLS + RECIPE_TOOLS + STOP_TOOL
 )
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
@@ -144,6 +145,7 @@ Available local tools:
   Murmur AI is not working or says run diagnostics.
 - get_settings(): read current voice, listening and privacy preferences.
 - set_setting(changes): change one or more preferences by name.
+- list_tool_recipes(): list enabled local look-up tools; run_tool_recipe(recipe_id, text) runs one.
 - remember_fact(text): remember a non-private fact. Refuses secrets, emails, card and phone numbers.
 - list_memories(): speak everything remembered; forget_memory(id) removes one, undo_forget() restores it.
 - stop_automation(reason): immediately stop any running GUI/vision automation.
