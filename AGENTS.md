@@ -217,6 +217,27 @@ This file is the source of truth for every coding agent and human contributor.
   only an explicit allowlist of local data (never model weights). It is a dry
   run unless `--apply` is passed; OS installers do not invoke it automatically.
 
+### v1.1.0 perception and speech upgrades (clean-room study applied)
+- Streamed replies are split at sentence boundaries (`audio/streaming.py`) and
+  delivered through a priority queue (`audio/speech_queue.py`): normal narration
+  queues, urgent confirmations/errors preempt once, and barge-in drops only
+  interruptible pending items. `Brain.stream_sentences` consumes Ollama tokens
+  as they arrive; long replies and screen descriptions speak sentence by sentence.
+- Native accessibility trees (`tools/a11y_tree.py`, UIA/AT-SPI/AX with graceful
+  fallback) are the fast path for named controls; the brain can call
+  `list_a11y_controls` and the VLM receives a bounded a11y table. Canvas-heavy
+  apps still use Set-of-Marks + the VLM.
+- Set-of-Marks uses a compact token-efficient manifest (`agent/som_manifest.py`)
+  with one shared ID space, contained-duplicate merging and geometry in a side
+  map, so small 7B VLMs stay fast. Post-action verification
+  (`agent/screen_diff.py`) makes "no change" explicit and feeds alternative-path
+  recovery when a click leaves the screen static.
+- Declarative `.murmur-skill` packs (`skills/`) carry only hotkeys, terminology
+  and prompt context, reject executable fields and injection text, and ship
+  built-ins for Blender, DaVinci Resolve and VS Code. Tauri
+  `check_os_permissions` reports mic/screen/accessibility status through `/health`
+  and speaks plain-language recovery steps.
+
 ## 2. Repository layout
 
 ```
@@ -252,7 +273,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 497 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 542 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -270,6 +291,9 @@ Murmur AI/
    ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
    ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py}
    ├─ memory.py               # private-filtered local memory vault (forget/undo)
+   ├─ audio/{streaming.py,speech_queue.py}  # sentence chunking + priority speech
+   ├─ agent/{som_manifest.py,screen_diff.py}  # compact SoM + post-action verify
+   ├─ skills/                 # declarative app workflow packs (non-executable)
    ├─ system/uninstall.py     # uninstall data choice allowlist and cleanup runner
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec

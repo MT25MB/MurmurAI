@@ -537,6 +537,9 @@ class VisionAgent:
                     app_title = ctx.title
                     app_label = ctx.profile_label
                     app_section = ctx.prompt_section
+                    from skills.pack_loader import app_context, load_packs
+
+                    app_section += "\n" + app_context(load_packs(), app_title)
                 except Exception:
                     logger.exception("App context detection failed")
 

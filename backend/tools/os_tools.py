@@ -146,6 +146,12 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     """Call a registered OS tool by name with the given arguments."""
     from .a11y_tree import handle_a11y_tool
     from .memory_tools import handle_memory_tool
+    from skills.pack_loader import handle_skill_tool
+
+    skill_result = handle_skill_tool(name, arguments)
+    if skill_result is not None:
+        return skill_result
+
     from .tool_recipes import handle_recipe_tool
 
     a11y_result = handle_a11y_tool(name, arguments)

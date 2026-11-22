@@ -1,0 +1,18 @@
+{
+  "id": "vscode",
+  "app_name": "Visual Studio Code",
+  "hotkeys": {
+    "command palette": "ctrl+shift+p",
+    "quick open": "ctrl+p",
+    "save": "ctrl+s",
+    "find": "ctrl+f",
+    "terminal": "ctrl+`",
+    "go to line": "ctrl+g"
+  },
+  "terminology": {
+    "editor": "the text area",
+    "explorer": "the file tree panel",
+    "command palette": "the quick-action menu"
+  },
+  "prompt_context": "VS Code is mostly standard controls. Prefer the accessibility tree and keyboard shortcuts over vision."
+}

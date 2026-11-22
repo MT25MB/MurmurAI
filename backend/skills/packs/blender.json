@@ -1,0 +1,20 @@
+{
+  "id": "blender",
+  "app_name": "Blender",
+  "hotkeys": {
+    "select all": "a",
+    "deselect": "alt+a",
+    "move": "g",
+    "rotate": "r",
+    "scale": "s",
+    "undo": "ctrl+z",
+    "object mode": "tab"
+  },
+  "terminology": {
+    "viewport": "the main 3D canvas area",
+    "outliner": "the panel listing scene objects",
+    "properties": "the panel with object settings",
+    "timeline": "the frame strip at the bottom"
+  },
+  "prompt_context": "Blender is a custom 3D canvas. Use SoM grounding for the viewport and the a11y tree for menus and panels. Prefer shortcuts for transforms."
+}

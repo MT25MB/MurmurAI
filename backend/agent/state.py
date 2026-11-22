@@ -21,7 +21,7 @@ class ClientMessage(BaseModel):
     type: Literal[
         "ping", "state", "text_input", "audio_chunk", "confirm",
         "guidance_response", "abort_automation", "set_listening_mode",
-        "update_available", "update_confirm", "update_status", "be_quiet",
+        "update_available", "update_confirm", "update_status", "permission_status", "be_quiet",
     ]
     text: str | None = None
     data: str | None = None  # base64 audio chunk
@@ -31,6 +31,7 @@ class ClientMessage(BaseModel):
     version: str | None = None  # update notification
     notes: str | None = None    # release summary
     detail: str | None = None   # update error/offline detail
+    permissions: dict | None = None  # OS permission diagnostics from the shell
 
 
 class ServerMessage(BaseModel):

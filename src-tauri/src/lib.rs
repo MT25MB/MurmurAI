@@ -7,6 +7,8 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 use tauri_plugin_updater::UpdaterExt;
 use serde::Serialize;
 
+mod permissions;
+
 /// Result of a local update check. Serde names are camelCase for the HUD.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -344,7 +346,11 @@ pub fn run() {
                 kill_backend();
             }
         })
-        .invoke_handler(tauri::generate_handler![check_for_updates, install_update])
+        .invoke_handler(tauri::generate_handler![
+            check_for_updates,
+            install_update,
+            permissions::check_os_permissions
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Murmur AI");
 }

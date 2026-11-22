@@ -20,6 +20,23 @@ const stateStyle: Record<Phase, { label: string; color: string; fill: string }> 
 
 export default function HudPill() {
   const { lastMessage, send } = useMurmurSocket();
+
+  // One-shot OS permission check from the native shell; the backend surfaces it
+  // on /health and speaks any plain-language recovery steps.
+  useEffect(() => {
+    let disposed = false;
+    import("../lib/permissions")
+      .then((m) => m.checkOsPermissions())
+      .then((report) => {
+        if (!disposed && report) {
+          send({ type: "permission_status", permissions: report });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [send]);
   const [status, setStatus] = useState<Phase>("IDLE");
   const [transcript, setTranscript] = useState("");
   const [muted, setMuted] = useState(false);

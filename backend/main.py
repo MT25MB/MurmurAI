@@ -71,6 +71,7 @@ class AppState:
         self.prewarm_task: Optional[asyncio.Task] = None
         self.plugin_task: Optional[asyncio.Task] = None
         self.demo: Optional[object] = None  # active guided practice session
+        self.os_permissions: Optional[dict] = None  # from the Tauri shell
         self._shutting_down = False
 
     def session_for(self, websocket: WebSocket) -> SessionState:
@@ -224,6 +225,7 @@ async def health() -> JSONResponse:
             "tts": app_state.speaker is not None,
             "listening": app_state.listening_task is not None
             and not app_state.listening_task.done(),
+            "os_permissions": app_state.os_permissions,
         }
     )
 
@@ -477,6 +479,9 @@ async def ws(websocket: WebSocket):
                 logger.info("Update check status from shell: %s", msg.detail or "")
                 await send(ServerMessage(type="info", text=msg.detail or "Update check finished."))
 
+            elif msg.type == "permission_status":
+                await _handle_permission_status(msg.permissions, send)
+
             elif msg.type == "be_quiet":
                 if app_state.speaker is not None:
                     if hasattr(app_state.speaker, "be_quiet"):
@@ -510,6 +515,22 @@ async def ws(websocket: WebSocket):
 
 
 # ---- handlers ----
+
+async def _handle_permission_status(permissions: Optional[dict], send) -> None:
+    """Store shell permission diagnostics and speak plain-language recovery."""
+    app_state.os_permissions = permissions
+    recovery = (permissions or {}).get("recovery") or []
+    if recovery:
+        spoken = "Permission check. " + " ".join(str(r) for r in recovery)
+        if app_state.speaker is not None:
+            try:
+                from audio.speech_queue import SpeechPriority
+
+                app_state.speaker.speak_priority(spoken, SpeechPriority.INTERRUPT)
+            except Exception:
+                logger.debug("Permission prompt speak failed", exc_info=True)
+    await send(ServerMessage(type="info", text="Permission check received."))
+
 
 async def _try_monitor_switch(session, send, text: str) -> bool:
     """Handle 'look at my second monitor' locally, without a model call."""

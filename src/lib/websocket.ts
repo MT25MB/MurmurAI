@@ -20,6 +20,7 @@ export type ClientMessage =
   | { type: "update_available"; version?: string; notes?: string }
   | { type: "update_confirm"; request_id: string; approved: boolean }
   | { type: "update_status"; detail?: string }
+  | { type: "permission_status"; permissions?: unknown }
   | { type: "be_quiet" };
 
 /** Messages the backend may send to the HUD. */

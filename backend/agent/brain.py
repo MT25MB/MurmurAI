@@ -35,6 +35,7 @@ from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
 from tools.memory_tools import MEMORY_TOOLS
 from tools.tool_recipes import RECIPE_TOOLS
 from tools.a11y_tree import A11Y_TOOLS
+from skills.pack_loader import SKILL_TOOLS
 from system.profiler import (
     initial_context_window,
     load_profile,
@@ -79,7 +80,7 @@ ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
     + CONTEXT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
     + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
-    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + STOP_TOOL
+    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + STOP_TOOL
 )
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.

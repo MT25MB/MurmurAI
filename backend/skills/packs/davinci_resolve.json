@@ -1,0 +1,19 @@
+{
+  "id": "davinci_resolve",
+  "app_name": "DaVinci Resolve",
+  "hotkeys": {
+    "play pause": "space",
+    "mark in": "i",
+    "mark out": "o",
+    "split clip": "s",
+    "undo": "ctrl+z",
+    "fit timeline": "shift+z"
+  },
+  "terminology": {
+    "timeline": "the clip strip where edits happen",
+    "viewer": "the picture preview",
+    "inspector": "the panel with clip settings",
+    "media pool": "the area holding imported clips"
+  },
+  "prompt_context": "DaVinci Resolve timelines are custom canvases. Use SoM grounding for the timeline and viewer; use the a11y tree for menus and dialogs."
+}
