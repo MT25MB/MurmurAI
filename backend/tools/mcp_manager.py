@@ -23,6 +23,7 @@ import queue
 import re
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -35,6 +36,26 @@ REPO_EXAMPLE = Path(__file__).resolve().parents[1] / "mcp_servers.example.json"
 
 PROTOCOL_VERSION = "2024-11-05"
 REQUEST_TIMEOUT = 15.0
+IDLE_TIMEOUT = 600.0
+DEFAULT_AUDIT_PATH = Path.home() / ".murmur-ai" / "logs" / "tool_audit.jsonl"
+
+
+def audit_tool_call(
+    path: Path,
+    server: str,
+    tool: str,
+    decision: str,
+    arguments: dict[str, Any] | None = None,
+) -> None:
+    """Append a decision line. Arguments are accepted but never serialized."""
+    row = {"ts": time.time(), "server": str(server), "tool": str(tool), "decision": str(decision)}
+    try:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row) + "\n")
+    except OSError:  # pragma: no cover - audit must never break a tool call
+        logger.debug("Could not write tool audit", exc_info=True)
 
 # Word tokens that make a tool risky enough to require spoken confirmation.
 # Names are tokenized on underscores/camel boundaries, so "write_note" counts.
@@ -251,13 +272,23 @@ class StdioMcpClient:
 class McpManager:
     """Owns MCP server connections and their dynamic tool registration."""
 
-    def __init__(self, config_path: Path | None = None, client_factory=None, bus=None):
+    def __init__(
+        self,
+        config_path: Path | None = None,
+        client_factory=None,
+        bus=None,
+        audit_path: Path | None = None,
+        idle_timeout: float = IDLE_TIMEOUT,
+    ):
         self.config_path = config_path or CONFIG_PATH
         self.client_factory = client_factory or StdioMcpClient
         self._clients: dict[str, StdioMcpClient] = {}
         self._tools: dict[str, McpTool] = {}
         self._configs: dict[str, ServerConfig] = {}
         self._dynamic_names: set[str] = set()
+        self._last_used: dict[str, float] = {}
+        self.audit_path = Path(audit_path) if audit_path else DEFAULT_AUDIT_PATH
+        self.idle_timeout = float(idle_timeout)
         self.errors: list[str] = []
         self.bus = bus  # set lazily to tools.event_bus.tool_bus
 
@@ -305,7 +336,32 @@ class McpManager:
             except Exception:
                 logger.debug("MCP client close failed", exc_info=True)
         self._clients.clear()
+        self._last_used.clear()
         self._tools.clear()
+
+    def _audit(self, tool: str, decision: str, arguments: dict[str, Any] | None = None) -> None:
+        entry = self._tools.get(tool)
+        audit_tool_call(
+            self.audit_path,
+            entry.server if entry else "unknown",
+            tool,
+            decision,
+            arguments,
+        )
+
+    def _close_idle(self) -> None:
+        """Stop servers that have not been used within the idle timeout."""
+        now = time.monotonic()
+        for name, client in list(self._clients.items()):
+            if now - self._last_used.get(name, now) <= self.idle_timeout:
+                continue
+            logger.info("Stopping idle MCP server '%s'", name)
+            try:
+                client.close()
+            except Exception:  # pragma: no cover - defensive
+                logger.debug("Idle MCP close failed", exc_info=True)
+            self._clients.pop(name, None)
+            self._last_used.pop(name, None)
 
     def reload(self) -> dict[str, Any]:
         """Reconnect to every configured server and rediscover their tools."""
@@ -343,6 +399,7 @@ class McpManager:
                         risk=risk,
                     )
                 self._clients[name] = client
+                self._last_used[name] = time.monotonic()
                 logger.info("MCP server '%s': %d tools", name, len(tools.get("tools", [])))
             except Exception as exc:
                 self.errors.append(f"{name}: {exc}")
@@ -378,8 +435,10 @@ class McpManager:
     # ---- execution ----
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        self._close_idle()
         tool = self._tools.get(name)
         if tool is None:
+            self._audit(name, "unknown", arguments)
             return f"Unknown MCP tool: {name}"
         if tool.risk == "high":
             description = (
@@ -392,9 +451,11 @@ class McpManager:
                 timeout=60,
             )
             if not approved:
+                self._audit(name, "denied", arguments)
                 return f"Cancelled. I did not run {name}."
         client = self._clients.get(tool.server)
         if client is None:
+            self._audit(name, "unavailable", arguments)
             return f"MCP server {tool.server} is not connected."
         try:
             result = client.request("tools/call", {
@@ -402,7 +463,9 @@ class McpManager:
                 "arguments": arguments or {},
             })
         except McpError as exc:
+            self._audit(name, "error", arguments)
             return f"MCP tool {name} failed: {exc}"
+        self._last_used[tool.server] = time.monotonic()
         texts = [
             str(part.get("text", ""))
             for part in result.get("content", [])
@@ -410,7 +473,9 @@ class McpManager:
         ]
         text = "\n".join(t for t in texts if t)
         if result.get("isError"):
+            self._audit(name, "error", arguments)
             return f"MCP tool {name} reported an error: {text or 'unknown error'}"
+        self._audit(name, "approved", arguments)
         return text or f"{name} finished."
 
     # ---- status / voice ----
