@@ -38,6 +38,7 @@ from system.profiler import (
     needed_context,
     next_context_window,
 )
+from agent.local_providers import load_endpoints
 from tools.safety import SafetyGate
 from agent.vision_agent import DESCRIBE_TOOL
 from agent.abort import abort_controller, is_abort_phrase
@@ -228,6 +229,15 @@ class Brain:
         )
         self._auto_context = override is None
 
+        # Optional extra provider: strictly loopback OpenAI-compatible servers.
+        # Ollama stays the default when no endpoint is named.
+        self.local_endpoint = None
+        named = os.getenv("MURMUR_LOCAL_ENDPOINT", "").strip()
+        if named:
+            self.local_endpoint = load_endpoints().get(named)
+            if self.local_endpoint is None:
+                logger.warning("Configured local endpoint '%s' is missing or invalid", named)
+
     # ---- Ollama chat ----
 
     def _chat(
@@ -236,6 +246,9 @@ class Brain:
         model: str | None = None,
         tools: list[dict] | None = None,
     ) -> dict[str, Any]:
+        if self.local_endpoint is not None:
+            return self.local_endpoint.chat(messages, tools=tools)
+
         payload: dict[str, Any] = {
             "model": model or self.model,
             "messages": messages,
