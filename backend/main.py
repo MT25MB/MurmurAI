@@ -518,6 +518,32 @@ async def _try_monitor_switch(session, send, text: str) -> bool:
     return True
 
 
+async def _try_mid_job_intent(session: SessionState, send, text: str) -> bool:
+    """Fast local head: stop/status/screen are answered without a model call."""
+    from agent.mid_job import classify
+
+    intent = classify(text)
+    if intent == "stop":
+        abort_controller.abort("user said stop mid-job")
+        await send(ServerMessage(type="automation_stopped", text="Automation stopped."))
+        await _set_state(send, session, "IDLE")
+        return True
+    if intent == "status":
+        reply = "I'm here and listening. Say stop to cancel a job."
+        session.add_turn("assistant", reply)
+        await _speak_and_return(session, send, reply)
+        return True
+    if intent == "screen":
+        from agent.vision_agent import describe_screen
+
+        reply = await asyncio.to_thread(describe_screen, "overview")
+        session.add_turn("assistant", reply)
+        await emit_transcript(session, send, reply)
+        await _set_state(send, session, "IDLE")
+        return True
+    return False
+
+
 async def handle_text_input(
     session: SessionState, send, text: str
 ) -> None:
@@ -543,6 +569,8 @@ async def handle_text_input(
     if await _try_settings_phrase(session, send, text):
         return
     if await _try_context_phrase(session, send, text):
+        return
+    if await _try_mid_job_intent(session, send, text):
         return
     # If the user is answering a spoken confirmation, handle it here instead of
     # sending "yes"/"no" to the model.
