@@ -533,14 +533,8 @@ async def _try_mid_job_intent(session: SessionState, send, text: str) -> bool:
         session.add_turn("assistant", reply)
         await _speak_and_return(session, send, reply)
         return True
-    if intent == "screen":
-        from agent.vision_agent import describe_screen
-
-        reply = await asyncio.to_thread(describe_screen, "overview")
-        session.add_turn("assistant", reply)
-        await emit_transcript(session, send, reply)
-        await _set_state(send, session, "IDLE")
-        return True
+    # Screen questions still go to the brain: its describe_screen tool knows
+    # whether vision is available and speaks a clear error when it isn't.
     return False
 
 
