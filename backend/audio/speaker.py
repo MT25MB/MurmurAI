@@ -16,6 +16,8 @@ from typing import Optional
 import numpy as np
 
 from audio.media_duck import MediaDucker
+from audio.speech_queue import SpeechPriority, SpeechQueue, SpeechRequest
+from audio.streaming import Sentence, SentenceChunker
 
 try:  # pragma: no cover - platform optional
     import sounddevice as sd
@@ -73,6 +75,7 @@ class LocalSpeaker:
         self._play_thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._interrupted = False
+        self._queue = SpeechQueue(sink=self._deliver_speech)
 
     # ---- engine resolution (lazy) ----
 
@@ -244,37 +247,68 @@ class LocalSpeaker:
 
     # ---- public API ----
 
-    def speak(self, text: str) -> None:
-        """Speak text. Blocks until done or interrupted. Safe to call from any thread."""
-        text = (text or "").strip()
+    def speak(self, text: str, priority: SpeechPriority = SpeechPriority.NORMAL_QUEUE) -> None:
+        """Queue text for speech. Normal narration queues; urgent speech preempts."""
+        self.speak_priority(text, priority)
+
+    def speak_priority(
+        self, text: str, priority: SpeechPriority = SpeechPriority.INTERRUPT
+    ) -> None:
+        """Speak with an explicit priority (confirmations and errors use INTERRUPT)."""
+        text = _spoken_text((text or "").strip())
         if not text:
             return
-        text = _spoken_text(text)
-        self.interrupt()  # cut anything currently playing
-        self._stop.clear()
-        self._interrupted = False
-        if self.duck_media:
-            self._ducker.duck()
-        self._play_thread = threading.Thread(
-            target=self._run_speak, args=(text,), daemon=True, name="Murmur AI-speaker"
+        interruptible = priority != SpeechPriority.INTERRUPT
+        preempt = self._queue.enqueue(
+            SpeechRequest(text=text, priority=priority, interruptible=interruptible)
         )
-        self._play_thread.start()
+        if preempt:
+            self._hard_interrupt_audio()
 
-    def interrupt(self) -> None:
-        """Immediately stop speaking. Idempotent and thread-safe."""
+    def speak_streamed(
+        self, chunks, priority: SpeechPriority = SpeechPriority.NORMAL_QUEUE
+    ) -> None:
+        """Enqueue sentences as soon as their boundary completes.
+
+        Accepts an iterable of streamed text fragments or Sentence objects.
+        """
+        chunker = SentenceChunker()
+        for piece in chunks:
+            text = piece.text if isinstance(piece, Sentence) else str(piece)
+            for sentence in chunker.feed(text):
+                self.speak_priority(sentence.text, priority)
+        for sentence in chunker.flush():
+            self.speak_priority(sentence.text, priority)
+
+    def _hard_interrupt_audio(self) -> None:
+        """Stop current audio output only; queue management is separate."""
         with self._lock:
             self._stop.set()
             self._interrupted = True
-            # sounddevice stop is thread-safe; abort current output.
             if sd is not None:
                 try:
                     sd.stop()
                 except Exception:  # pragma: no cover - defensive
                     logger.exception("sd.stop failed")
 
+    def interrupt(self) -> None:
+        """Barge-in: stop audio and drop queued narration, keep critical items."""
+        self._queue.clear_interruptible()
+        self._hard_interrupt_audio()
+
     def is_speaking(self) -> bool:
+        if not self._queue.is_idle:
+            return True
         with self._lock:
             return self._play_thread is not None and self._play_thread.is_alive()
+
+    def _deliver_speech(self, request: SpeechRequest) -> None:
+        """Queue worker sink: synthesize one request synchronously."""
+        self._stop.clear()
+        self._interrupted = False
+        if self.duck_media:
+            self._ducker.duck()
+        self._run_speak(request.text)
 
     # ---- internals ----
 

@@ -97,9 +97,15 @@ async def lifespan(app: FastAPI):
             asyncio.run_coroutine_threadsafe(broadcast_to_huds(message), loop)
 
     def speak_from_tool(text: str) -> None:
+        # Confirmation prompts are urgent: preempt queued narration.
         speaker = app_state.speaker
         if speaker is not None:
-            speaker.speak(text)
+            if hasattr(speaker, "speak_priority"):
+                from audio.speech_queue import SpeechPriority
+
+                speaker.speak_priority(text, SpeechPriority.INTERRUPT)
+            else:
+                speaker.speak(text)
 
     tool_bus.configure(loop, emit_from_tool, speak_fn=speak_from_tool)
 
@@ -588,7 +594,7 @@ async def handle_text_input(
         return
 
     session.add_turn("assistant", reply)
-    await _speak_and_return(session, send, reply)
+    await _speak_and_return(session, send, reply, stream=len(reply) > 200)
 
 
 async def handle_confirm(
@@ -685,7 +691,11 @@ def _try_verbal_confirmation(text: str) -> Optional[bool]:
     logger.info("Verbal confirmation %s for %s (heard: %r)", decision, request_id, text)
     _chime("confirmation" if decision else "error")
     if app_state.speaker is not None:
-        app_state.speaker.speak("Approved." if decision else "Cancelled.")
+        from audio.speech_queue import SpeechPriority
+
+        app_state.speaker.speak_priority(
+            "Approved." if decision else "Cancelled.", SpeechPriority.INTERRUPT
+        )
     return decision
 
 
@@ -1006,13 +1016,24 @@ async def _set_state(send, session: SessionState, status: str) -> None:
         _chime(cue)
 
 
-async def _speak_and_return(session: SessionState, send, reply: str) -> None:
-    """Speak the reply, then return to IDLE (listening)."""
+async def _speak_and_return(
+    session: SessionState, send, reply: str, stream: bool = False
+) -> None:
+    """Speak the reply, then return to IDLE (listening).
+
+    Long replies are split at sentence boundaries so synthesis starts before
+    the whole response is assembled.
+    """
     await emit_transcript(session, send, reply)
     await _set_state(send, session, "SPEAKING")
     if app_state.speaker:
         try:
-            app_state.speaker.speak(reply)
+            if stream and hasattr(app_state.speaker, "speak_streamed"):
+                from audio.streaming import chunk_text
+
+                app_state.speaker.speak_streamed(chunk_text(reply))
+            else:
+                app_state.speaker.speak(reply)
         except Exception:
             logger.exception("TTS speak failed")
     # Give the UI a moment to show SPEAKING, then go idle.

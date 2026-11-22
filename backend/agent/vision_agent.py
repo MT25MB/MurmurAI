@@ -899,7 +899,12 @@ def describe_screen(focus: str = "overview") -> str:
         speaker = None
     if speaker is not None:
         try:
-            speaker.speak(description)
+            if hasattr(speaker, "speak_streamed"):
+                from audio.streaming import chunk_text
+
+                speaker.speak_streamed(chunk_text(description))
+            else:
+                speaker.speak(description)
         except Exception:  # pragma: no cover - defensive
             logger.exception("Failed to speak screen description")
     else:

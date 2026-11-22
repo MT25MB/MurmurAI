@@ -281,6 +281,39 @@ class Brain:
                 data = resp.json()
         return data
 
+    def stream_sentences(self, messages: list[dict[str, str]], model: str | None = None):
+        """Yield Sentence objects from a streaming local chat completion."""
+        from audio.streaming import SentenceChunker, chunk_text
+
+        if self.local_endpoint is not None:
+            reply = self.local_endpoint.chat(messages)
+            for sentence in chunk_text(reply.get("message", {}).get("content") or ""):
+                yield sentence
+            return
+
+        payload: dict[str, Any] = {
+            "model": model or self.model,
+            "messages": messages,
+            "stream": True,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+            "options": {"num_ctx": self.context_window},
+        }
+        chunker = SentenceChunker()
+        try:
+            with self._client.stream("POST", "/api/chat", json=payload) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    token = (data.get("message") or {}).get("content") or ""
+                    for sentence in chunker.feed(token):
+                        yield sentence
+        except Exception:  # pragma: no cover - streaming backend dependent
+            logger.exception("Streaming chat failed")
+        for sentence in chunker.flush():
+            yield sentence
+
     # ---- ReAct turn ----
 
     def think_and_act(
