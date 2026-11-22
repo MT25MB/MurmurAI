@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field, fields
@@ -46,6 +47,41 @@ ENV_WHISPER_COMPUTE = "WHISPER_COMPUTE_TYPE"
 ENV_WHISPER_DEVICE = "WHISPER_DEVICE"
 ENV_MAX_SCREEN_DIM = "MURMUR_MAX_SCREEN_DIM"
 ENV_KEEP_ALIVE = "OLLAMA_KEEP_ALIVE"
+
+# Context window tiers, chosen from RAM/VRAM on startup. A window that overflows
+# grows one tier and retries once; an explicit user value disables auto-sizing.
+CONTEXT_TIERS = (4_096, 8_192, 16_384, 32_768)
+CONTEXT_REPLY_RESERVE = 512
+
+
+def initial_context_window(ram_gb: float, vram_gb: float, override: int | None = None) -> int:
+    """Pick a starting num_ctx from detected hardware, or honour the override."""
+    if override and override > 0:
+        return int(override)
+    if (ram_gb or 0) >= 16 or (vram_gb or 0) >= 6:
+        return 16_384
+    if (ram_gb or 0) >= 12 or (vram_gb or 0) >= 3:
+        return 8_192
+    return 4_096
+
+
+def needed_context(error: str | None, reserve: int = CONTEXT_REPLY_RESERVE) -> int | None:
+    """Parse the token count from an Ollama 'exceeds available context' error."""
+    if not error:
+        return None
+    match = re.search(r"\((\d+)\s*tokens?\)\s*exceeds", error, re.IGNORECASE)
+    if not match:
+        return None
+    return int(match.group(1)) + max(0, reserve)
+
+
+def next_context_window(current: int, needed: int | None, cap: int = 32_768) -> int | None:
+    """Return the smallest tier above current that fits, within cap."""
+    want = needed or (current * 2)
+    for size in CONTEXT_TIERS:
+        if size > current and size >= want and size <= cap:
+            return size
+    return None
 
 
 @dataclass

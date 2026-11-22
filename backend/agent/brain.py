@@ -32,6 +32,12 @@ from system.demo import DEMO_TOOLS
 from tools.mcp_manager import MANAGEMENT_TOOLS
 from system.settings_tools import SETTINGS_TOOLS
 from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
+from system.profiler import (
+    initial_context_window,
+    load_profile,
+    needed_context,
+    next_context_window,
+)
 from tools.safety import SafetyGate
 from agent.vision_agent import DESCRIBE_TOOL
 from agent.abort import abort_controller, is_abort_phrase
@@ -207,6 +213,21 @@ class Brain:
         self._client = httpx.Client(base_url=self.host, timeout=self.timeout)
         self._tools_ready = bool(ALL_TOOLS)
 
+        # Context window grows from hardware and retries an overflowed ask once.
+        # An explicit MURMUR_CONTEXT_WINDOW disables auto-sizing entirely.
+        raw_override = os.getenv("MURMUR_CONTEXT_WINDOW", "").strip()
+        try:
+            override = int(raw_override) if raw_override else None
+        except ValueError:
+            override = None
+        profile = load_profile()
+        self.context_window = initial_context_window(
+            profile.total_ram_gb if profile else 0.0,
+            profile.vram_gb if profile else 0.0,
+            override,
+        )
+        self._auto_context = override is None
+
     # ---- Ollama chat ----
 
     def _chat(
@@ -221,12 +242,25 @@ class Brain:
             "stream": False,
             # Keep models resident between commands to remove cold-start lag.
             "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+            "options": {"num_ctx": self.context_window},
         }
         if tools:
             payload["tools"] = tools
         resp = self._client.post("/api/chat", json=payload)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+
+        if self._auto_context:
+            error = data.get("error") or ""
+            grown = next_context_window(self.context_window, needed_context(error))
+            if grown:
+                logger.info("Context overflow, retrying with num_ctx=%s", grown)
+                self.context_window = grown
+                payload["options"]["num_ctx"] = grown
+                resp = self._client.post("/api/chat", json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+        return data
 
     # ---- ReAct turn ----
 
