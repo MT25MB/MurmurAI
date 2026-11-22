@@ -91,6 +91,18 @@ Press **Ctrl+,** (or **Cmd+,** on macOS), or use the tray menu, to open the acce
 
 Murmur AI won't listen to its own voice: TTS playback mutes voice detection with a short tail buffer, and an optional loopback device can ignore room audio. Enable *Lower media volume while speaking* to duck background media. Say **"Be quiet"** or **"Stop talking"** (or press **Q**, or **Ctrl/Cmd+Shift+Q**) to cut speech instantly.
 
+#### Uninstall and your data
+
+By default, uninstalling Murmur AI **keeps** your memories, chats, keys and settings in `~/.murmur-ai` so a reinstall picks up where you left off. To clear them instead, turn on **"Clear my data if Murmur AI is uninstalled"** in the settings panel, or say **"Clear my data when you are uninstalled"**. Say **"Keep my data when you are uninstalled"** to switch back, or **"What happens to my data when you are uninstalled"** to hear the current choice.
+
+After uninstalling, the choice is applied by the bundled cleanup tool:
+
+```bash
+python scripts/uninstall_cleanup.py --apply
+```
+
+It is a dry run unless `--apply` is passed, and it only removes an explicit allowlist of data files (`memories.json`, config, keys, setup marker and logs). Downloaded model weights are never removed. The OS installers do not call this tool automatically; run it yourself after uninstall if you chose to clear your data.
+
 Say **"Run diagnostics"** or **"Why aren't you working?"** for a plain-English spoken report on your microphone, Ollama, local models, OS permissions and display session. If you hit a bug, say **"Export diagnostics"**: Murmur builds a privacy-safe zip on your Desktop (logs, hardware profile, Ollama status and a sanitized config, with paths and secrets redacted) and speaks the exact path so you can attach it to a GitHub issue. Nothing is uploaded automatically. It can offer to fix missing permissions or restart Ollama by voice.
 
 ### Local MCP plugins

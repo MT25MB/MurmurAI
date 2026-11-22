@@ -35,7 +35,7 @@ This file is the source of truth for every coding agent and human contributor.
 - Voice-controlled settings + diagnostics live in `system/settings_tools.py`.
   Preferences persist in `~/.murmur-ai/config.json` (speech rate, voice,
   chimes, description verbosity, listening mode, mic threshold, chat/vision
-  models) and are applied to the live speaker/listener/brain at startup and on
+  models, `clear_data_on_uninstall`) and are applied to the live speaker/listener/brain at startup and on
   change. Voice commands are matched locally before the brain: "speak faster",
   "change your voice", "turn chimes off", "switch to detailed screen
   descriptions", "switch to wake-word mode", "increase mic threshold", "switch
@@ -212,6 +212,10 @@ This file is the source of truth for every coding agent and human contributor.
   HTTPS-GET-only, domain-allowlisted and start disabled until reviewed.
 - Optional extra providers are strictly loopback OpenAI-compatible endpoints
   named by `MURMUR_LOCAL_ENDPOINT`; Ollama remains the default. No cloud keys.
+- Uninstall data policy: keeping data is the default. `clear_data_on_uninstall`
+  is opt-in via settings or voice, and `scripts/uninstall_cleanup.py` removes
+  only an explicit allowlist of local data (never model weights). It is a dry
+  run unless `--apply` is passed; OS installers do not invoke it automatically.
 
 ## 2. Repository layout
 
@@ -230,7 +234,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (40 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (41 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -248,7 +252,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 490 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 497 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -266,6 +270,7 @@ Murmur AI/
    ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
    ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py}
    ├─ memory.py               # private-filtered local memory vault (forget/undo)
+   ├─ system/uninstall.py     # uninstall data choice allowlist and cleanup runner
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec
    └─ logs/                  # visual-agent step replay (screenshots + JSON)

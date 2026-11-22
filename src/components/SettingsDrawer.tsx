@@ -203,6 +203,23 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
 
               <div className="flex items-center gap-2">
                 <input
+                  id="settings-uninstall-data"
+                  type="checkbox"
+                  checked={settings.clear_data_on_uninstall}
+                  onChange={(e) => change({ clear_data_on_uninstall: e.target.checked })}
+                  className="h-4 w-4 accent-blue"
+                />
+                <label htmlFor="settings-uninstall-data" className="text-xs font-medium">
+                  Clear my data if Murmur AI is uninstalled
+                </label>
+              </div>
+              <p className="ml-6 text-[11px] text-muted">
+                Off by default: memories, chats, keys and settings stay on this PC. Model
+                downloads are never removed.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
                   id="settings-earcons"
                   type="checkbox"
                   checked={settings.earcons}

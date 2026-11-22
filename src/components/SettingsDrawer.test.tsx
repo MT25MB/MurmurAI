@@ -20,6 +20,7 @@ const defaults = {
   voice_profile: "default",
   chat_model: "",
   vision_model: "",
+  clear_data_on_uninstall: false,
 };
 
 let current = { ...defaults };
@@ -138,6 +139,19 @@ describe("SettingsDrawer", () => {
 
     await user.selectOptions(screen.getByLabelText("Listening mode"), "wake");
     expect(posts).toContainEqual({ listening_mode: "wake" });
+  });
+
+  it("opt-in to clearing data on uninstall is off by default and can be enabled", async () => {
+    const user = userEvent.setup();
+    render(<SettingsDrawer open onClose={() => {}} />);
+
+    const choice = await screen.findByLabelText(
+      "Clear my data if Murmur AI is uninstalled"
+    );
+    expect(choice).not.toBeChecked();
+
+    await user.click(choice);
+    expect(posts).toContainEqual({ clear_data_on_uninstall: true });
   });
 
   it("runs diagnostics and shows the spoken report", async () => {

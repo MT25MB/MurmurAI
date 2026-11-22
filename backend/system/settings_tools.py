@@ -35,6 +35,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_profile": "default",          # default | clear | fast | quiet
     "chat_model": "",
     "vision_model": "",
+    "clear_data_on_uninstall": False,  # keep memories/chats/keys unless opted in
 }
 
 _CACHE: Optional[dict[str, Any]] = None
@@ -116,7 +117,7 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
     settings["mic_threshold"] = min(1.0, max(0.0, float(settings.get("mic_threshold", 0.5))))
     for key in (
         "earcons", "screen_reader_friendly", "media_ducking", "echo_guard",
-        "loopback_guard", "spatial_audio_cues",
+        "loopback_guard", "spatial_audio_cues", "clear_data_on_uninstall",
     ):
         settings[key] = bool(settings.get(key, DEFAULT_SETTINGS[key]))
     try:
@@ -259,6 +260,20 @@ def handle_voice_command(text: str) -> Optional[str]:
             pass
         # Deliberately not spoken: the user asked for silence.
         return "Okay, I'll be quiet. Say 'hello' when you need me again."
+
+    # Uninstall data policy: explicit opt-in only; keeping data is the default.
+    if re.search(r"\b(clear|delete|erase|remove)\b.*\buninstall(?:ed|ling)?\b", value):
+        update_settings({"clear_data_on_uninstall": True})
+        return _voice_reply("Your data will be cleared if you uninstall Murmur AI.")
+    if re.search(r"\b(keep|save|retain)\b.*\buninstall(?:ed|ling)?\b", value):
+        update_settings({"clear_data_on_uninstall": False})
+        return _voice_reply("Your data will be kept if you uninstall Murmur AI.")
+    if re.search(r"\b(what|whether)\b.*\bdata\b.*\buninstall|\bdata\b.*\buninstall(?:ed|ling)?\b", value):
+        kept = not load_settings()["clear_data_on_uninstall"]
+        return _voice_reply(
+            "Your data will be kept when you uninstall."
+            if kept else "Your data will be cleared when you uninstall."
+        )
 
     if re.search(r"screen reader friendly\s+(on|true|enable)|\benable\b.*screen reader friendly", value):
         update_settings({"screen_reader_friendly": True})

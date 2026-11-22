@@ -18,6 +18,7 @@ export interface Settings {
   voice_profile: "default" | "clear" | "fast" | "quiet";
   chat_model: string;
   vision_model: string;
+  clear_data_on_uninstall: boolean;
 }
 
 export interface Diagnostics {
