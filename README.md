@@ -155,7 +155,7 @@ brew install --cask murmur-ai
 
 # Linux (AppImage from the latest release)
 curl -L -o MurmurAI.AppImage \
-  https://github.com/MT25MB/MurmurAI/releases/latest/download/Murmur.AI_1.1.0_amd64.AppImage
+  https://github.com/MT25MB/MurmurAI/releases/latest/download/Murmur.AI_1.2.0_amd64.AppImage
 chmod +x MurmurAI.AppImage && ./MurmurAI.AppImage
 ```
 
