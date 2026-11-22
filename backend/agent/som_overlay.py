@@ -50,6 +50,7 @@ class SomResult:
     height: int = 0
     used_opencv: bool = False
     used_accessibility: bool = False
+    manifest: object = None  # compact token-efficient element table
 
 
 def _try_import_accessibility():
@@ -234,6 +235,23 @@ def annotate_screenshot(png_bytes: bytes) -> SomResult:
     img.save(buf, format="PNG", optimize=True)
     import base64
 
+    from agent.som_manifest import ElementRecord, build_manifest
+
+    manifest = build_manifest(
+        [
+            ElementRecord(
+                name=el.label or "ui",
+                role="control",
+                center_x=el.center_x,
+                center_y=el.center_y,
+                box=el.box,
+                source="som",
+            )
+            for el in elements.values()
+        ],
+        limit=24,
+    )
+
     return SomResult(
         annotated_png_base64=base64.b64encode(buf.getvalue()).decode("ascii"),
         elements=elements,
@@ -241,6 +259,7 @@ def annotate_screenshot(png_bytes: bytes) -> SomResult:
         height=height,
         used_opencv=used_opencv,
         used_accessibility=used_accessibility,
+        manifest=manifest,
     )
 
 

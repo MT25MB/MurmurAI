@@ -634,6 +634,10 @@ class VisionAgent:
             try:
                 self._execute(action, coords, drag_to, text)
                 record.result = "executed"
+                # Verify the action actually changed the UI. A static screen
+                # after a click/shortcut feeds an alternative-path hint next step.
+                if action not in {"WAIT", "FINISH", "FAIL", "DONE"}:
+                    self._verify_post_action(png_bytes, action)
             except Exception as exc:
                 # PyAutoGUI FailSafeException (mouse in a corner) aborts everything.
                 if "failsafe" in type(exc).__name__.lower() or "fail-safe" in str(exc).lower():
@@ -663,6 +667,25 @@ class VisionAgent:
             time.sleep(STEP_SETTLE_S)
 
         return f"Reached max steps ({steps}) without FINISH. See {LOGS_DIR} for replay."
+
+    def _verify_post_action(self, before_png: bytes, action: str) -> None:
+        """Compare the screen after an action; nudge the next step if unchanged."""
+        from agent.screen_diff import verify_action
+
+        try:
+            time.sleep(STEP_SETTLE_S)
+            after_png, _, _ = self.controller.capture()
+            result = verify_action(action.lower(), before_png, after_png)
+            record = {"action": action, **{k: (v.value if hasattr(v, "value") else v) for k, v in result.items()}}
+            logger.info("Post-action verification: %s", record)
+            if result["verdict"].value == "no_change" and not result["satisfied"]:
+                self._recovery_attempts += 1
+                self._recovery_hint = (
+                    f"RECOVERY: the last {action} did not change the screen. "
+                    "Try a keyboard shortcut, the app menu, or a different control."
+                )
+        except Exception:  # pragma: no cover - verification must not break the loop
+            logger.debug("Post-action verification failed", exc_info=True)
 
     def _recover(self, subgoal_idx: int, status, active) -> str:
         """Recovery policy: try an alternative path, then ask the user verbally."""
@@ -704,8 +727,9 @@ class VisionAgent:
         history_summary = format_history(self.history)
         elements_desc = ""
         if element_map:
+            # Keep geometry in the side map; the prompt only carries IDs.
             elements_desc = "Marked boxes: " + ", ".join(
-                f"[{eid}] at ({int(x)},{int(y)})" for eid, (x, y) in element_map.items()
+                f"[{eid}]" for eid in element_map
             )
         system = SYSTEM_PROMPT + "\n" + elements_desc
         system += a11y_context(width, height)
