@@ -119,6 +119,7 @@ class ServerConfig:
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     allowlist: set[str] = field(default_factory=set)
+    tool_modes: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
 
     @classmethod
@@ -133,12 +134,20 @@ class ServerConfig:
         allowlist = raw.get("allowlist") or []
         if not isinstance(allowlist, list):
             raise McpError(f"MCP server '{name}' has an invalid allowlist")
+        raw_modes = raw.get("tool_modes") or {}
+        if not isinstance(raw_modes, dict):
+            raise McpError(f"MCP server '{name}' has invalid tool_modes")
+        modes = {
+            str(k): str(v) for k, v in raw_modes.items()
+            if str(v) in {"always", "ask", "off"}
+        }
         return cls(
             name=name,
             command=command,
             args=[str(a) for a in args],
             env={str(k): str(v) for k, v in env.items()},
             allowlist={str(a) for a in allowlist},
+            tool_modes=modes,
             enabled=bool(raw.get("enabled", True)),
         )
 
@@ -151,6 +160,7 @@ class McpTool:
     description: str
     schema: dict[str, Any]
     risk: str = "low"
+    mode: str = "security"  # security | always | ask | off
 
 
 def tool_risk(name: str, description: str = "") -> str:
@@ -399,6 +409,7 @@ class McpManager:
                         description=str(raw.get("description", "")),
                         schema=schema,
                         risk=risk,
+                        mode=config.tool_modes.get(original, "security"),
                     )
                 self._clients[name] = client
                 self._last_used[name] = time.monotonic()
@@ -442,7 +453,11 @@ class McpManager:
         if tool is None:
             self._audit(name, "unknown", arguments)
             return f"Unknown MCP tool: {name}"
-        if tool.risk == "high":
+        if tool.mode == "off":
+            self._audit(name, "off", arguments)
+            return f"{name} is switched off in plugin settings."
+        needs_confirmation = tool.mode == "ask" or (tool.mode != "always" and tool.risk == "high")
+        if needs_confirmation:
             description = (
                 f"Plugin tool {name} from {tool.server} can change files, contact "
                 "the network, or affect the system. Let it run?"
