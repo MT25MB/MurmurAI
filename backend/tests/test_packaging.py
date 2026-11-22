@@ -63,15 +63,34 @@ def test_token_map_generates_url_and_hash_tokens(assets):
 
 
 def test_sync_manifests_replaces_all_placeholders(assets, tmp_path):
+    # Self-contained templates with placeholders; repo templates may already be
+    # synced by a release, which would leave nothing for this test to replace.
     target = tmp_path / "packaging"
-    shutil.copytree(PACKAGING, target)
+    templates = {
+        "winget/MurmurAI.yaml": (
+            'PackageVersion: "{{VERSION}}"\nInstallerUrl: "{{MSI_URL}}"\n'
+            'InstallerSha256: "{{MSI_SHA256}}"\n'
+        ),
+        "homebrew/murmur-ai.rb": (
+            'version "{{VERSION}}"\nsha256 "{{DMG_SHA256}}"\nurl "{{DMG_URL}}"\n'
+        ),
+        "linux/murmur-ai.desktop": "Version={{VERSION}}\n",
+        "linux/com.murmurai.MurmurAI.metainfo.xml": (
+            '<release version="{{VERSION}}" date="{{DATE}}"/>\n'
+        ),
+    }
+    for relative, content in templates.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
     artifacts = collect_artifacts(assets, "1.2.3")
     changed = sync_manifests(target, "1.2.3", artifacts, "2026-11-21")
     assert len(changed) == 4
     for path in target.rglob("*"):
         if path.is_file():
             assert "{{" not in path.read_text(encoding="utf-8"), path
-    assert "PackageVersion: \"1.2.3\"" in (target / "winget" / "MurmurAI.yaml").read_text(encoding="utf-8")
+    assert 'PackageVersion: "1.2.3"' in (target / "winget" / "MurmurAI.yaml").read_text(encoding="utf-8")
 
 
 def test_write_sha256sums(assets, tmp_path):
