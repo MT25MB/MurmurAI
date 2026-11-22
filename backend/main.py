@@ -642,6 +642,13 @@ _NO_RE = _re.compile(
 )
 
 
+def _echo_is_active() -> bool:
+    """True while our own TTS or loopback audio could be heard as speech."""
+    from audio.echo_guard import echo_is_active
+
+    return echo_is_active()
+
+
 def _try_verbal_confirmation(text: str) -> Optional[bool]:
     """If a confirmation is pending and the text says yes/no, resolve it.
 
@@ -656,6 +663,10 @@ def _try_verbal_confirmation(text: str) -> Optional[bool]:
         abort_controller.abort("user said stop")
         if pending:
             tool_bus.resolve_confirmation(pending[-1], False)
+        return None
+
+    # A "yes" heard from our own speaker (or a call's echo) is never consent.
+    if _echo_is_active():
         return None
 
     # If we're waiting for stuck-guidance, any spoken text is the answer.
