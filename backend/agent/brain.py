@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from tools.os_tools import OS_TOOLS, dispatch_tool
+from tools.os_tools import OS_TOOLS, UNDO_TOOLS, dispatch_tool
 from tools.installer_tool import INSTALL_TOOLS
 from tools.browser_tool import BROWSER_TOOLS
 from tools.window_tools import WINDOW_TOOLS
@@ -80,7 +80,7 @@ ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
     + CONTEXT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
     + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
-    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + STOP_TOOL
+    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + UNDO_TOOLS + STOP_TOOL
 )
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
@@ -151,6 +151,7 @@ Available local tools:
 - list_tool_recipes(): list enabled local look-up tools; run_tool_recipe(recipe_id, text) runs one.
 - remember_fact(text): remember a non-private fact. Refuses secrets, emails, card and phone numbers.
 - list_memories(): speak everything remembered; forget_memory(id) removes one, undo_forget() restores it.
+- undo_last_action(): reverse the last file move or send Ctrl/Cmd+Z to the active app.
 - stop_automation(reason): immediately stop any running GUI/vision automation.
   Use it whenever the user wants to stop, abort, or cancel an ongoing task.
 
@@ -192,6 +193,38 @@ _ACTION_CLAIM_RE = re.compile(
     r"stopped)\b|\b(?:done|finished)\s*[.!]?$",
     re.IGNORECASE,
 )
+
+
+def clarify_low_confidence(
+    text: str,
+    asr_confidence: str = "high",
+    controls: list[str] | None = None,
+) -> str | None:
+    """Return a short clarifying question instead of acting on an unsure turn."""
+    import difflib
+
+    names = [str(c) for c in (controls or []) if str(c).strip()][:20]
+    lowered = (text or "").strip().lower()
+    if asr_confidence == "low":
+        tokens = [t for t in re.findall(r"[A-Za-z0-9]+", lowered) if len(t) >= 3]
+
+        def matches_control(name: str) -> bool:
+            label = name.lower()
+            return bool(lowered in label or any(token in label for token in tokens))
+
+        matches = [name for name in names if matches_control(name)]
+        if len(matches) >= 2:
+            return f"Did you mean {matches[0]}, or {matches[1]}?"
+        if matches:
+            return f"Did you mean {matches[0]}?"
+        return "I didn't catch that. Could you say it again?"
+    close = [
+        name for name in names
+        if difflib.SequenceMatcher(None, lowered, name.lower()).ratio() >= 0.65
+    ]
+    if len(close) >= 2:
+        return f"Did you mean {close[0]}, or {close[1]}?"
+    return None
 
 
 def guard_unverified_claim(reply: str, executed_tools: list[str]) -> str:
@@ -324,6 +357,7 @@ class Brain:
         user_text: str,
         conversation_history: list[dict[str, str]] | None = None,
         screen_base64: str | None = None,
+        asr_confidence: str = "high",
     ) -> str:
         """One full ReAct turn. Returns the final spoken response text."""
         # Hard safety: an explicit abort phrase halts automation before any
@@ -333,6 +367,14 @@ class Brain:
             return self._clean_for_voice(
                 "Stopping automation. Everything is halted. What would you like me to do instead?"
             )
+
+        if asr_confidence == "low":
+            from tools.a11y_tree import capture_tree
+
+            controls = [element.name for element in capture_tree().elements]
+            question = clarify_low_confidence(user_text, asr_confidence, controls)
+            if question:
+                return question
 
         history = conversation_history or []
         messages: list[dict[str, str]] = [

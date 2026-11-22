@@ -30,6 +30,8 @@ except Exception:  # pragma: no cover - optional dep may be installed but unusab
     WhisperModel = None  # type: ignore
 
 from audio.echo_guard import ECHO_TAIL_S, echo_is_active
+from audio.asr_confidence import confidence_from_segments
+from audio.hotwords import build_hint
 
 logger = logging.getLogger("murmur_ai.audio.listener")
 
@@ -85,6 +87,8 @@ class VoiceListener:
         self._silence_frames = 0
         self._speaking = False
         self._utterance_start = 0.0
+        self.last_confidence = "high"
+        self.last_confidence_score = 1.0
 
     # ---- model (lazy) ----
 
@@ -245,14 +249,26 @@ class VoiceListener:
         # Convert int16 bytes to float32 numpy for faster-whisper.
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         try:
-            segments, _info = model.transcribe(
-                audio,
-                language="en",
-                beam_size=1,
-                vad_filter=False,  # we already did VAD
-            )
-            text = " ".join(seg.text.strip() for seg in segments).strip()
-            logger.info("Transcribed: %r", text)
+            hint = build_hint()
+            options = {
+                "language": "en",
+                "beam_size": 1,
+                "vad_filter": False,  # we already did VAD
+            }
+            if hint:
+                options["initial_prompt"] = hint
+                options["hotwords"] = hint
+            try:
+                segments, _info = model.transcribe(audio, **options)
+            except TypeError:
+                # Older faster-whisper versions do not accept hotwords.
+                options.pop("hotwords", None)
+                segments, _info = model.transcribe(audio, **options)
+
+            rows = list(segments)
+            text = " ".join(str(seg.text).strip() for seg in rows).strip()
+            self.last_confidence, self.last_confidence_score = confidence_from_segments(rows)
+            logger.info("Transcribed: %r (confidence %s)", text, self.last_confidence)
             return text
         except Exception:  # pragma: no cover - model dependent
             logger.exception("Transcription failed")

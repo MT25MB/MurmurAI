@@ -1077,9 +1077,10 @@ async def start_listening(session: SessionState, send) -> None:
 
     def on_utterance(text: str) -> None:
         session.add_turn("user", text)
+        confidence = getattr(app_state.listener, "last_confidence", "high")
         loop = app_state.loop or asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(
-            _on_utterance_async(session, send, text), loop
+            _on_utterance_async(session, send, text, confidence), loop
         )
 
     app_state.listener.on_utterance = on_utterance
@@ -1088,7 +1089,9 @@ async def start_listening(session: SessionState, send) -> None:
     await _set_state(send, session, "LISTENING")
 
 
-async def _on_utterance_async(session, send, text: str) -> None:
+async def _on_utterance_async(
+    session, send, text: str, asr_confidence: str = "high"
+) -> None:
     # Sleep/wake commands are handled locally, never sent to the model.
     if text_is_sleep_phrase(text):
         await enter_sleep(session, send)
@@ -1124,6 +1127,7 @@ async def _on_utterance_async(session, send, text: str) -> None:
             app_state.brain.think_and_act,
             user_text=_augment_with_context(text, session),
             conversation_history=session.turns,
+            asr_confidence=asr_confidence,
         )
     except Exception:
         logger.exception("Brain turn failed")

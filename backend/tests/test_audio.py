@@ -109,6 +109,53 @@ def test_transcribe_joins_segments_and_strips(monkeypatch, fake_sounddevice):
     assert v._transcribe((np.zeros(16000) * 32767).astype(np.int16).tobytes()) == "open blender"
 
 
+def test_asr_confidence_from_logprob_and_no_speech():
+    from audio.asr_confidence import confidence_from_segments
+
+    high = confidence_from_segments([
+        {"text": "hello", "avg_logprob": -0.1, "no_speech_prob": 0.01},
+    ])
+    low = confidence_from_segments([
+        {"text": "hello", "avg_logprob": -1.2, "no_speech_prob": 0.8},
+    ])
+    assert high[0] == "high" and low[0] == "low"
+
+
+def test_hotwords_include_window_title_and_pronunciations(monkeypatch):
+    from audio import hotwords
+
+    monkeypatch.setattr(hotwords, "_active_window_title", lambda: "Blender - scene.blend")
+    monkeypatch.setattr(hotwords, "_skill_keywords", lambda: ["viewport", "timeline"])
+    monkeypatch.setattr(
+        hotwords, "_custom_names", lambda: ["GUI", "DaVinci"]
+    )
+    hint = hotwords.build_hint()
+    assert "Blender" in hint
+    assert "viewport" in hint
+    assert "GUI" in hint
+
+
+def test_transcribe_passes_prompt_hint(monkeypatch, fake_sounddevice):
+    seen = {}
+
+    class Seg:
+        text = " open blender "
+        avg_logprob = -0.1
+        no_speech_prob = 0.01
+
+    class Model:
+        def transcribe(self, audio, **kwargs):
+            seen.update(kwargs)
+            return [Seg()], {}
+
+    v = _make_listener(monkeypatch, fake_sounddevice)()
+    v._model = Model()
+    result = v._transcribe((np.zeros(16000) * 32767).astype(np.int16).tobytes())
+    assert result == "open blender"
+    assert "initial_prompt" in seen
+    assert v.last_confidence == "high"
+
+
 def test_transcribe_failure_returns_empty(monkeypatch, fake_sounddevice):
     class FakeVad:
         def __init__(self, mode): pass

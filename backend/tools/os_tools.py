@@ -27,6 +27,7 @@ except Exception:  # pragma: no cover - optional dep may be installed but unusab
 import base64
 
 from .safety import SafetyGate
+from . import undo_journal as journal
 
 logger = logging.getLogger("murmur_ai.tools.os_tools")
 
@@ -141,6 +142,43 @@ OS_TOOLS = [
     },
 ]
 
+UNDO_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "undo_last_action",
+            "description": (
+                "Undo the last action: reverse a recent file move when reversible, "
+                "otherwise send the active app's undo shortcut."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    }
+]
+
+
+def _undo_last_file_move() -> bool:
+    return journal.undo_last()
+
+
+def undo_last_action() -> str:
+    """Reverse the last reversible move, or send the platform undo shortcut."""
+    if _undo_last_file_move():
+        return "Reverted the last file move."
+    try:
+        if platform.system() == "Darwin":
+            pyautogui.hotkey("command", "z")
+        else:
+            pyautogui.hotkey("ctrl", "z")
+        return "Sent undo to the active app."
+    except Exception:  # pragma: no cover - platform dependent
+        logger.debug("Undo shortcut failed", exc_info=True)
+        return "I couldn't send undo to the active app."
+
 
 def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     """Call a registered OS tool by name with the given arguments."""
@@ -164,6 +202,8 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     memory_result = handle_memory_tool(name, arguments)
     if memory_result is not None:
         return memory_result
+    if name == "undo_last_action":
+        return undo_last_action()
     if name == "open_application":
         return open_application(arguments.get("app_name", ""))
     if name == "mouse_and_keyboard":

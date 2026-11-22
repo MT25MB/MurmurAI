@@ -72,6 +72,62 @@ def test_react_confirmation_required_surfaces_without_execution(monkeypatch):
     assert "confirmation required" in reply.lower()
 
 
+def test_low_confidence_asks_for_confirmation():
+    from agent.brain import clarify_low_confidence
+
+    question = clarify_low_confidence("open blender", asr_confidence="low",
+                                      controls=["Blender", "Notepad"])
+    assert question is not None
+    assert "Did you mean" in question
+    assert "Blender" in question
+
+
+def test_high_confidence_does_not_clarify():
+    from agent.brain import clarify_low_confidence
+
+    assert clarify_low_confidence("open blender", asr_confidence="high",
+                                  controls=["Blender"]) is None
+
+
+def test_close_control_names_get_disambiguated():
+    from agent.brain import clarify_low_confidence
+
+    question = clarify_low_confidence("save", asr_confidence="high",
+                                      controls=["Save", "Save As", "Close"])
+    assert question is not None
+    assert "Save" in question and "Save As" in question
+
+
+def test_undo_last_action_uses_shortcut(monkeypatch):
+    import tools.os_tools as os_tools
+
+    seen = []
+    monkeypatch.setattr(os_tools, "_undo_last_file_move", lambda: False)
+    monkeypatch.setattr("pyautogui.hotkey", lambda *keys: seen.append(keys), raising=False)
+
+    result = os_tools.dispatch_tool("undo_last_action", {}, None)
+    assert "undo" in result.lower()
+    assert seen and ("ctrl", "z") in seen or ("command", "z") in seen
+
+
+def test_undo_reverses_last_file_move(tmp_path, monkeypatch):
+    import tools.os_tools as os_tools
+    import tools.undo_journal as journal
+
+    src = tmp_path / "a.txt"
+    dst = tmp_path / "b.txt"
+    src.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(journal, "JOURNAL_PATH", tmp_path / "journal.json")
+    journal.record_move(str(src), str(dst))
+    src.unlink()  # the move removed the original
+    dst.write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(os_tools.journal, "JOURNAL_PATH", tmp_path / "journal.json")
+    result = os_tools.dispatch_tool("undo_last_action", {}, None)
+    assert "reverted" in result.lower() or "moved back" in result.lower()
+    assert src.exists() and not dst.exists()
+
+
 def test_clean_for_voice_strips_markdown():
     text = "**Bold** `code`\n- item one\n- item two\n```python\nprint(1)\n```"
     cleaned = Brain._clean_for_voice(text)
