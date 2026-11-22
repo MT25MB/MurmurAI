@@ -144,6 +144,11 @@ OS_TOOLS = [
 
 def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     """Call a registered OS tool by name with the given arguments."""
+    from .memory_tools import handle_memory_tool
+
+    memory_result = handle_memory_tool(name, arguments)
+    if memory_result is not None:
+        return memory_result
     if name == "open_application":
         return open_application(arguments.get("app_name", ""))
     if name == "mouse_and_keyboard":
