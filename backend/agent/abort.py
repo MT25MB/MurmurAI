@@ -58,6 +58,15 @@ class AbortController:
     def is_aborted(self) -> bool:
         return self._event.is_set()
 
+    def wait(self, timeout: float | None = None) -> bool:
+        """Block until abort is signalled or timeout expires.
+
+        Returns True if aborted, False on timeout. Workers waiting on a held
+        action use this so a global cancel releases them immediately and their
+        ``finally`` cleanup always runs.
+        """
+        return self._event.wait(timeout)
+
     @property
     def reason(self) -> str:
         return self._reason
