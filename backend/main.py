@@ -532,6 +532,33 @@ async def _handle_permission_status(permissions: Optional[dict], send) -> None:
     await send(ServerMessage(type="info", text="Permission check received."))
 
 
+async def _try_checkpoint_phrase(session, send, text: str) -> bool:
+    """Answer 'what step did we stop on?' and 'resume my last task'."""
+    value = (text or "").lower()
+    if "resume" not in value and "stop on" not in value and "left off" not in value:
+        return False
+    from agent.checkpoint import describe, load_last, resume_subgoals
+
+    checkpoint = load_last()
+    if checkpoint is None:
+        await _speak_and_return(session, send, "I don't have a paused task to resume.")
+        return True
+    if "what step" in value or "stop on" in value or "left off" in value:
+        await _speak_and_return(session, send, describe(checkpoint))
+        return True
+    remaining = resume_subgoals(checkpoint)
+    await _speak_and_return(session, send, f"Resuming: {', '.join(remaining)}.")
+    try:
+        from agent.vision_agent import VisionAgent
+
+        await asyncio.to_thread(
+            VisionAgent().run_visual_task, "; then ".join(remaining)
+        )
+    except Exception:  # pragma: no cover - platform dependent
+        logger.exception("Checkpoint resume failed")
+    return True
+
+
 async def _try_monitor_switch(session, send, text: str) -> bool:
     """Handle 'look at my second monitor' locally, without a model call."""
     from agent.vision_agent import parse_monitor_phrase, set_active_monitor
@@ -576,6 +603,8 @@ async def handle_text_input(
     if text_is_wake_phrase(text) and app_state.listening_mode == "sleep":
         await wake_up(session, send)
         await start_listening(session, send)
+        return
+    if await _try_checkpoint_phrase(session, send, text):
         return
     if await _try_monitor_switch(session, send, text):
         return
@@ -1102,6 +1131,8 @@ async def _on_utterance_async(
             await start_listening(session, send)
             return
         # In active mode a wake phrase is just a normal utterance; fall through.
+    if await _try_checkpoint_phrase(session, send, text):
+        return
     if await _try_monitor_switch(session, send, text):
         return
     if await _try_update_check_phrase(session, send, text):

@@ -237,6 +237,15 @@ This file is the source of truth for every coding agent and human contributor.
   built-ins for Blender, DaVinci Resolve and VS Code. Tauri
   `check_os_permissions` reports mic/screen/accessibility status through `/health`
   and speaks plain-language recovery steps.
+- ASR bands (`audio/asr_confidence.py`) mark turns high/medium/low from whisper
+  log-probs and no-speech probability; low confidence or two closely matching
+  control names trigger a short spoken clarification instead of a guess. Bounded
+  hotword hints come from window titles, skill terms and custom pronunciations.
+  "Undo that" reverses a recorded file move or sends Ctrl/Cmd+Z.
+- Multi-step tasks save verified-subgoal checkpoints under
+  `~/.murmur-ai/checkpoints/`; "What step did we stop on?" and "Resume my last
+  task" work from the last checkpoint. Local vision supports qwen2.5-vl (7b/3b)
+  and pixel-coordinate families qwen3.5:9b / gemma4:12b, normalized by model.
 
 ## 2. Repository layout
 
@@ -273,7 +282,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 554 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 574 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -294,6 +303,9 @@ Murmur AI/
    ├─ audio/{streaming.py,speech_queue.py}  # sentence chunking + priority speech
    ├─ agent/{som_manifest.py,screen_diff.py}  # compact SoM + post-action verify
    ├─ skills/                 # declarative app workflow packs (non-executable)
+   ├─ agent/checkpoint.py     # persisted verified-subgoal progress + resume
+   ├─ audio/{asr_confidence.py,hotwords.py}  # confidence gating + dynamic ASR hints
+   ├─ tools/undo_journal.py   # reversible file-move journal for voice undo
    ├─ system/uninstall.py     # uninstall data choice allowlist and cleanup runner
    ├─ setup.py               # first-run checks + model/weight download endpoints
    ├─ murmur-backend.spec   # PyInstaller onefile sidecar spec

@@ -40,6 +40,9 @@ REQUIRED_MODELS: list[str] = ["qwen2.5:7b", "qwen2.5-vl:7b"]
 MODEL_LABELS: dict[str, str] = {
     "qwen2.5:7b": "Fast voice & tool chat model",
     "qwen2.5-vl:7b": "Screen-vision model",
+    "qwen2.5-vl:3b": "Light screen-vision model",
+    "qwen3.5:9b": "Modern vision model (pixel coordinates)",
+    "gemma4:12b": "Modern vision model (pixel coordinates)",
 }
 
 # Local model cache owned by Murmur AI.

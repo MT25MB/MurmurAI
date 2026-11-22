@@ -588,6 +588,14 @@ class VisionAgent:
                 self.plan, self._recovery_hint,
             )
 
+            # Different local VLM families emit normalized or pixel coordinates.
+            from system.profiler import normalize_vlm_coords
+
+            if coords:
+                coords = list(normalize_vlm_coords(coords, width, height, self.model))
+            if drag_to:
+                drag_to = list(normalize_vlm_coords(drag_to, width, height, self.model))
+
             # Resolve element_id to precise coordinates if the VLM chose a box.
             if action in ("CLICK", "DOUBLE_CLICK") and element_id is not None:
                 resolved = element_map.get(element_id)
@@ -708,6 +716,14 @@ class VisionAgent:
                 if active:
                     self._speak(f"Done: {active.text}")
                     logger.info("Subgoal complete: %s", active.text)
+                from agent.checkpoint import record_progress
+
+                record_progress(
+                    goal,
+                    [s.text for s in self.plan.subgoals],
+                    [s.text for s in self.plan.subgoals if s.done],
+                    self.plan.active_index,
+                )
                 if self.plan.all_done:
                     self._speak("All steps are done.")
                     return f"Task finished after {step} step(s)."

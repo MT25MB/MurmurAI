@@ -48,6 +48,36 @@ ENV_WHISPER_DEVICE = "WHISPER_DEVICE"
 ENV_MAX_SCREEN_DIM = "MURMUR_MAX_SCREEN_DIM"
 ENV_KEEP_ALIVE = "OLLAMA_KEEP_ALIVE"
 
+# Supported local vision checkpoints. Qwen2.5-VL emits 0-1000 normalized
+# boxes; newer families emit pixel coordinates (or 0-1 fractions).
+VISION_MODELS = frozenset({
+    "qwen3.5:9b",
+    "gemma4:12b",
+    "qwen2.5-vl:7b",
+    "qwen2.5-vl:3b",
+})
+
+
+def coordinate_mode(model: str | None) -> str:
+    """Return the coordinate convention used by a vision model family."""
+    name = (model or "").lower()
+    if name.startswith(("qwen3.5", "gemma4")):
+        return "pixels"
+    return "normalized_1000"
+
+
+def normalize_vlm_coords(raw, width: int, height: int, model: str | None = None) -> tuple[int, int]:
+    """Convert a model's coordinate pair to normalized 0-1000 values."""
+    try:
+        x, y = float(raw[0]), float(raw[1])
+    except (TypeError, ValueError, IndexError):
+        return 500, 500
+    if coordinate_mode(model) == "pixels":
+        # Values <= 1 are treated as fractions of the image.
+        x = x * 1000 if 0 <= x <= 1 else x / max(1, width) * 1000
+        y = y * 1000 if 0 <= y <= 1 else y / max(1, height) * 1000
+    return int(max(0, min(1000, x))), int(max(0, min(1000, y)))
+
 # Context window tiers, chosen from RAM/VRAM on startup. A window that overflows
 # grows one tier and retries once; an explicit user value disables auto-sizing.
 CONTEXT_TIERS = (4_096, 8_192, 16_384, 32_768)
