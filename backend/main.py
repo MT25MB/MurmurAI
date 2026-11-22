@@ -641,6 +641,9 @@ def _try_verbal_confirmation(text: str) -> Optional[bool]:
     denied = bool(_NO_RE.search(text))
     approved = bool(_YES_RE.search(text))
     if not (denied or approved):
+        # A held approval belongs to one exact action. Anything else the user
+        # says cancels it instead of leaving a stale "yes" target alive.
+        tool_bus.drop_pending("unrelated utterance")
         return None
     decision = False if denied else approved
     # Resolve the most recent pending request.

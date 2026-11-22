@@ -40,6 +40,7 @@ class ToolEventBus:
         self._speak_fn: Optional[Callable[[str], None]] = None
         self._pending: dict[str, tuple[threading.Event, dict]] = {}
         self._guidance: dict[str, tuple[threading.Event, dict]] = {}
+        self._resolved: set[str] = set()
         self._lock = threading.Lock()
 
     # ---- configuration (called by main.py at startup) ----
@@ -91,7 +92,16 @@ class ToolEventBus:
 
         Returns True only on an explicit approval. Denials and timeouts return
         False (treated as 'no', per AGENTS.md).
+
+        Only one approval may be held at a time: a second request is refused
+        immediately rather than leaving two live "yes" targets. This mirrors
+        Capri's single held action and keeps spoken approval unambiguous.
         """
+        with self._lock:
+            if self._pending:
+                logger.info("Confirmation refused: another approval is already held")
+                return False
+            self._resolved.clear()
         request_id = uuid.uuid4().hex
         done = threading.Event()
         result: dict[str, bool] = {"approved": False}
@@ -133,17 +143,39 @@ class ToolEventBus:
     def resolve_confirmation(self, request_id: str, approved: bool) -> bool:
         """Resolve a pending confirmation from the async WS handler.
 
-        Returns True if the request_id was found and resolved.
+        Returns True if the request_id was found and resolved. Each approval is
+        single-use: replaying a yes for an already-resolved request is refused.
         """
         with self._lock:
+            if request_id in self._resolved:
+                return False
             entry = self._pending.get(request_id)
-        if entry is None:
-            return False
+            if entry is None:
+                return False
+            self._resolved.add(request_id)
         done, result = entry
         result["approved"] = bool(approved)
         done.set()
         logger.info("Confirmation %s resolved: %s", request_id, approved)
         return True
+
+    def drop_pending(self, reason: str) -> int:
+        """Deny and discard every held approval (Capri's Security.Drop).
+
+        Called when the user says anything that is not a yes or a no: the held
+        action is cancelled rather than left waiting for a later "yes".
+        Returns the number of approvals dropped.
+        """
+        with self._lock:
+            held = list(self._pending.items())
+            self._pending.clear()
+            for request_id in held:
+                self._resolved.add(request_id[0])
+        for request_id, (done, result) in held:
+            result["approved"] = False
+            done.set()
+            logger.info("Confirmation %s dropped: %s", request_id, reason)
+        return len(held)
 
     def has_pending(self, request_id: str) -> bool:
         with self._lock:
