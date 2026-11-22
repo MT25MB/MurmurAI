@@ -28,8 +28,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from agent.prompt_guard import strip_override_lines
-
 logger = logging.getLogger("murmur_ai.tools.mcp_manager")
 
 CONFIG_PATH = Path.home() / ".murmur-ai" / "mcp_servers.json"
@@ -527,6 +525,8 @@ class McpManager:
 
 def _to_function_schema(raw: dict[str, Any], namespaced: str) -> dict[str, Any]:
     """Convert an MCP tool definition to the brain's OpenAI-style schema."""
+    from agent.prompt_guard import strip_override_lines  # lazy: avoids agent<->tools cycle
+
     input_schema = raw.get("inputSchema") or {}
     if not isinstance(input_schema, dict) or input_schema.get("type") != "object":
         input_schema = {"type": "object"}
