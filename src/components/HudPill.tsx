@@ -51,6 +51,8 @@ export default function HudPill() {
   const [stopped, setStopped] = useState("");
   const [automating, setAutomating] = useState(false);
   const [mode, setMode] = useState<"active" | "sleep">("active");
+  const [typing, setTyping] = useState(false);
+  const [typeInput, setTypeInput] = useState("");
   const [update, setUpdate] = useState<{
     request_id: string;
     version: string;
@@ -59,6 +61,32 @@ export default function HudPill() {
   } | null>(null);
   const amplitudeRef = useRef(0);
   const approveRef = useRef<HTMLButtonElement>(null);
+  const typeInputRef = useRef<HTMLInputElement>(null);
+
+  // The ready-state HUD window is only 400x84, so the typed-command row needs a
+  // temporary height increase. Permissions are already granted for setSize.
+  useEffect(() => {
+    let disposed = false;
+    (async () => {
+      try {
+        const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
+          import("@tauri-apps/api/window"),
+          import("@tauri-apps/api/dpi"),
+        ]);
+        if (disposed) return;
+        await getCurrentWindow().setSize(new LogicalSize(400, typing ? 150 : 84));
+      } catch {
+        // Browser dev mode: no native window to resize.
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [typing]);
+
+  useEffect(() => {
+    if (typing) typeInputRef.current?.focus();
+  }, [typing]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -174,7 +202,10 @@ export default function HudPill() {
         }
         return;
       }
-      if (e.key.toLowerCase() === "m") {
+      if (e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        setTyping(true);
+      } else if (e.key.toLowerCase() === "m") {
         e.preventDefault();
         setMuted((m) => !m);
       } else if (e.key.toLowerCase() === "q") {
@@ -207,6 +238,14 @@ export default function HudPill() {
       unlisten?.();
     };
   }, [send]);
+
+  const submitTyped = useCallback(() => {
+    const text = typeInput.trim();
+    if (!text) return;
+    send({ type: "text_input", text });
+    setTypeInput("");
+    setTranscript(text);
+  }, [typeInput, send]);
 
   const submitGuidance = useCallback(() => {
     if (!guidance || !guidanceInput.trim()) return;
@@ -275,6 +314,18 @@ export default function HudPill() {
         <button
           type="button"
           className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          onClick={() => setTyping((v) => !v)}
+          aria-pressed={typing}
+          aria-label="Type a command (T)"
+          title="Type instead of speaking (T)"
+        >
+          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+            <path d="M4 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm1 4v2h10V7H5Zm0 4v2h6v-2H5Z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={() => changeMode(mode === "active" ? "sleep" : "active")}
           aria-pressed={mode === "sleep"}
           aria-label={mode === "sleep" ? "Wake Murmur (Ctrl+Shift+Space)" : "Put Murmur to sleep (Ctrl+Shift+Space)"}
@@ -311,6 +362,39 @@ export default function HudPill() {
       <div className="my-2.5 flex w-full items-end justify-center" aria-hidden="true">
         <Waveform amplitude={amplitudeRef.current} active={status === "LISTENING" || status === "SPEAKING"} />
       </div>
+
+      {typing && (
+        <div className="app-region-no-drag mt-2 flex gap-1.5">
+          <label htmlFor="typed-command" className="sr-only">Command to send</label>
+          <input
+            id="typed-command"
+            ref={typeInputRef}
+            type="text"
+            value={typeInput}
+            onChange={(e) => setTypeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitTyped();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setTyping(false);
+              }
+            }}
+            placeholder="Type a command, then press Enter…"
+            className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-2 py-1.5 text-[11px] text-ink placeholder:text-muted"
+          />
+          <button
+            type="button"
+            onClick={submitTyped}
+            disabled={!typeInput.trim()}
+            aria-label="Send typed command"
+            className="shrink-0 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white disabled:opacity-40"
+          >
+            Send
+          </button>
+        </div>
+      )}
 
       {progress && (
         <div className="app-region-no-drag mt-2 rounded-lg border border-blue/30 bg-blue-deep/20 p-2.5">

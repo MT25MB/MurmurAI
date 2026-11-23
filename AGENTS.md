@@ -231,6 +231,9 @@ This file is the source of truth for every coding agent and human contributor.
   backoff (showing progress) instead of failing on one early fetch, and Retry
   polls too. `/setup/status` shares a cached, 0.8s Ollama tags probe (failures
   cached for 2s) so it returns in <1s instead of ~8s.
+- The HUD has an optional typed-command mode (keyboard button or `T`): it
+  temporarily resizes the 400x84 window, sends the existing `text_input` WS
+  message, and ignores global M/Q shortcuts while the field is focused.
 - Set-of-Marks uses a compact token-efficient manifest (`agent/som_manifest.py`)
   with one shared ID space, contained-duplicate merging and geometry in a side
   map, so small 7B VLMs stay fast. Post-action verification
@@ -268,7 +271,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (44 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (48 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs

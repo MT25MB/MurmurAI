@@ -49,6 +49,37 @@ describe("HudPill", () => {
     expect(screen.getByRole("button", { name: /mute microphone/i })).toBeInTheDocument();
   });
 
+  it("reveals a typed-command field and sends text_input on Enter", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+
+    await user.click(screen.getByRole("button", { name: /type a command/i }));
+    const input = screen.getByRole("textbox", { name: /command to send/i });
+    await user.type(input, "open notepad{Enter}");
+
+    expect(JSON.parse(sockets[0].sent.at(-1))).toEqual({
+      type: "text_input",
+      text: "open notepad",
+    });
+  });
+
+  it("hides the typed-command field on Escape", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await user.click(screen.getByRole("button", { name: /type a command/i }));
+    const input = screen.getByRole("textbox", { name: /command to send/i });
+    await user.type(input, "{Escape}");
+    expect(screen.queryByRole("textbox", { name: /command to send/i })).toBeNull();
+  });
+
+  it("T shortcut opens the typed-command field", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await user.keyboard("t");
+    expect(screen.getByRole("textbox", { name: /command to send/i })).toBeInTheDocument();
+  });
+
   it("toggles mute state and announces it", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
