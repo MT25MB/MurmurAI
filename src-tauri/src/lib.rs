@@ -7,7 +7,19 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 use tauri_plugin_updater::UpdaterExt;
 use serde::Serialize;
 
+mod focus;
 mod permissions;
+
+/// Turn a command failure into a short, speakable message for the HUD.
+/// A blank or whitespace-only error still yields a useful announcement.
+fn command_error_message(command: &str, error: &str) -> String {
+    let detail = error.trim();
+    if detail.is_empty() {
+        format!("{command} is unavailable.")
+    } else {
+        format!("{command} failed: {detail}")
+    }
+}
 
 /// Result of a local update check. Serde names are camelCase for the HUD.
 #[derive(Debug, Clone, Serialize)]
@@ -36,7 +48,12 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> 
 
     let updater = match app.updater() {
         Ok(updater) => updater,
-        Err(error) => return Ok(unavailable(Some(error.to_string()))),
+        Err(error) => {
+            return Ok(unavailable(Some(command_error_message(
+                "Update check",
+                &error.to_string(),
+            ))))
+        }
     };
 
     match updater.check().await {
@@ -52,7 +69,10 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> 
             Ok(info)
         }
         Ok(None) => Ok(unavailable(None)),
-        Err(error) => Ok(unavailable(Some(error.to_string()))),
+        Err(error) => Ok(unavailable(Some(command_error_message(
+            "Update check",
+            &error.to_string(),
+        )))),
     }
 }
 
@@ -60,17 +80,19 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> 
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit("murmur://update-status", "Downloading the update…");
-    let updater = app.updater().map_err(|error| error.to_string())?;
+    let updater = app
+        .updater()
+        .map_err(|error| command_error_message("Update install", &error.to_string()))?;
     let update = updater
         .check()
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| command_error_message("Update check", &error.to_string()))?
         .ok_or_else(|| "No update is available".to_string())?;
 
     update
         .download_and_install(|_, _| {}, || {})
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| command_error_message("Update install", &error.to_string()))?;
     let _ = app.emit("murmur://update-status", "Update installed. Restarting…");
     // restart() diverges (the app process is replaced), so it is the tail.
     app.restart()
@@ -89,6 +111,7 @@ fn toggle_window(window: &WebviewWindow) {
         Ok(false) => {
             let _ = window.show();
             let _ = window.set_focus();
+            focus::announce_focus(window.app_handle(), "Murmur AI");
         }
         Err(err) => eprintln!("[Murmur AI] failed to read window visibility: {err}"),
     }
@@ -129,10 +152,6 @@ fn spawn_backend(app: &tauri::AppHandle) {
     }
 
     use tauri_plugin_shell::process::Command;
-
-    if !cfg!(debug_assertions) {
-        stop_stale_sidecar();
-    }
 
     // Build the command: in debug/dev builds always use the Python source
     // entrypoint; in release builds use the bundled PyInstaller sidecar.
@@ -248,8 +267,17 @@ pub fn run() {
                 }
             }
 
-            // Spawn the Python backend sidecar automatically on startup.
-            spawn_backend(app.handle());
+            // Spawn the Python backend sidecar automatically on startup. The
+            // stale-sidecar probe does process I/O, so run it on Tokio's
+            // blocking pool: setup returns immediately and the tray stays
+            // responsive while the backend starts.
+            let backend_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if !cfg!(debug_assertions) {
+                    let _ = tauri::async_runtime::spawn_blocking(stop_stale_sidecar).await;
+                }
+                spawn_backend(&backend_handle);
+            });
 
             let toggle = MenuItem::with_id(app, "toggle", "Show / Hide HUD", true, None::<&str>)?;
             let start = MenuItem::with_id(app, "start", "Start Listening", true, None::<&str>)?;
@@ -315,6 +343,7 @@ pub fn run() {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
+                            focus::announce_focus(tray.app_handle(), "Murmur AI");
                         }
                     }
                 })
@@ -364,19 +393,41 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|_window, event| {
-            if matches!(
-                event,
-                tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
-            ) {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
                 kill_backend();
             }
+            // Native alt-tab / tray return: let the webview restore DOM focus
+            // and re-announce status without stealing focus from other apps.
+            tauri::WindowEvent::Focused(true) => {
+                focus::announce_focus(window.app_handle(), "Murmur AI");
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             check_for_updates,
             install_update,
-            permissions::check_os_permissions
+            permissions::check_os_permissions,
+            focus::restore_focus
         ])
         .run(tauri::generate_context!())
         .expect("error while running Murmur AI");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_error_message;
+
+    #[test]
+    fn command_errors_are_speakable_and_never_empty() {
+        assert_eq!(
+            command_error_message("Update check", "network unreachable"),
+            "Update check failed: network unreachable"
+        );
+        assert_eq!(
+            command_error_message("Update check", "  \n "),
+            "Update check is unavailable."
+        );
+        assert_eq!(command_error_message("Update check", ""), "Update check is unavailable.");
+    }
 }

@@ -45,44 +45,61 @@ fn build(mic: PermissionState, screen: PermissionState, accessibility: Permissio
     PermissionReport { microphone: mic, screen, accessibility, recovery, summary }
 }
 
-#[cfg(windows)]
-fn consent(key: &str) -> PermissionState {
-    use std::process::Command;
-    let output = Command::new("reg")
-        .args(["query", key, "/v", "Value"])
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
-            if text.contains("denied") {
-                PermissionState::Denied
-            } else if text.contains("allow") {
-                PermissionState::Granted
-            } else {
-                PermissionState::Unknown
-            }
-        }
-        _ => PermissionState::Unknown,
+/// Map a registry probe to a state. Pure so every failure path is testable.
+pub(crate) fn state_from_reg_output(text: &str, succeeded: bool) -> PermissionState {
+    if !succeeded {
+        return PermissionState::Unknown;
+    }
+    let lowered = text.to_lowercase();
+    if lowered.contains("denied") {
+        PermissionState::Denied
+    } else if lowered.contains("allow") {
+        PermissionState::Granted
+    } else {
+        PermissionState::Unknown
     }
 }
 
 #[cfg(windows)]
-pub fn check_permissions() -> PermissionReport {
+fn probe_reg(key: &str) -> (bool, String) {
+    use std::process::Command;
+    match Command::new("reg").args(["query", key, "/v", "Value"]).output() {
+        Ok(out) if out.status.success() => {
+            (true, String::from_utf8_lossy(&out.stdout).into_owned())
+        }
+        // A failed or unreadable probe is "unknown", never an app error.
+        _ => (false, String::new()),
+    }
+}
+
+#[cfg(windows)]
+async fn consent(key: &str) -> PermissionState {
+    let key = key.to_string();
+    // `reg.exe` is blocking process I/O. Run it on Tokio's blocking pool so the
+    // command handler never stalls the UI thread, tray, or other commands.
+    let (succeeded, text) = tauri::async_runtime::spawn_blocking(move || probe_reg(&key))
+        .await
+        .unwrap_or((false, String::new()));
+    state_from_reg_output(&text, succeeded)
+}
+
+#[cfg(windows)]
+pub async fn check_permissions() -> PermissionReport {
     let base = r"HKCU\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore";
-    let mic = consent(&format!(r"{}\microphone", base));
+    let mic = consent(&format!(r"{}\microphone", base)).await;
     let screen = PermissionState::Unknown;
     let accessibility = PermissionState::Unknown;
     build(mic, screen, accessibility)
 }
 
 #[cfg(target_os = "macos")]
-pub fn check_permissions() -> PermissionReport {
+pub async fn check_permissions() -> PermissionReport {
     // TCC cannot be read without extra entitlements; report plainly.
     build(PermissionState::Unknown, PermissionState::Unknown, PermissionState::Unknown)
 }
 
 #[cfg(target_os = "linux")]
-pub fn check_permissions() -> PermissionReport {
+pub async fn check_permissions() -> PermissionReport {
     let mic = if std::env::var_os("MURMUR_NO_AUDIO").is_some() {
         PermissionState::NotNeeded
     } else {
@@ -92,13 +109,15 @@ pub fn check_permissions() -> PermissionReport {
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-pub fn check_permissions() -> PermissionReport {
+pub async fn check_permissions() -> PermissionReport {
     build(PermissionState::Unknown, PermissionState::Unknown, PermissionState::Unknown)
 }
 
+/// Read-only diagnostic probe. Never fails the IPC call: an unavailable probe is
+/// reported as `unknown` so the HUD can speak recovery steps instead of freezing.
 #[tauri::command]
-pub fn check_os_permissions() -> PermissionReport {
-    check_permissions()
+pub async fn check_os_permissions() -> PermissionReport {
+    check_permissions().await
 }
 
 #[cfg(test)]
@@ -116,5 +135,27 @@ mod tests {
     fn all_granted_has_no_recovery() {
         let report = build(PermissionState::Granted, PermissionState::Granted, PermissionState::Granted);
         assert!(report.recovery.is_empty());
+    }
+
+    #[test]
+    fn reg_probe_maps_denied_allowed_and_unreadable_output() {
+        assert_eq!(state_from_reg_output("Value    REG_DWORD    0x0\nDenied", true), PermissionState::Denied);
+        assert_eq!(state_from_reg_output("Value    REG_DWORD    0x1\nAllow", true), PermissionState::Granted);
+        assert_eq!(state_from_reg_output("unexpected output", true), PermissionState::Unknown);
+        // Command failed / registry key absent must degrade to unknown, not error.
+        assert_eq!(state_from_reg_output("ignored", false), PermissionState::Unknown);
+        assert_eq!(state_from_reg_output("Allow", false), PermissionState::Unknown);
+    }
+
+    #[test]
+    fn failed_probe_produces_no_false_recovery_claim() {
+        let report = build(
+            state_from_reg_output("reg.exe not found", false),
+            PermissionState::Unknown,
+            PermissionState::Unknown,
+        );
+        assert!(report.recovery.is_empty());
+        assert_eq!(report.microphone, PermissionState::Unknown);
+        assert_eq!(report.summary, "No permission problems detected.");
     }
 }

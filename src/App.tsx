@@ -4,12 +4,14 @@ import OnboardingModal from "./components/OnboardingModal";
 import SettingsDrawer from "./components/SettingsDrawer";
 import { fetchSetupStatus, type SetupStatus } from "./lib/setup";
 import { waitForBackend } from "./lib/backendReady";
+import { useFocusRecovery } from "./lib/focusRecovery";
 
 export default function App() {
   // null = still checking; true = setup complete (show HUD); false = onboarding.
   const [ready, setReady] = useState<boolean | null>(null);
   const [connectAttempt, setConnectAttempt] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { containerRef, announcement } = useFocusRecovery();
 
   useEffect(() => {
     let disposed = false;
@@ -127,9 +129,12 @@ export default function App() {
   }
 
   return (
-    <>
+    <div ref={containerRef} tabIndex={-1} className="h-full w-full">
       {content}
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-    </>
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+    </div>
   );
 }

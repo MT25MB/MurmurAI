@@ -61,6 +61,16 @@ body {
   box-shadow: 0 0 0 1px var(--color-obsidian), 0 0 0 6px rgba(85, 152, 249, 0.28);
 }
 
+/* Programmatic focus after an alt-tab must show a visible ring too. */
+[data-focus-restored="true"] {
+  outline: 3px solid var(--color-blue);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+@media (forced-colors: active) {
+  [data-focus-restored="true"] { outline-color: Highlight; }
+}
+
 /* Visually hidden but available to screen readers. */
 .sr-only {
   position: absolute;

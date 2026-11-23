@@ -248,6 +248,15 @@ This file is the source of truth for every coding agent and human contributor.
   animated indeterminate bar otherwise, and a 15s stall watchdog with a
   "Restart this download" action. The native shell stops a stale sidecar still
   holding port 8765 before spawning the new one after an update.
+- Tauri shell hardening: every `#[tauri::command]` doing I/O is `async` (Windows
+  registry probes run on Tokio's blocking pool; stale-sidecar cleanup too), and
+  `capabilities/default.json` grants only the nine core window/event IPC calls
+  the HUD makes, scoped to the `main` window with explicit desktop platform
+  guards. App commands and plugins are called from Rust, not granted extra ACL.
+- Focus recovery: the shell emits `murmur://window-focused` on native focus regain
+  (tray/toggle/alt-tab); `src/lib/focusRecovery.ts` restores DOM focus only when
+  it fell to `body`, shows a visible ring, re-announces through a polite live
+  region, and never traps Tab. `restore_focus` is the explicit native command.
 - Tauri window API. Design decision: "maximize" expands the HUD to 520x620
   rather than OS-maximizing a transparent always-on-top pill into a full-screen
   overlay; minimize restores through the tray; close kills the sidecar.
@@ -288,7 +297,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (58 tests incl. website)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (64 tests incl. website)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -306,7 +315,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 576 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 581 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
