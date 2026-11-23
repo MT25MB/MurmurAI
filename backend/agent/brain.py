@@ -36,6 +36,7 @@ from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
 from tools.memory_tools import MEMORY_TOOLS
 from tools.tool_recipes import RECIPE_TOOLS
 from tools.a11y_tree import A11Y_TOOLS
+from agent.plan_preview import PlanPreview, extract_files
 from skills.pack_loader import SKILL_TOOLS
 from system.profiler import (
     initial_context_window,
@@ -351,6 +352,91 @@ class Brain:
         for sentence in chunker.flush():
             yield sentence
 
+    # ---- plan preview (dry run) ----
+
+    @staticmethod
+    def _preview_step(call: dict) -> str:
+        function = call.get("function", {}) if isinstance(call, dict) else {}
+        name = str(function.get("name") or "tool")
+        arguments = function.get("arguments", "{}")
+        try:
+            args = json.loads(arguments) if isinstance(arguments, str) else arguments
+        except json.JSONDecodeError:
+            args = {}
+        detail = ", ".join(
+            f"{key}={str(value)[:48]}"
+            for key, value in list((args or {}).items())[:2]
+            if isinstance(value, (str, int, float, bool))
+        )
+        return f"{name} ({detail})" if detail else name
+
+    def build_preview(self, goal: str) -> PlanPreview:
+        """Build a read-only proposal of tools/files for a goal.
+
+        Uses one local model pass with tools advertised but never executes any
+        of them. If the model proposes nothing, the deterministic task planner
+        supplies ordered subgoals instead.
+        """
+        messages = [
+            {"role": "system", "content": build_system_prompt()},
+            {"role": "user", "content": goal},
+        ]
+        calls: list[dict] = []
+        try:
+            response = self._chat(messages, tools=ALL_TOOLS if self._tools_ready else None)
+            calls = list(response.get("message", {}).get("tool_calls") or [])
+        except Exception:  # pragma: no cover - offline is a normal state
+            logger.exception("Preview model pass failed; using deterministic plan")
+
+        if calls:
+            steps = [self._preview_step(call) for call in calls]
+            tools = [
+                str((call.get("function") or {}).get("name") or "tool") for call in calls
+            ]
+            files = extract_files([json.dumps(call, ensure_ascii=False) for call in calls])
+        else:
+            from agent.task_plan import build_plan
+
+            plan = build_plan(goal)
+            steps = [subgoal.text for subgoal in plan.subgoals]
+            tools = []
+            files = []
+
+        for name in extract_files(goal):
+            if name not in files:
+                files.append(name)
+        return PlanPreview(
+            goal=goal,
+            steps=steps or [goal],
+            tools=tools,
+            files=files,
+            engine="brain",
+            tool_calls=calls,
+        )
+
+    def execute_preview(self, preview: PlanPreview) -> str:
+        """Execute exactly the steps the user approved, skipping chosen ones."""
+        results: list[str] = []
+        executed: list[str] = []
+        for index, call in enumerate(preview.tool_calls, start=1):
+            if index in preview.skipped:
+                continue
+            function = call.get("function", {}) if isinstance(call, dict) else {}
+            name = str(function.get("name") or "")
+            arguments = function.get("arguments", "{}")
+            try:
+                args = json.loads(arguments) if isinstance(arguments, str) else arguments
+            except json.JSONDecodeError:
+                args = {}
+            if name == "stop_automation":
+                abort_controller.abort("user requested during preview execution")
+                return self._clean_for_voice("Automation stopped. Everything is halted.")
+            result = dispatch_tool(name, args or {}, self.safety)
+            executed.append(name)
+            results.append(f"{name}: {result[:80]}")
+        reply = "Done. " + "; ".join(results) if results else "Nothing left to run."
+        return self._clean_for_voice(guard_unverified_claim(reply, executed))
+
     # ---- ReAct turn ----
 
     def think_and_act(
@@ -359,6 +445,7 @@ class Brain:
         conversation_history: list[dict[str, str]] | None = None,
         screen_base64: str | None = None,
         asr_confidence: str = "high",
+        dry_run: bool = False,
     ) -> str:
         """One full ReAct turn. Returns the final spoken response text."""
         # Hard safety: an explicit abort phrase halts automation before any
@@ -376,6 +463,10 @@ class Brain:
             question = clarify_low_confidence(user_text, asr_confidence, controls)
             if question:
                 return question
+
+        if dry_run:
+            # Preview only: build the ordered tool/file plan but dispatch nothing.
+            return self._clean_for_voice(self.build_preview(user_text).spoken())
 
         history = conversation_history or []
         messages: list[dict[str, str]] = [

@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agent.brain import Brain
+from agent.plan_preview import classify as classify_plan, pick_engine, should_auto_preview
 from agent.state import SessionState, ServerMessage
 from audio.dictation import DictationSession, START_RE as DICTATION_START_RE
 from audio.listener import VoiceListener
@@ -631,6 +632,97 @@ async def _try_mid_job_intent(session: SessionState, send, text: str) -> bool:
     return False
 
 
+def _preview_settings() -> dict:
+    """Opt-in flag for automatic previews; offline settings simply mean off."""
+    try:
+        from system.settings_tools import load_settings
+
+        return load_settings()
+    except Exception:  # pragma: no cover - local config may be unavailable
+        return {}
+
+
+async def _build_and_store_preview(session: SessionState, send, goal: str) -> None:
+    """Build a read-only preview for a goal and hold it for one decision."""
+    try:
+        if pick_engine(goal) == "vision":
+            from agent.vision_agent import VisionAgent
+
+            preview = await asyncio.to_thread(VisionAgent().build_preview, goal)
+        else:
+            preview = await asyncio.to_thread(app_state.brain.build_preview, goal)
+    except Exception:  # pragma: no cover - model/model absent
+        logger.exception("Could not build plan preview")
+        await _announce_local(session, send, "I couldn't build a preview for that.")
+        return
+    session.pending_plan = preview
+    await _announce_local(session, send, preview.spoken())
+
+
+async def _route_plan_preview(
+    session: SessionState, send, text: str
+) -> tuple[bool, str]:
+    """Return ``(handled, routed_text)`` for preview/decision utterances.
+
+    A preview is a single held action, mirroring the tool approval rules: any
+    unrelated speech, a stop phrase, or another decision drops it.
+    """
+    # A tool confirmation is the only other held approval; never stack them.
+    if tool_bus.pending_ids():
+        return False, text
+
+    decision = classify_plan(text)
+    pending = session.pending_plan
+
+    if is_abort_phrase(text):
+        if pending:
+            session.pending_plan = None
+            await _announce_local(session, send, "Preview discarded. Everything is halted.")
+        return False, text
+
+    if pending is not None:
+        if decision.kind == "approve":
+            session.pending_plan = None
+            preview = pending
+            try:
+                if preview.engine == "vision":
+                    from agent.vision_agent import VisionAgent
+
+                    result = await asyncio.to_thread(
+                        VisionAgent().run_visual_task,
+                        preview.goal,
+                        plan=preview.plan,
+                        skip_indices=sorted(preview.skipped),
+                    )
+                else:
+                    result = await asyncio.to_thread(
+                        app_state.brain.execute_preview, preview
+                    )
+                await _speak_and_return(session, send, result)
+            except Exception:  # pragma: no cover - desktop dependent
+                logger.exception("Approved preview failed")
+                await _announce_local(session, send, "I couldn't run that preview.")
+            return True, ""
+        if decision.kind == "skip":
+            await _announce_local(session, send, pending.skip(decision.numbers))
+            return True, ""
+        if decision.kind == "cancel":
+            session.pending_plan = None
+            await _announce_local(session, send, "Preview discarded.")
+            return True, ""
+        session.pending_plan = None
+        await _announce_local(session, send, "Preview discarded.")
+        return False, text
+
+    if decision.kind == "preview":
+        await _build_and_store_preview(session, send, decision.goal)
+        return True, ""
+    if should_auto_preview(text, _preview_settings()):
+        await _build_and_store_preview(session, send, text)
+        return True, ""
+    return False, text
+
+
 async def _announce_local(session: SessionState, send, message: str) -> None:
     """Speak a local status change and expose it to the screen-reader log."""
     await emit_transcript(session, send, message, "system")
@@ -694,6 +786,9 @@ async def handle_text_input(
     if handled:
         return
     if await _try_text_edit_phrase(session, send, text):
+        return
+    handled, text = await _route_plan_preview(session, send, text)
+    if handled:
         return
     session.add_turn("user", text)
     if text_is_sleep_phrase(text):
@@ -1224,6 +1319,9 @@ async def _on_utterance_async(
     if handled:
         return
     if await _try_text_edit_phrase(session, send, text):
+        return
+    handled, text = await _route_plan_preview(session, send, text)
+    if handled:
         return
     # Sleep/wake commands are handled locally, never sent to the model.
     if text_is_sleep_phrase(text):

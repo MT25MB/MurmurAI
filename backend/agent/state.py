@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from agent.plan_preview import PlanPreview
+
 
 class ClientMessage(BaseModel):
     """Messages the HUD (or any local client) may send to the sidecar."""
@@ -90,6 +92,9 @@ class SessionState:
     started_at: float = field(default_factory=time.monotonic)
     turns: list[dict[str, str]] = field(default_factory=list)
     pending: dict[str, ConfirmationRequest] = field(default_factory=dict)
+    # Held, single-use plan preview. Cleared on approval, adjustment cancel, or
+    # any unrelated utterance so a stale "yes" never executes an old plan.
+    pending_plan: PlanPreview | None = None
     audio_chunks: int = 0
     # Lightweight per-session context for pronoun/"this"/"it" resolution.
     context: dict[str, object] = field(default_factory=dict)

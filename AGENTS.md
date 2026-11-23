@@ -257,6 +257,13 @@ This file is the source of truth for every coding agent and human contributor.
   (tray/toggle/alt-tab); `src/lib/focusRecovery.ts` restores DOM focus only when
   it fell to `body`, shows a visible ring, re-announces through a polite live
   region, and never traps Tab. `restore_focus` is the explicit native command.
+- Spoken plan preview (`agent/plan_preview.py`, `brain.py`, `vision_agent.py`):
+  "preview what you'd do to X" builds an ordered, read-only list of subgoals,
+  tools and files and speaks it without dispatch. The preview is one single-use
+  held action: "go ahead"/"yes, confirm" runs exactly the previewed tool calls
+  (or reused vision plan), "skip step two" adjusts it, "cancel"/unrelated speech/
+  stop phrases discard it. `preview_plans` (voice: "preview plans on") auto-previews
+  multi-step and file tasks. No preview stacks with a pending tool approval.
 - Dictation mode (`audio/dictation.py` + `tools/text_edit_tools.py`): "start
   dictating" types finalized utterances into the focused field (clipboard paste
   for long or Unicode passages, with the user's clipboard restored) and never
@@ -323,7 +330,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 601 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 618 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -338,7 +345,7 @@ Murmur AI/
    ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
    ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py,dictation.py}  # wake word + dictation mode
-   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
+   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,plan_preview.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
    ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py,text_edit_tools.py}
    ├─ memory.py               # private-filtered local memory vault (forget/undo)
    ├─ audio/{streaming.py,speech_queue.py}  # sentence chunking + priority speech

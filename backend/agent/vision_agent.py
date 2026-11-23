@@ -50,6 +50,7 @@ from tools.event_bus import tool_bus
 from agent.state import ServerMessage
 from agent.abort import abort_controller
 from agent.task_plan import TaskPlan, build_plan, format_history
+from agent.plan_preview import PlanPreview, extract_files
 from agent.loop_detector import LoopDetector, action_fingerprint, screen_hash
 from agent.offscreen_search import ScrollSearch
 
@@ -470,6 +471,7 @@ class VisionAgent:
         self.abort = abort_controller
         self.loop_detector = LoopDetector()
         self.plan: Optional[TaskPlan] = None
+        self.last_preview: Optional[PlanPreview] = None
         self._recovery_attempts = 0
         self._recovery_hint = ""
         self._announce_stop = self._make_stop_announcer()
@@ -521,7 +523,48 @@ class VisionAgent:
             )
         return announcer
 
-    def run_visual_task(self, goal: str, max_steps: Optional[int] = None) -> str:
+    def build_preview(self, goal: str) -> PlanPreview:
+        """Read-only preview of the visual subgoals; no capture or clicking."""
+        plan = build_plan(goal)
+        steps = [subgoal.text for subgoal in plan.subgoals] or [goal]
+        hints: list[str] = []
+        joined = " ".join(steps).lower()
+        for keyword, tool in (
+            ("click", "pyautogui.click"),
+            ("type", "pyautogui.write"),
+            ("scroll", "pyautogui.scroll"),
+            ("save", "file_tools"),
+            ("open ", "os_tools"),
+        ):
+            if keyword in joined and tool not in hints:
+                hints.append(tool)
+        files = extract_files(steps)
+        for name in extract_files(goal):
+            if name not in files:
+                files.append(name)
+        return PlanPreview(
+            goal=goal,
+            steps=steps,
+            tools=["vision_agent", *hints],
+            files=files,
+            engine="vision",
+            plan=plan,
+        )
+
+    def run_visual_task(
+        self,
+        goal: str,
+        max_steps: Optional[int] = None,
+        dry_run: bool = False,
+        plan: Optional[TaskPlan] = None,
+        skip_indices: Optional[list[int]] = None,
+    ) -> str:
+        if dry_run:
+            preview = self.build_preview(goal)
+            self.last_preview = preview
+            self._speak(preview.spoken())
+            return preview.spoken()
+
         steps = max_steps or self.max_steps
         self.history = []
         self.abort.reset()  # a fresh task clears any previous abort signal
@@ -529,8 +572,14 @@ class VisionAgent:
         self._recovery_attempts = 0
         self._recovery_hint = ""
 
-        # 1) Plan: break a multi-step goal into ordered subgoals.
-        self.plan = build_plan(goal)
+        # 1) Plan: break a multi-step goal into ordered subgoals, or reuse the
+        #    approved preview so execution matches what the user heard.
+        self.plan = plan or build_plan(goal)
+        for index in skip_indices or []:
+            if 1 <= index <= len(self.plan.subgoals):
+                self.plan.subgoals[index - 1].done = True
+        while self.plan.current() and self.plan.current().done:
+            self.plan.active_index += 1
         self._speak(
             f"Starting task with {len(self.plan.subgoals)} step"
             f"{'s' if len(self.plan.subgoals) != 1 else ''}."

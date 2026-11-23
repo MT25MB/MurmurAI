@@ -27,6 +27,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "listening_mode": "active",          # active | wake
     "mic_threshold": 0.5,                # 0..1, higher = ignore quieter noise
     "screen_reader_friendly": False,     # reduce chatter alongside a screen reader
+    "preview_plans": False,              # speak plans before multi-step/file actions
     "media_ducking": False,              # lower media volume while speaking
     "echo_guard": True,                  # ignore our own TTS during listening
     "echo_guard_tail_ms": 250,           # extra quiet after TTS stops
@@ -281,6 +282,13 @@ def handle_voice_command(text: str) -> Optional[str]:
     if re.search(r"screen reader friendly\s+(off|false|disable)|\bdisable\b.*screen reader friendly", value):
         update_settings({"screen_reader_friendly": False})
         return _voice_reply("Screen reader friendly mode is off.")
+
+    if re.search(r"\bpreview plans\s+(on|true|enable)\b|\benable\b.*\bplan preview", value):
+        update_settings({"preview_plans": True})
+        return _voice_reply("Plan previews are on. I'll read multi-step plans before acting.")
+    if re.search(r"\bpreview plans\s+(off|false|disable)\b|\bdisable\b.*\bplan preview", value):
+        update_settings({"preview_plans": False})
+        return _voice_reply("Plan previews are off.")
 
     if re.search(r"\b(duck|lower)\b.*\bmedia\b.*\bon\b|\bmedia ducking on\b", value):
         update_settings({"media_ducking": True})
