@@ -208,7 +208,7 @@ class StdioMcpClient:
             {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "murmur-ai", "version": "1.2.7"},
+                "clientInfo": {"name": "murmur-ai", "version": "1.2.8"},
             },
         )
         self.notify("notifications/initialized", {})
