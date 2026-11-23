@@ -257,6 +257,14 @@ This file is the source of truth for every coding agent and human contributor.
   (tray/toggle/alt-tab); `src/lib/focusRecovery.ts` restores DOM focus only when
   it fell to `body`, shows a visible ring, re-announces through a polite live
   region, and never traps Tab. `restore_focus` is the explicit native command.
+- Dictation mode (`audio/dictation.py` + `tools/text_edit_tools.py`): "start
+  dictating" types finalized utterances into the focused field (clipboard paste
+  for long or Unicode passages, with the user's clipboard restored) and never
+  calls the brain. Spoken cues map to new line/paragraph, period, comma, question
+  and exclamation marks; "scratch that" backspaces the last phrase. "Stop
+  dictating" or "computer"/"hey murmur" ends the mode and hands the remainder to
+  normal routing. Spoken select all / copy selection / paste here / delete word /
+  read-back also work as local phrases and as model tools.
 - Tauri window API. Design decision: "maximize" expands the HUD to 520x620
   rather than OS-maximizing a transparent always-on-top pill into a full-screen
   overlay; minimize restores through the tray; close kills the sidecar.
@@ -315,7 +323,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 581 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 601 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -329,9 +337,9 @@ Murmur AI/
    │                         #    test_packaging.py + fixtures/)
    ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
-   ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py}  # offline wake word + sleep/wake
+   ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py,dictation.py}  # wake word + dictation mode
    ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
-   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py}
+   ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py,text_edit_tools.py}
    ├─ memory.py               # private-filtered local memory vault (forget/undo)
    ├─ audio/{streaming.py,speech_queue.py}  # sentence chunking + priority speech
    ├─ agent/{som_manifest.py,screen_diff.py}  # compact SoM + post-action verify

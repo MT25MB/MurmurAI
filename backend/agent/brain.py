@@ -25,6 +25,7 @@ from tools.installer_tool import INSTALL_TOOLS
 from tools.browser_tool import BROWSER_TOOLS
 from tools.window_tools import WINDOW_TOOLS
 from tools.context_tools import CONTEXT_TOOLS
+from tools.text_edit_tools import TEXT_EDIT_TOOLS
 from tools.file_tools import FILE_TOOLS
 from audio.pronunciation import PRONUNCIATION_TOOLS
 from audio.voice_profiles import VOICE_PROFILE_TOOLS
@@ -78,7 +79,7 @@ STOP_TOOL = [
 # browser + abort).
 ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
-    + CONTEXT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
+    + CONTEXT_TOOLS + TEXT_EDIT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
     + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
     + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + UNDO_TOOLS + STOP_TOOL
 )

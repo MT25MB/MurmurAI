@@ -26,12 +26,14 @@ from fastapi.responses import JSONResponse
 
 from agent.brain import Brain
 from agent.state import SessionState, ServerMessage
+from audio.dictation import DictationSession, START_RE as DICTATION_START_RE
 from audio.listener import VoiceListener
 from audio.speaker import LocalSpeaker
 from audio.speaker_provider import set_speaker as register_speaker
 from agent.abort import abort_controller, is_abort_phrase
 from tools.safety import SafetyGate
 from tools.event_bus import tool_bus
+from tools import text_edit_tools
 import setup as setup_module
 
 load_dotenv()
@@ -60,6 +62,9 @@ class AppState:
         self.hud_sockets: set[WebSocket] = set()
         self.send_locks: dict[int, asyncio.Lock] = {}
         self.setup_task: Optional[asyncio.Task] = None
+        # Voice dictation is a local mode: speech is typed, never treated as a
+        # tool command until "stop dictating" or a command trigger.
+        self.dictation = DictationSession()
         # Sleep/wake state machine: "active" (continuous VAD) or "sleep" (wake-word only).
         self.listening_mode = "active"
         self.wake_detector = None
@@ -626,10 +631,70 @@ async def _try_mid_job_intent(session: SessionState, send, text: str) -> bool:
     return False
 
 
+async def _announce_local(session: SessionState, send, message: str) -> None:
+    """Speak a local status change and expose it to the screen-reader log."""
+    await emit_transcript(session, send, message, "system")
+    if app_state.speaker:
+        try:
+            app_state.speaker.speak(message)
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("Dictation announcement failed", exc_info=True)
+
+
+async def _try_text_edit_phrase(session: SessionState, send, text: str) -> bool:
+    """Handle spoken selection/editing commands locally before the model."""
+    reply = text_edit_tools.handle_text_edit_phrase(text, app_state.dictation.buffer)
+    if reply is None:
+        return False
+    await _announce_local(session, send, reply)
+    return True
+
+
+async def _route_dictation(
+    session: SessionState, send, text: str
+) -> tuple[bool, str]:
+    """Return ``(handled, routed_text)`` for one utterance.
+
+    While dictation is active, speech is typed into the focused field and never
+    sent to the brain. A stop phrase consumes the turn; a command trigger ends
+    dictation and returns the remainder for normal agent routing.
+    """
+    dictation = app_state.dictation
+    phrase = (text or "").strip()
+    if not dictation.active:
+        if DICTATION_START_RE.match(phrase):
+            await _announce_local(session, send, dictation.start())
+            return True, ""
+        return False, phrase
+
+    result = dictation.feed(phrase)
+    if result.backspaces:
+        try:
+            text_edit_tools.erase_last_chars(result.backspaces)
+        except RuntimeError as exc:  # missing optional dependency
+            await _announce_local(session, send, str(exc))
+    if result.text:
+        try:
+            text_edit_tools.type_text(result.text)
+        except RuntimeError as exc:  # missing optional dependency
+            await _announce_local(session, send, str(exc))
+        await emit_transcript(session, send, f"Typed: {result.text}", "system")
+    if result.spoken:
+        await _announce_local(session, send, result.spoken)
+    if result.command:
+        return False, result.command
+    return True, ""
+
+
 async def handle_text_input(
     session: SessionState, send, text: str
 ) -> None:
     """Full voice turn: transcribe already done; think, act, speak."""
+    handled, text = await _route_dictation(session, send, text)
+    if handled:
+        return
+    if await _try_text_edit_phrase(session, send, text):
+        return
     session.add_turn("user", text)
     if text_is_sleep_phrase(text):
         await enter_sleep(session, send)
@@ -1155,6 +1220,11 @@ async def start_listening(session: SessionState, send) -> None:
 async def _on_utterance_async(
     session, send, text: str, asr_confidence: str = "high"
 ) -> None:
+    handled, text = await _route_dictation(session, send, text)
+    if handled:
+        return
+    if await _try_text_edit_phrase(session, send, text):
+        return
     # Sleep/wake commands are handled locally, never sent to the model.
     if text_is_sleep_phrase(text):
         await enter_sleep(session, send)

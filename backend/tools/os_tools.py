@@ -191,6 +191,7 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
         return skill_result
 
     from .tool_recipes import handle_recipe_tool
+    from .text_edit_tools import handle_text_edit_tool
 
     a11y_result = handle_a11y_tool(name, arguments)
     if a11y_result is not None:
@@ -202,6 +203,9 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
     memory_result = handle_memory_tool(name, arguments)
     if memory_result is not None:
         return memory_result
+    text_edit_result = handle_text_edit_tool(name, arguments)
+    if text_edit_result is not None:
+        return text_edit_result
     if name == "undo_last_action":
         return undo_last_action()
     if name == "open_application":
