@@ -62,6 +62,45 @@ async def test_ollama_error_frame_becomes_an_actionable_pull_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_ending_mid_download_reports_last_progress_and_likely_cause(
+    monkeypatch,
+):
+    lines = [
+        '{"status":"pulling manifest"}',
+        '{"status":"pulling abcd1234","total":1000,"completed":600}',
+    ]
+    monkeypatch.setattr(
+        app_setup.httpx, "AsyncClient", lambda *_a, **_k: FakeClient(lines)
+    )
+    monkeypatch.setattr(app_setup, "_models_disk_free", lambda: 20_000_000_000)
+
+    result = await app_setup.pull_model("qwen2.5:7b", lambda *_args: None)
+
+    assert result["ok"] is False
+    message = result["error"].lower()
+    assert "before it finished" in message
+    assert "disk space" in message
+    assert "60%" in message
+
+
+@pytest.mark.asyncio
+async def test_low_disk_space_is_reported_before_a_long_download(monkeypatch):
+    lines = [
+        '{"status":"pulling manifest"}',
+        '{"status":"pulling abcd1234","total":5_000_000_000,"completed":0}',
+    ]
+    monkeypatch.setattr(
+        app_setup.httpx, "AsyncClient", lambda *_a, **_k: FakeClient(lines)
+    )
+    monkeypatch.setattr(app_setup, "_models_disk_free", lambda: 2_000_000_000)
+
+    result = await app_setup.pull_model("qwen2.5:7b", lambda *_args: None)
+
+    assert result["ok"] is False
+    assert "disk space" in result["error"].lower()
+
+
+@pytest.mark.asyncio
 async def test_error_status_without_error_field_also_fails_cleanly(monkeypatch):
     lines = ['{"status":"error","detail":"model not found"}']
     monkeypatch.setattr(

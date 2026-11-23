@@ -319,6 +319,21 @@ async def ensure_local_weights(progress: Optional[ProgressCallback] = None) -> N
 # Ollama model pulling with streamed progress
 # ---------------------------------------------------------------------------
 
+def _models_disk_free() -> Optional[int]:
+    """Free bytes on the filesystem holding Ollama's model blobs, if known."""
+    try:
+        root = Path(os.getenv("OLLAMA_MODELS") or (Path.home() / ".ollama" / "models"))
+        while not root.exists() and root != root.parent:
+            root = root.parent
+        return shutil.disk_usage(str(root)).free
+    except Exception:  # pragma: no cover - platform dependent
+        return None
+
+
+def _gb(byte_count: int) -> str:
+    return f"{byte_count / (1024 ** 3):.1f} GB"
+
+
 async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any]:
     """Stream Ollama /api/pull progress via on_progress; return final status."""
     model = (model or "").strip()
@@ -326,6 +341,8 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
         return {"ok": False, "error": "No model name provided."}
 
     on_progress(model, 0, f"Starting download of {model}…")
+    last_status = "no status reported"
+    last_percent: Optional[int] = None
     try:
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
@@ -365,6 +382,23 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
                     percent: Optional[int] = None
                     if total and completed:
                         percent = min(100, int(completed / total * 100))
+                        last_status, last_percent = status, percent
+
+                    # A multi-gigabyte model cannot finish on a nearly full
+                    # disk; fail early with the real reason instead of after
+                    # several minutes of apparently healthy progress.
+                    if total:
+                        free = _models_disk_free()
+                        remaining = max(0, int(total) - int(completed))
+                        if free is not None and free < remaining:
+                            message = (
+                                f"Not enough disk space to pull {model}: about "
+                                f"{_gb(remaining)} still needed, {_gb(free)} free. "
+                                "Free space and try again."
+                            )
+                            logger.warning("%s", message)
+                            on_progress(model, percent, message)
+                            return {"ok": False, "error": message}
 
                     label = f"{status}"
                     if percent is not None:
@@ -377,7 +411,14 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
         logger.exception("Ollama pull failed for %s", model)
         return {"ok": False, "error": str(exc)}
 
-    return {"ok": False, "error": "Pull stream ended without success status."}
+    where = f" (last seen: {last_status}" + (f" {last_percent}%" if last_percent is not None else "") + ")"
+    return {
+        "ok": False,
+        "error": (
+            f"Ollama stopped the download of {model} before it finished{where}. "
+            "Check free disk space and that Ollama is still running, then try again."
+        ),
+    }
 
 
 def install_ollama_instructions() -> dict[str, Any]:
