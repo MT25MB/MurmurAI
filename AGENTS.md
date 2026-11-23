@@ -234,6 +234,11 @@ This file is the source of truth for every coding agent and human contributor.
 - The HUD has an optional typed-command mode (keyboard button or `T`): it
   temporarily resizes the 400x84 window, sends the existing `text_input` WS
   message, and ignores global M/Q shortcuts while the field is focused.
+- Window management: the pill is a CSS drag region (`app-region-drag`) with all
+  controls opted out. Compact minimize / expand / close buttons call the native
+  Tauri window API. Design decision: "maximize" expands the HUD to 520x620
+  rather than OS-maximizing a transparent always-on-top pill into a full-screen
+  overlay; minimize restores through the tray; close kills the sidecar.
 - Set-of-Marks uses a compact token-efficient manifest (`agent/som_manifest.py`)
   with one shared ID space, contained-duplicate merging and geometry in a side
   map, so small 7B VLMs stay fast. Post-action verification
@@ -271,7 +276,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (48 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (51 tests)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs

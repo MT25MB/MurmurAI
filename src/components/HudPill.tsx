@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMurmurSocket } from "../lib/websocket";
 import { useSleepWakeHotkey } from "../lib/useSleepWakeHotkey";
 import { useAutoUpdater } from "../lib/updater";
+import { closeHud, minimizeHud, setHudSize } from "../lib/windowControls";
 import TranscriptStream from "./TranscriptStream";
 import { Waveform } from "./Waveform";
 import logoUrl from "../assets/logo-blue.png";
@@ -53,6 +54,7 @@ export default function HudPill() {
   const [mode, setMode] = useState<"active" | "sleep">("active");
   const [typing, setTyping] = useState(false);
   const [typeInput, setTypeInput] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [update, setUpdate] = useState<{
     request_id: string;
     version: string;
@@ -63,26 +65,12 @@ export default function HudPill() {
   const approveRef = useRef<HTMLButtonElement>(null);
   const typeInputRef = useRef<HTMLInputElement>(null);
 
-  // The ready-state HUD window is only 400x84, so the typed-command row needs a
-  // temporary height increase. Permissions are already granted for setSize.
+  // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
-    let disposed = false;
-    (async () => {
-      try {
-        const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
-          import("@tauri-apps/api/window"),
-          import("@tauri-apps/api/dpi"),
-        ]);
-        if (disposed) return;
-        await getCurrentWindow().setSize(new LogicalSize(400, typing ? 150 : 84));
-      } catch {
-        // Browser dev mode: no native window to resize.
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [typing]);
+    if (expanded) void setHudSize(520, 620);
+    else if (typing) void setHudSize(400, 150);
+    else void setHudSize(400, 84);
+  }, [expanded, typing]);
 
   useEffect(() => {
     if (typing) typeInputRef.current?.focus();
@@ -265,7 +253,7 @@ export default function HudPill() {
 
   return (
     <section
-      className="fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+      className="app-region-drag fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       role="region"
       aria-label="Murmur AI status and controls"
     >
@@ -284,7 +272,7 @@ export default function HudPill() {
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-xs font-semibold tracking-tight text-ink">
+            <h2 className="truncate text-xs font-semibold tracking-tight text-ink">
               MURMUR<span className="text-blue">/AI</span>
             </h2>
             <span className="mono-label !text-[10px]" style={{ color: meta.color }} aria-hidden="true">
@@ -357,6 +345,45 @@ export default function HudPill() {
             )}
           </svg>
         </button>
+        <div className="flex shrink-0 items-center gap-1 border-l border-border pl-1.5">
+          <button
+            type="button"
+            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink"
+            onClick={() => void minimizeHud()}
+            aria-label="Minimize HUD"
+            title="Minimize (restore from the tray)"
+          >
+            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
+              <rect x="4" y="9" width="12" height="2" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Collapse HUD" : "Expand HUD"}
+            title={expanded ? "Collapse HUD" : "Expand HUD"}
+          >
+            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
+              {expanded ? (
+                <rect x="5" y="8" width="10" height="4" />
+              ) : (
+                <path d="M4 4h12v2H6v8H4V4Zm0 10h2v2h8v-2h2v4H4v-4Z" />
+              )}
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-red-fill/30 hover:text-red"
+            onClick={() => void closeHud()}
+            aria-label="Close Murmur AI"
+            title="Quit Murmur AI"
+          >
+            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
+              <path d="M5.3 4.2 10 8.9l4.7-4.7 1.1 1.1-4.7 4.7 4.7 4.7-1.1 1.1-4.7-4.7-4.7 4.7-1.1-1.1 4.7-4.7-4.7-4.7 1.1-1.1Z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="my-2.5 flex w-full items-end justify-center" aria-hidden="true">

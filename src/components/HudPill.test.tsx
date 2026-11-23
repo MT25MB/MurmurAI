@@ -12,6 +12,20 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
+const windowMock = vi.hoisted(() => ({
+  setSize: vi.fn().mockResolvedValue(undefined),
+  setResizable: vi.fn().mockResolvedValue(undefined),
+  center: vi.fn().mockResolvedValue(undefined),
+  minimize: vi.fn().mockResolvedValue(undefined),
+  close: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => windowMock }));
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalSize: class {
+    constructor(public width: number, public height: number) {}
+  },
+}));
+
 // Capture WebSocket instances so tests can push server messages.
 const sockets: any[] = [];
 class TestWS {
@@ -39,6 +53,9 @@ describe("HudPill", () => {
   beforeEach(() => {
     sockets.length = 0;
     vi.stubGlobal("WebSocket", TestWS);
+    windowMock.setSize.mockClear();
+    windowMock.minimize.mockClear();
+    windowMock.close.mockClear();
   });
 
   it("exposes an accessible status live region and mute button", async () => {
@@ -47,6 +64,42 @@ describe("HudPill", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("button", { name: /mute microphone/i })).toBeInTheDocument();
+  });
+
+  it("minimizes and closes through the native window", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+
+    await user.click(screen.getByRole("button", { name: /minimize hud/i }));
+    expect(windowMock.minimize).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: /close murmur ai/i }));
+    expect(windowMock.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands and collapses the HUD panel", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+    await waitFor(() => {
+      const size = windowMock.setSize.mock.calls.at(-1)?.[0];
+      expect(size.width).toBe(520);
+      expect(size.height).toBe(620);
+    });
+
+    await user.click(screen.getByRole("button", { name: /collapse hud/i }));
+    await waitFor(() => {
+      const size = windowMock.setSize.mock.calls.at(-1)?.[0];
+      expect(size.width).toBe(400);
+      expect(size.height).toBe(84);
+    });
+  });
+
+  it("marks the pill as a drag region", async () => {
+    render(<HudPill />);
+    const region = screen.getByRole("region", { name: /status and controls/i });
+    expect(region).toHaveClass("app-region-drag");
   });
 
   it("reveals a typed-command field and sends text_input on Enter", async () => {
