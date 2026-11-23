@@ -240,6 +240,10 @@ This file is the source of truth for every coding agent and human contributor.
   one ordered sender (a queue, not racing send tasks) with stage-based fallback
   percentages, and the HUD tracks multiple pulls by model with a "Download all
   missing" button. `main.py` imports `json` for the pull endpoint payload.
+- Website downloads resolve the highest stable semver from the releases list
+  (`website/src/releases.ts`), not GitHub's date-based `/releases/latest`, so an
+  older high-version release can't win. The README's Linux command resolves the
+  newest AppImage URL dynamically instead of hardcoding a version.
 - Tauri window API. Design decision: "maximize" expands the HUD to 520x620
   rather than OS-maximizing a transparent always-on-top pill into a full-screen
   overlay; minimize restores through the tray; close kills the sidecar.
@@ -280,7 +284,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (53 tests)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (57 tests incl. website)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs

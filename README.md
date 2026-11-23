@@ -153,9 +153,9 @@ winget install --id MT25MB.MurmurAI -e
 brew tap MT25MB/murmur-ai https://github.com/MT25MB/MurmurAI
 brew install --cask murmur-ai
 
-# Linux (AppImage from the latest release)
-curl -L -o MurmurAI.AppImage \
-  https://github.com/MT25MB/MurmurAI/releases/latest/download/Murmur.AI_1.2.5_amd64.AppImage
+# Linux (resolve the newest AppImage URL from GitHub, so it never goes stale)
+URL=$(python3 -c 'import json,urllib.request; d=json.load(urllib.request.urlopen("https://api.github.com/repos/MT25MB/MurmurAI/releases/latest")); print(next(a["browser_download_url"] for a in d["assets"] if "amd64.AppImage" in a["name"]))')
+curl -L -o MurmurAI.AppImage "$URL"
 chmod +x MurmurAI.AppImage && ./MurmurAI.AppImage
 ```
 

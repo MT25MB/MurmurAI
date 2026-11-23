@@ -1,17 +1,13 @@
 /** Downloads the correct installer by querying the GitHub Releases API. */
 
 import { useEffect, useState } from "react";
-import { LATEST_RELEASE_API, RELEASES_URL } from "../config";
-
-type Asset = { name: string; browser_download_url: string; size: number };
-type Release = { tag_name: string; assets: Asset[] };
+import { RELEASES_API, RELEASES_URL } from "../config";
+import { resolveBestAsset, type Asset, type Os, type Release } from "../releases";
 
 type State =
   | { kind: "loading" }
-  | { kind: "ready"; os: Os; asset: Asset; tag: string; all: Asset[] }
+  | { kind: "ready"; os: Os; asset: Asset; tag: string }
   | { kind: "fallback"; os: Os };
-
-type Os = "windows" | "macos" | "linux";
 
 function detectOs(): Os {
   const ua = navigator.userAgent.toLowerCase();
@@ -26,33 +22,19 @@ const OS_LABEL: Record<Os, string> = {
   linux: "Linux",
 };
 
-/** Rank the best asset for each OS. Tauri produces .msi/.exe, .dmg, .AppImage/.deb. */
-function pickAsset(assets: Asset[], os: Os): Asset | undefined {
-  const patterns: Record<Os, RegExp[]> = {
-    windows: [/\.msi$/i, /\.exe$/i, /windows/i],
-    macos: [/\.dmg$/i, /\.app\.tar\.gz$/i, /macos/i, /darwin/i, /aarch64.*apple/i],
-    linux: [/\.appimage$/i, /\.deb$/i, /linux/i, /\.tar\.gz$/i],
-  };
-  for (const re of patterns[os]) {
-    const found = assets.find((a) => re.test(a.name));
-    if (found) return found;
-  }
-  return undefined;
-}
-
 export default function DownloadButton() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [os] = useState<Os>(() => detectOs());
 
   useEffect(() => {
     let alive = true;
-    fetch(LATEST_RELEASE_API, { headers: { Accept: "application/vnd.github+json" } })
+    fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((release: Release) => {
+      .then((releases: Release[]) => {
         if (!alive) return;
-        const asset = pickAsset(release.assets ?? [], os);
-        if (asset) {
-          setState({ kind: "ready", os, asset, tag: release.tag_name, all: release.assets });
+        const best = resolveBestAsset(releases, os);
+        if (best) {
+          setState({ kind: "ready", os, asset: best.asset, tag: best.tag });
         } else {
           setState({ kind: "fallback", os });
         }
@@ -77,8 +59,9 @@ export default function DownloadButton() {
     <div className="flex flex-col items-center gap-3 sm:items-start">
       <a
         href={primaryHref}
-        target="_blank"
-        rel="noreferrer"
+        download={state.kind === "ready" ? state.asset.name : undefined}
+        target={state.kind === "ready" ? undefined : "_blank"}
+        rel={state.kind === "ready" ? undefined : "noreferrer"}
         aria-busy={state.kind === "loading"}
         className={`group inline-flex items-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-fill/20 transition-all hover:-translate-y-0.5 hover:shadow-blue-fill/40 ${
           state.kind === "loading" ? "bg-blue-fill/70" : "bg-blue-fill"

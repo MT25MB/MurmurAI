@@ -5,5 +5,7 @@ export const REPO_NAME = "MurmurAI";
 
 export const REPO_SLUG = `${REPO_OWNER}/${REPO_NAME}`;
 export const REPO_URL = `https://github.com/${REPO_SLUG}`;
-export const RELEASES_URL = `${REPO_URL}/releases`;
+export const RELEASES_URL = `${REPO_URL}/releases/latest`;
 export const LATEST_RELEASE_API = `https://api.github.com/repos/${REPO_SLUG}/releases/latest`;
+// /releases/latest is date-based; this list lets the site pick the highest version.
+export const RELEASES_API = `https://api.github.com/repos/${REPO_SLUG}/releases?per_page=100`;
