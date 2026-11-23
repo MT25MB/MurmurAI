@@ -240,6 +240,9 @@ This file is the source of truth for every coding agent and human contributor.
   one ordered sender (a queue, not racing send tasks) with stage-based fallback
   percentages, and the HUD tracks multiple pulls by model with a "Download all
   missing" button. `main.py` imports `json` for the pull endpoint payload.
+  Ollama reports pull failures in a 200 stream frame (`{"error": ...}`);
+  `setup.pull_model` now surfaces that message (and a name-check hint) instead
+  of the misleading "Pull stream ended without success status."
 - Website downloads resolve the highest stable semver from the releases list
   (`website/src/releases.ts`), not GitHub's date-based `/releases/latest`, so an
   older high-version release can't win. The README's Linux command resolves the
@@ -333,7 +336,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 620 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 622 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,

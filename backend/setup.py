@@ -345,7 +345,21 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
                     except json.JSONDecodeError:
                         continue
 
+                    # Ollama reports pull failures as a normal 200 stream frame:
+                    # {"error": "pull model manifest: file does not exist"}.
+                    # Ignoring it made every bad model name look like an instant
+                    # stall with no useful explanation.
+                    error = str(data.get("error") or "").strip()
                     status = str(data.get("status", ""))
+                    if error or status.lower() == "error":
+                        detail = error or str(data.get("detail") or "unknown Ollama error")
+                        message = f"Ollama could not pull {model}: {detail}"
+                        if "not exist" in detail.lower() or "not found" in detail.lower():
+                            message += " Check the model name and try again."
+                        logger.warning("%s", message)
+                        on_progress(model, None, message)
+                        return {"ok": False, "error": message}
+
                     total = data.get("total") or 0
                     completed = data.get("completed") or 0
                     percent: Optional[int] = None
