@@ -243,7 +243,10 @@ This file is the source of truth for every coding agent and human contributor.
 - Website downloads resolve the highest stable semver from the releases list
   (`website/src/releases.ts`), not GitHub's date-based `/releases/latest`, so an
   older high-version release can't win. The README's Linux command resolves the
-  newest AppImage URL dynamically instead of hardcoding a version.
+  newest AppImage URL dynamically instead of hardcoding a version. The website
+  build excludes root-owned Vitest files (`website/tsconfig.json`): CI installs
+  only website dependencies, so typechecking those tests broke every Pages
+  deploy from v1.2.6 onward and left the live site stuck on the old resolver.
 - Download UI has a real progress bar: determinate when byte counts exist, an
   animated indeterminate bar otherwise, and a 15s stall watchdog with a
   "Restart this download" action. The native shell stops a stale sidecar still
@@ -330,7 +333,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 618 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 620 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
