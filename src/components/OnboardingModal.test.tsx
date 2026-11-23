@@ -71,6 +71,67 @@ describe("OnboardingModal", () => {
     expect(screen.getByRole("meter", { name: /microphone input level/i })).toBeInTheDocument();
   });
 
+  it("keeps multiple model pulls open at the same time", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const body = String(url).includes("permissions") ? perms : {
+        ...status,
+        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": false },
+      };
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }));
+
+    const sockets: Array<{ closed: boolean; model: string }> = [];
+    class TestWS {
+      static OPEN = 1;
+      readyState = TestWS.OPEN;
+      closed = false;
+      model = "";
+      onopen: (() => void) | null = null;
+      onmessage: ((e: { data: string }) => void) | null = null;
+      constructor() { sockets.push(this as any); setTimeout(() => this.onopen?.(), 0); }
+      send(data: string) { this.model = JSON.parse(data).model; }
+      close() { this.closed = true; }
+    }
+    vi.stubGlobal("WebSocket", TestWS);
+
+    render(<OnboardingModal onComplete={() => {}} />);
+    const buttons = await screen.findAllByRole("button", { name: /download the .* model/i });
+    expect(buttons).toHaveLength(2);
+
+    await user.click(buttons[0]);
+    await user.click(buttons[1]);
+
+    await waitFor(() => expect(sockets.length).toBe(2));
+    expect(sockets.every((s) => !s.closed)).toBe(true);
+    expect(new Set(sockets.map((s) => s.model)).size).toBe(2);
+  });
+
+  it("downloads all missing models from one button", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const body = String(url).includes("permissions") ? perms : {
+        ...status,
+        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": false },
+      };
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }));
+    const sockets: string[] = [];
+    class TestWS {
+      static OPEN = 1;
+      readyState = TestWS.OPEN;
+      onopen: (() => void) | null = null;
+      constructor() { sockets.push("ws"); setTimeout(() => this.onopen?.(), 0); }
+      send(data: string) { sockets[0] = JSON.parse(data).model; }
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", TestWS);
+
+    render(<OnboardingModal onComplete={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: /download all missing/i }));
+    await waitFor(() => expect(sockets.length).toBe(2));
+  });
+
   it("shows the backend error alert with a retry button when fetch fails", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
     render(<OnboardingModal onComplete={() => {}} />);

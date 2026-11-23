@@ -10,6 +10,7 @@ Spawned and killed by the Tauri shell. The HUD connects to ws://127.0.0.1:8765/w
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -304,24 +305,52 @@ async def setup_pull_model(websocket: WebSocket):
     await websocket.accept()
     logger.info("Setup pull-model client connected")
 
-    progress_tasks: set[asyncio.Task] = set()
+    # One ordered sender. Fire-and-forget send tasks race each other on the
+    # same websocket and silently fail, which left the HUD stuck at 0%.
+    progress_queue: asyncio.Queue[str] = asyncio.Queue()
+    last_percent: dict[str, int] = {}
 
-    async def send_progress(label: str, percent: Optional[int], status: str, model: str) -> None:
-        await websocket.send_text(
+    async def _progress_sender() -> None:
+        while True:
+            payload = await progress_queue.get()
+            try:
+                await websocket.send_text(payload)
+            except Exception:  # pragma: no cover - client disconnected
+                progress_queue.task_done()
+                return
+            progress_queue.task_done()
+
+    sender = asyncio.create_task(_progress_sender())
+
+    def on_progress(label: str, percent: Optional[int], status: str) -> None:
+        nonlocal model_name
+        value = percent
+        if value is None:
+            # Ollama omits byte counts for some stages; keep the bar moving with
+            # a conservative stage estimate rather than showing a frozen 0%.
+            lowered = status.lower()
+            if "manifest" in lowered:
+                estimate = 5
+            elif "download" in lowered or "pulling" in lowered:
+                estimate = 45
+            elif "verif" in lowered or "digest" in lowered:
+                estimate = 75
+            elif "writ" in lowered or "extract" in lowered:
+                estimate = 90
+            else:
+                estimate = 20
+            value = max(estimate, last_percent.get(model_name, 0))
+        if value is not None:
+            last_percent[model_name] = max(value, last_percent.get(model_name, 0))
+        progress_queue.put_nowait(
             ServerMessage(
                 type="pull_progress",
-                model=model,
+                model=model_name,
                 text=status,
-                percent=percent,
+                percent=value,
                 detail=label,
             ).to_json()
         )
-
-    def on_progress(label: str, percent: Optional[int], status: str) -> None:
-        # Keep a strong reference so the send task is never GC'd mid-flight.
-        task = asyncio.create_task(send_progress(label, percent, status, model_name))
-        progress_tasks.add(task)
-        task.add_done_callback(progress_tasks.discard)
 
     try:
         while True:
@@ -336,9 +365,8 @@ async def setup_pull_model(websocket: WebSocket):
 
             model_name = str(data.get("model", ""))
             result = await setup_module.pull_model(model_name, on_progress)
-            # Ensure all progress frames are flushed before the terminal message.
-            if progress_tasks:
-                await asyncio.gather(*list(progress_tasks), return_exceptions=True)
+            # Every queued frame is sent before the terminal message.
+            await progress_queue.join()
             if result.get("ok"):
                 await websocket.send_text(
                     ServerMessage(
@@ -358,6 +386,12 @@ async def setup_pull_model(websocket: WebSocket):
         logger.info("Setup pull-model client disconnected")
     except Exception:
         logger.exception("Setup pull-model endpoint error")
+    finally:
+        sender.cancel()
+        try:
+            await sender
+        except asyncio.CancelledError:  # pragma: no cover - cancellation
+            pass
 
 
 # ---- WebSocket broadcast (used by tool threads) ----

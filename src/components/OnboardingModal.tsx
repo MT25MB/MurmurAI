@@ -26,11 +26,11 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   const [loadError, setLoadError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [installInfo, setInstallInfo] = useState<{ command: string; url: string } | null>(null);
-  const [pull, setPull] = useState<{ model: string; text: string; percent: number | null } | null>(null);
+  const [pulls, setPulls] = useState<Record<string, { text: string; percent: number | null }>>({});
   const [micLevel, setMicLevel] = useState(0);
   const [micState, setMicState] = useState<"idle" | "listening" | "error" | "done">("idle");
   const [busy, setBusy] = useState(false);
-  const closePullRef = useRef<(() => void) | null>(null);
+  const closePullRefs = useRef<Record<string, () => void>>({});
   const micCleanupRef = useRef<(() => void) | null>(null);
 
   const refresh = useCallback(async (): Promise<boolean> => {
@@ -62,7 +62,8 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   useEffect(() => {
     refresh();
     return () => {
-      closePullRef.current?.();
+      Object.values(closePullRefs.current).forEach((close) => close());
+      closePullRefs.current = {};
       micCleanupRef.current?.();
     };
   }, [refresh]);
@@ -82,16 +83,23 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   };
 
   const handlePull = (model: string) => {
-    closePullRef.current?.();
-    setPull({ model, text: "Starting download…", percent: 0 });
-    closePullRef.current = pullModel(
+    if (closePullRefs.current[model]) return; // already downloading this one
+    setPulls((prev) => ({ ...prev, [model]: { text: "Starting download…", percent: 0 } }));
+    closePullRefs.current[model] = pullModel(
       model,
-      (text, percent) => setPull({ model, text, percent }),
+      (text, percent) =>
+        setPulls((prev) => ({ ...prev, [model]: { text, percent } })),
       (ok, text) => {
-        setPull({ model, text, percent: ok ? 100 : null });
+        setPulls((prev) => ({ ...prev, [model]: { text, percent: ok ? 100 : null } }));
+        delete closePullRefs.current[model];
         if (ok) setTimeout(refresh, 500);
       },
     );
+  };
+
+  const pullAllMissing = () => {
+    if (!status) return;
+    status.required_models.filter((m) => !status.models[m]).forEach(handlePull);
   };
 
   const testMic = async () => {
@@ -283,9 +291,21 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
 
         {/* Model pulls */}
         <section className="mt-6">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            Local models
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Local models
+            </h2>
+            {status.required_models.some((m) => !status.models[m]) && (
+              <button
+                type="button"
+                onClick={pullAllMissing}
+                className="app-region-no-drag rounded-md border border-blue/40 bg-blue-deep/25 px-2 py-1 text-[10px] font-semibold text-blue hover:bg-blue-deep/40"
+                aria-label="Download all missing local models at once"
+              >
+                Download all missing
+              </button>
+            )}
+          </div>
           <div className="mt-2 space-y-2">
             {status.required_models.map((m) => (
               <div key={m} className="rounded-lg border border-border bg-surface/60 p-3">
@@ -309,26 +329,26 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                     </button>
                   )}
                 </div>
-                {pull?.model === m && (
+                {pulls[m] && (
                   <div className="mt-2" aria-live="polite">
-                    <p className="truncate text-[11px] text-blue" title={pull.text} aria-hidden="true">
-                      {pull.text}
+                    <p className="truncate text-[11px] text-blue" title={pulls[m].text} aria-hidden="true">
+                      {pulls[m].text}
                     </p>
                     <div
                       role="progressbar"
                       aria-label={`Download progress for ${m}`}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-valuenow={pull.percent ?? 0}
+                      aria-valuenow={pulls[m].percent ?? 0}
                     >
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                         <div
                           className="h-full rounded-full bg-blue-fill transition-all duration-200"
-                          style={{ width: `${pull.percent ?? 0}%` }}
+                          style={{ width: `${pulls[m].percent ?? 0}%` }}
                         />
                       </div>
                     </div>
-                    <span className="sr-only">{pull.text}</span>
+                    <span className="sr-only">{pulls[m].text}</span>
                   </div>
                 )}
               </div>
