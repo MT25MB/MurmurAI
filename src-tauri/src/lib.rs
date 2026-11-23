@@ -94,6 +94,28 @@ fn toggle_window(window: &WebviewWindow) {
     }
 }
 
+/// A previous app version can leave its sidecar holding port 8765 after an
+/// in-place update. Stop it so the freshly installed code actually serves.
+fn stop_stale_sidecar() {
+    if std::net::TcpStream::connect("127.0.0.1:8765").is_err() {
+        return;
+    }
+    eprintln!("[Murmur AI] stale backend on 127.0.0.1:8765; stopping it");
+    #[cfg(windows)]
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", "murmur-backend.exe"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    #[cfg(not(windows))]
+    let _ = std::process::Command::new("pkill")
+        .args(["-f", "murmur-backend"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    std::thread::sleep(std::time::Duration::from_millis(600));
+}
+
 /// Spawn the backend sidecar via tauri-plugin-shell.
 ///
 /// Production: launch the bundled PyInstaller binary (externalBin).
@@ -107,6 +129,10 @@ fn spawn_backend(app: &tauri::AppHandle) {
     }
 
     use tauri_plugin_shell::process::Command;
+
+    if !cfg!(debug_assertions) {
+        stop_stale_sidecar();
+    }
 
     // Build the command: in debug/dev builds always use the Python source
     // entrypoint; in release builds use the bundled PyInstaller sidecar.

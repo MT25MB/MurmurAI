@@ -244,6 +244,10 @@ This file is the source of truth for every coding agent and human contributor.
   (`website/src/releases.ts`), not GitHub's date-based `/releases/latest`, so an
   older high-version release can't win. The README's Linux command resolves the
   newest AppImage URL dynamically instead of hardcoding a version.
+- Download UI has a real progress bar: determinate when byte counts exist, an
+  animated indeterminate bar otherwise, and a 15s stall watchdog with a
+  "Restart this download" action. The native shell stops a stale sidecar still
+  holding port 8765 before spawning the new one after an update.
 - Tauri window API. Design decision: "maximize" expands the HUD to 520x620
   rather than OS-maximizing a transparent always-on-top pill into a full-screen
   overlay; minimize restores through the tray; close kills the sidecar.
@@ -284,7 +288,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (57 tests incl. website)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (58 tests incl. website)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs

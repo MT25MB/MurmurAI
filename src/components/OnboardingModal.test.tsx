@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import OnboardingModal from "./OnboardingModal";
 
@@ -130,6 +130,41 @@ describe("OnboardingModal", () => {
     render(<OnboardingModal onComplete={() => {}} />);
     await user.click(await screen.findByRole("button", { name: /download all missing/i }));
     await waitFor(() => expect(sockets.length).toBe(2));
+  });
+
+  it("shows a real loading bar and flags a download that stops sending progress", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const body = String(url).includes("permissions") ? perms : {
+        ...status,
+        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": true },
+      };
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }));
+    class SilentWS {
+      static OPEN = 1;
+      readyState = SilentWS.OPEN;
+      onopen: (() => void) | null = null;
+      constructor() { setTimeout(() => this.onopen?.(), 0); }
+      send() {}
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", SilentWS);
+
+    render(<OnboardingModal onComplete={() => {}} />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole("button", { name: /download the qwen2\.5:7b model/i }));
+    await act(async () => { await Promise.resolve(); });
+
+    const bar = screen.getByRole("progressbar", { name: /download progress for qwen2\.5:7b/i });
+    expect(bar).toHaveAttribute("aria-valuetext", "Downloading, estimating remaining time");
+    expect(bar.querySelector(".progress-indeterminate")).toBeTruthy();
+
+    await act(async () => { vi.advanceTimersByTime(16000); });
+    expect(screen.getByText(/no progress from the local engine/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /restart this download/i })).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("shows the backend error alert with a retry button when fetch fails", async () => {

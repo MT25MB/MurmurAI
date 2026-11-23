@@ -26,7 +26,13 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   const [loadError, setLoadError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [installInfo, setInstallInfo] = useState<{ command: string; url: string } | null>(null);
-  const [pulls, setPulls] = useState<Record<string, { text: string; percent: number | null }>>({});
+  const [pulls, setPulls] = useState<Record<string, {
+    text: string;
+    percent: number | null;
+    updatedAt: number;
+    active: boolean;
+  }>>({});
+  const [tick, setTick] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [micState, setMicState] = useState<"idle" | "listening" | "error" | "done">("idle");
   const [busy, setBusy] = useState(false);
@@ -45,6 +51,13 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
       return false;
     }
   }, []);
+
+  // Re-render periodically so a stalled pull can be detected without frames.
+  useEffect(() => {
+    if (!Object.values(pulls).some((p) => p.active)) return;
+    const id = setInterval(() => setTick((n) => n + 1), 2000);
+    return () => clearInterval(id);
+  }, [pulls]);
 
   // Retry must survive the sidecar's cold start, so poll briefly with feedback
   // instead of firing one fetch that fails instantly and looks unclickable.
@@ -83,14 +96,27 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   };
 
   const handlePull = (model: string) => {
-    if (closePullRefs.current[model]) return; // already downloading this one
-    setPulls((prev) => ({ ...prev, [model]: { text: "Starting download…", percent: 0 } }));
+    // A stalled socket is restarted by closing it first; other models keep going.
+    if (closePullRefs.current[model]) {
+      closePullRefs.current[model]();
+      delete closePullRefs.current[model];
+    }
+    setPulls((prev) => ({
+      ...prev,
+      [model]: { text: "Starting download…", percent: 0, updatedAt: Date.now(), active: true },
+    }));
     closePullRefs.current[model] = pullModel(
       model,
       (text, percent) =>
-        setPulls((prev) => ({ ...prev, [model]: { text, percent } })),
+        setPulls((prev) => ({
+          ...prev,
+          [model]: { text, percent, updatedAt: Date.now(), active: true },
+        })),
       (ok, text) => {
-        setPulls((prev) => ({ ...prev, [model]: { text, percent: ok ? 100 : null } }));
+        setPulls((prev) => ({
+          ...prev,
+          [model]: { text, percent: ok ? 100 : null, updatedAt: Date.now(), active: false },
+        }));
         delete closePullRefs.current[model];
         if (ok) setTimeout(refresh, 500);
       },
@@ -329,28 +355,45 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                     </button>
                   )}
                 </div>
-                {pulls[m] && (
-                  <div className="mt-2" aria-live="polite">
-                    <p className="truncate text-[11px] text-blue" title={pulls[m].text} aria-hidden="true">
-                      {pulls[m].text}
-                    </p>
-                    <div
-                      role="progressbar"
-                      aria-label={`Download progress for ${m}`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={pulls[m].percent ?? 0}
-                    >
-                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                        <div
-                          className="h-full rounded-full bg-blue-fill transition-all duration-200"
-                          style={{ width: `${pulls[m].percent ?? 0}%` }}
-                        />
+                {pulls[m] && (() => {
+                  const pull = pulls[m];
+                  const stalled = pull.active && tick > 0 && Date.now() - pull.updatedAt > 15000;
+                  const known = pull.percent !== null && pull.percent > 0;
+                  return (
+                    <div className="mt-2" aria-live="polite">
+                      <p className="truncate text-[11px] text-blue" title={pull.text} aria-hidden="true">
+                        {stalled ? "No progress from the local engine" : pull.text}
+                      </p>
+                      <div
+                        role="progressbar"
+                        aria-label={`Download progress for ${m}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={known ? pull.percent! : undefined}
+                        aria-valuetext={known ? `${pull.percent}%` : "Downloading, estimating remaining time"}
+                      >
+                        <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                          <div
+                            className={`h-full rounded-full transition-all duration-200 ${
+                              known ? "bg-blue-fill" : "progress-indeterminate"
+                            }`}
+                            style={known ? { width: `${pull.percent}%` } : undefined}
+                          />
+                        </div>
                       </div>
+                      {stalled && (
+                        <button
+                          type="button"
+                          onClick={() => handlePull(m)}
+                          className="mt-2 rounded-md border border-red/40 px-2 py-1 text-[10px] font-semibold text-red hover:bg-red-fill/20"
+                        >
+                          Restart this download
+                        </button>
+                      )}
+                      <span className="sr-only">{stalled ? "Download stalled" : pull.text}</span>
                     </div>
-                    <span className="sr-only">{pulls[m].text}</span>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
           </div>
