@@ -110,12 +110,14 @@ describe("HudPill", () => {
     const user = userEvent.setup();
     render(<HudPill />);
 
+    windowMock.setResizable.mockClear();
     await user.click(screen.getByRole("button", { name: /expand hud/i }));
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
       expect(size.width).toBe(520);
       expect(size.height).toBe(620);
     });
+    expect(windowMock.setResizable).toHaveBeenCalledWith(true);
 
     await user.click(screen.getByRole("button", { name: /collapse hud/i }));
     await waitFor(() => {

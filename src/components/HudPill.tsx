@@ -67,9 +67,9 @@ export default function HudPill() {
 
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
-    if (expanded) void setHudSize(520, 620);
-    else if (typing) void setHudSize(400, 150);
-    else void setHudSize(400, 84);
+    if (expanded) void setHudSize(520, 620, true);
+    else if (typing) void setHudSize(400, 150, false);
+    else void setHudSize(400, 84, false);
   }, [expanded, typing]);
 
   useEffect(() => {
