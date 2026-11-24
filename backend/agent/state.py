@@ -24,8 +24,10 @@ class ClientMessage(BaseModel):
         "ping", "state", "text_input", "audio_chunk", "confirm",
         "guidance_response", "abort_automation", "set_listening_mode",
         "update_available", "update_confirm", "update_status", "permission_status", "be_quiet",
+        "set_muted",
     ]
     text: str | None = None
+    muted: bool | None = None
     data: str | None = None  # base64 audio chunk
     request_id: str | None = None
     approved: bool | None = None

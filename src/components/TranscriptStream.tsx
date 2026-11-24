@@ -4,6 +4,8 @@ import type { ServerMessage } from "../lib/websocket";
 interface TranscriptStreamProps {
   lastMessage: ServerMessage | null;
   maxTurns?: number;
+  /** Show the log visually in the expanded HUD; otherwise screen-reader only. */
+  visible?: boolean;
 }
 
 interface Turn {
@@ -20,7 +22,7 @@ interface Turn {
  * visually hidden but exposed as a polite live log so assistive tech can read
  * each turn in order.
  */
-export default function TranscriptStream({ lastMessage, maxTurns = 50 }: TranscriptStreamProps) {
+export default function TranscriptStream({ lastMessage, maxTurns = 50, visible = false }: TranscriptStreamProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const nextId = useRef(1);
 
@@ -41,10 +43,17 @@ export default function TranscriptStream({ lastMessage, maxTurns = 50 }: Transcr
       aria-live="polite"
       aria-relevant="additions"
       aria-atomic="false"
-      className="sr-only"
+      className={
+        visible
+          ? "min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-border bg-obsidian/80 p-3 text-xs leading-relaxed text-ink"
+          : "sr-only"
+      }
     >
+      {turns.length === 0 && visible ? (
+        <p className="text-muted">Nothing said yet. Speak, or type a command below.</p>
+      ) : null}
       {turns.map((turn) => (
-        <p key={turn.id} data-role={turn.role}>
+        <p key={turn.id} data-role={turn.role} className={turn.role === "system" ? "text-muted" : "text-ink"}>
           {turn.role === "system" ? `Status: ${turn.text}` : turn.text}
         </p>
       ))}
