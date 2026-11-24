@@ -12,6 +12,7 @@ import platform
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:  # pragma: no cover - platform optional
@@ -350,6 +351,74 @@ def _sys() -> str:
     return platform.system()
 
 
+# Windows Store apps are not .exe files on disk: "calculator" only resolves via
+# its ms-* protocol. Keep a small alias table so common spoken requests work
+# without the model having to guess a Windows-specific command.
+WINDOWS_APP_ALIASES: dict[str, tuple[str, ...]] = {
+    "calculator": ("ms-calculator:", "calc.exe"),
+    "calc": ("ms-calculator:", "calc.exe"),
+    "settings": ("ms-settings:", "ms-settings:system"),
+    "photos": ("ms-photos:",),
+    "store": ("ms-windows-store:",),
+    "mail": ("mailto:",),
+    "notepad": ("notepad.exe",),
+    "paint": ("mspaint.exe",),
+    "file explorer": ("explorer.exe",),
+    "explorer": ("explorer.exe",),
+    "edge": ("msedge.exe",),
+    "chrome": ("chrome.exe",),
+    "firefox": ("firefox.exe",),
+    "terminal": ("wt.exe",),
+    "vs code": ("code.exe",),
+    "visual studio code": ("code.exe",),
+    "word": ("winword.exe",),
+    "excel": ("excel.exe",),
+    "powerpoint": ("powerpoint.exe",),
+}
+
+
+def _windows_launch(name: str) -> bool:
+    """Try shell aliases, Start Menu shortcuts, then a Start-menu search."""
+    key = name.strip().lower().strip('"').strip("'")
+    candidates = list(WINDOWS_APP_ALIASES.get(key, ()))
+    candidates += [name, f"{name}.exe"]
+    for target in candidates:
+        try:
+            os.startfile(target)  # type: ignore[attr-defined]
+            return True
+        except Exception:
+            continue
+
+    # Start Menu .lnk shortcuts (including installed desktop apps).
+    roots = [
+        Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+    ]
+    for root in roots:
+        if not root.exists():
+            continue
+        for shortcut in root.rglob("*.lnk"):
+            if key in shortcut.stem.lower() or key.replace(" ", "") in shortcut.stem.lower().replace(" ", ""):
+                try:
+                    os.startfile(str(shortcut))  # type: ignore[attr-defined]
+                    return True
+                except Exception:
+                    continue
+
+    # Human-style fallback: Win key, type the app name, press Enter.
+    if pyautogui is not None:
+        try:
+            pyautogui.press("win")
+            time.sleep(0.35)
+            pyautogui.write(name, interval=0.02)
+            time.sleep(0.5)
+            pyautogui.press("enter")
+            return True
+        except Exception:
+            logger.exception("Start menu launch fallback failed")
+    return False
+
+
 def open_application(app_name: str) -> str:
     """Launch an app cross-platform."""
     name = (app_name or "").strip()
@@ -358,8 +427,9 @@ def open_application(app_name: str) -> str:
     try:
         system = _sys()
         if system == "Windows":
-            os.startfile(name)  # type: ignore[attr-defined]
-            return f"Opened {name}."
+            if _windows_launch(name):
+                return f"Opened {name}."
+            return f"Could not find a way to open {name}. Check the app name and try again."
         if system == "Darwin":
             subprocess.run(["open", "-a", name], check=False)
             return f"Opened {name}."

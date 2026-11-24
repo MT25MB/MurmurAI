@@ -14,6 +14,20 @@ from tools.installer_tool import detect_install_plan
 from tools.safety import SafetyGate
 
 
+def test_windows_calculator_resolves_to_a_store_protocol(monkeypatch):
+    """Spoken app names must work on Windows without guessing an .exe path."""
+    import tools.os_tools as os_tools
+
+    opened = []
+    monkeypatch.setattr(os_tools, "_sys", lambda: "Windows")
+    monkeypatch.setattr(
+        os_tools.os, "startfile", lambda target: opened.append(target), raising=False
+    )
+
+    assert os_tools.open_application("calculator") == "Opened calculator."
+    assert opened[0] == "ms-calculator:"
+
+
 # ---- tool schemas ----
 
 def test_all_tool_schemas_valid():
