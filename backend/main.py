@@ -79,6 +79,9 @@ class AppState:
         self.plugin_task: Optional[asyncio.Task] = None
         self.demo: Optional[object] = None  # active guided practice session
         self.os_permissions: Optional[dict] = None  # from the Tauri shell
+        # HUD mute is an explicit runtime switch: utterances are ignored but the
+        # listener keeps running so unmuting is instant and the waveform stays live.
+        self.muted = False
         self._shutting_down = False
 
     def session_for(self, websocket: WebSocket) -> SessionState:
@@ -491,6 +494,15 @@ async def ws(websocket: WebSocket):
                 # Free-text answer to a spoken "I'm stuck, what should I do?" prompt.
                 if tool_bus.resolve_guidance(msg.request_id or "", msg.text or ""):
                     await send(ServerMessage(type="info", text="Guidance received."))
+
+            elif msg.type == "set_muted":
+                app_state.muted = bool(msg.muted)
+                await send(
+                    ServerMessage(
+                        type="info",
+                        text="Microphone muted." if app_state.muted else "Microphone unmuted.",
+                    )
+                )
 
             elif msg.type == "set_listening_mode":
                 mode = (msg.mode or "").lower()
@@ -1299,6 +1311,9 @@ async def start_listening(session: SessionState, send) -> None:
     )
 
     def on_utterance(text: str) -> None:
+        if app_state.muted:
+            logger.info("Ignoring utterance while muted")
+            return
         session.add_turn("user", text)
         confidence = getattr(app_state.listener, "last_confidence", "high")
         loop = app_state.loop or asyncio.get_event_loop()
@@ -1389,7 +1404,7 @@ async def _listen_amplitude(session: SessionState, send) -> None:
                 indata, _ = stream.read(1600)
                 rms = float((indata ** 2).mean() ** 0.5) if indata.size else 0.0
                 # 0..1-ish amplitude for the UI.
-                amp = min(rms * 8.0, 1.0)
+                amp = 0.0 if app_state.muted else min(rms * 8.0, 1.0)
                 await send(
                     ServerMessage(
                         type="state",

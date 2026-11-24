@@ -36,6 +36,25 @@ def test_state_broadcast_sends_to_all_huds(status):
     assert sent[0]["type"] == "state" and sent[0]["status"] == status
 
 
+def test_ws_set_muted_toggles_the_runtime_mute_flag():
+    """Mute is a real sidecar switch, not just a HUD icon colour."""
+    client = TestClient(main.app)
+    main.app_state.muted = False
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()  # greeting
+            ws.send_text('{"type":"set_muted","muted":true}')
+            muted = ws.receive_json()
+            assert muted["type"] == "info"
+            assert "muted" in muted["text"].lower()
+            assert main.app_state.muted is True
+            ws.send_text('{"type":"set_muted","muted":false}')
+            assert ws.receive_json()["type"] == "info"
+            assert main.app_state.muted is False
+    finally:
+        main.app_state.muted = False
+
+
 def test_server_message_serialization_omits_none():
     msg = ServerMessage(type="progress", text="45%", percent=45)
     assert '"percent":45' in msg.to_json()

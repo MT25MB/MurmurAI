@@ -170,6 +170,14 @@ export default function HudPill() {
     [update, send],
   );
 
+  // Mute must reach the sidecar, otherwise the mic still feeds the brain and the
+  // HUD keeps announcing "Listening" after the user clicked mute.
+  const toggleMute = useCallback(() => {
+    const next = !muted;
+    setMuted(next);
+    send({ type: "set_muted", muted: next });
+  }, [muted, send]);
+
   // Tauri global hotkey (Ctrl/Cmd+Shift+Space) toggles standby. In a browser
   // there is no Tauri event, so the in-HUD button below is the tactile fallback.
   useSleepWakeHotkey(mode, changeMode);
@@ -195,7 +203,7 @@ export default function HudPill() {
         setTyping(true);
       } else if (e.key.toLowerCase() === "m") {
         e.preventDefault();
-        setMuted((m) => !m);
+        toggleMute();
       } else if (e.key.toLowerCase() === "q") {
         // Quick "be quiet": stop TTS immediately without muting the mic.
         e.preventDefault();
@@ -205,7 +213,7 @@ export default function HudPill() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirmation, answer, send]);
+  }, [confirmation, answer, send, toggleMute]);
 
   // Tray/global hotkey asks us to silence spoken output immediately.
   useEffect(() => {
@@ -249,11 +257,16 @@ export default function HudPill() {
   }, [send]);
 
   const meta = stateStyle[status] || stateStyle.IDLE;
-  const statusMessage = `${meta.label}. ${muted ? "Microphone muted." : ""} ${transcript || ""}`.trim();
+  const displayLabel = muted ? "Muted" : meta.label;
+  const statusMessage = `${displayLabel}. ${muted ? "Microphone muted." : ""} ${transcript || ""}`.trim();
 
   return (
     <section
-      className="app-region-drag fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+      className={
+        expanded
+          ? "app-region-drag fixed inset-0 z-[9999] flex select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          : "app-region-drag fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+      }
       role="region"
       aria-label="Murmur AI status and controls"
     >
@@ -261,8 +274,6 @@ export default function HudPill() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
-      <TranscriptStream lastMessage={lastMessage} />
-
       <div className="flex items-center gap-2.5">
         <img
           src={logoUrl}
@@ -275,8 +286,12 @@ export default function HudPill() {
             <h2 className="truncate text-xs font-semibold tracking-tight text-ink">
               MURMUR<span className="text-blue">/AI</span>
             </h2>
-            <span className="mono-label !text-[10px]" style={{ color: meta.color }} aria-hidden="true">
-              {meta.label}
+            <span
+              className="mono-label !text-[10px]"
+              style={{ color: muted ? "var(--color-muted)" : meta.color }}
+              aria-hidden="true"
+            >
+              {displayLabel}
             </span>
           </div>
           {transcript && (
@@ -332,7 +347,7 @@ export default function HudPill() {
         <button
           type="button"
           className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
-          onClick={() => setMuted((m) => !m)}
+          onClick={toggleMute}
           aria-pressed={muted}
           aria-label={muted ? "Unmute microphone (M)" : "Mute microphone (M)"}
           title={muted ? "Unmute (M)" : "Mute (M)"}
@@ -387,11 +402,16 @@ export default function HudPill() {
       </div>
 
       <div className="my-2.5 flex w-full items-end justify-center" aria-hidden="true">
-        <Waveform amplitude={amplitudeRef.current} active={status === "LISTENING" || status === "SPEAKING"} />
+        <Waveform
+          amplitude={amplitudeRef.current}
+          active={!muted && (status === "LISTENING" || status === "SPEAKING")}
+        />
       </div>
 
-      {typing && (
-        <div className="app-region-no-drag mt-2 flex gap-1.5">
+      <TranscriptStream lastMessage={lastMessage} visible={expanded} />
+
+      {(typing || expanded) && (
+        <div className="app-region-no-drag flex gap-1.5">
           <label htmlFor="typed-command" className="sr-only">Command to send</label>
           <input
             id="typed-command"

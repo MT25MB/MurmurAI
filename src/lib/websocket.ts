@@ -17,6 +17,7 @@ export type ClientMessage =
   | { type: "guidance_response"; request_id: string; text: string }
   | { type: "abort_automation"; text?: string }
   | { type: "set_listening_mode"; mode: "active" | "sleep" }
+  | { type: "set_muted"; muted: boolean }
   | { type: "update_available"; version?: string; notes?: string }
   | { type: "update_confirm"; request_id: string; approved: boolean }
   | { type: "update_status"; detail?: string }

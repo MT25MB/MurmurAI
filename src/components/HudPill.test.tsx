@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import HudPill from "./HudPill";
 
@@ -64,6 +64,35 @@ describe("HudPill", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("button", { name: /mute microphone/i })).toBeInTheDocument();
+  });
+
+  it("sends mute to the sidecar and shows the muted state", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+
+    await user.click(screen.getByRole("button", { name: /mute microphone/i }));
+
+    expect(sockets[0].sent.map((raw: string) => JSON.parse(raw))).toContainEqual({
+      type: "set_muted",
+      muted: true,
+    });
+    expect(screen.getByRole("button", { name: /unmute microphone/i })).toBeInTheDocument();
+    expect(screen.getByRole("status").textContent).toContain("Muted");
+  });
+
+  it("fills the expanded window with a visible transcript panel", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "transcript", text: "Hello from Murmur" });
+
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+
+    const log = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(log).not.toHaveClass("sr-only");
+    expect(within(log).getByText("Hello from Murmur")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/type a command/i)).toBeInTheDocument();
   });
 
   it("minimizes and closes through the native window", async () => {
