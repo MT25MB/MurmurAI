@@ -47,7 +47,7 @@ Murmur AI looks at the screen instead.
 ## What it can do
 
 * **Voice in, voice out.** `webrtcvad` catches when you start and stop talking, `faster-whisper` turns the audio into text, and `Kokoro-82M` speaks the reply. Start talking mid-reply and it stops.
-* **Set-of-Marks.** `mss` grabs a frame. OpenCV and OS accessibility APIs find the controls. Numbered boxes go on the image, the vision model (`qwen2.5-vl:7b`) picks a number, and `pyautogui` clicks or types.
+* **Set-of-Marks.** `mss` grabs a frame. OpenCV and OS accessibility APIs find the controls. Numbered boxes go on the image, the vision model (`qwen2.5vl:7b`) picks a number, and `pyautogui` clicks or types.
 * **Shortcuts first.** It checks which app is in front and uses that app's own hotkeys where it can. Fewer clicks, fewer mistakes.
 * **Installing apps.** Say *"Install VLC"* or *"Install Blender"*. It searches `winget`, `brew`, `flatpak`, `snap`, `apt`, `dnf`, or `pacman`, shows you the command, and waits for your OK. If no package exists, it falls back to the browser.
 * **Clipboard and recent files.** Ask *"What did I just copy?"*, *"Summarize my clipboard"*, or *"Copy that result to my clipboard"*. Say *"What did I just download?"* to hear recent files with sizes and types. Words like *"this"* and *"it"* resolve against the last file or app you mentioned in the session.
@@ -67,7 +67,7 @@ The desktop shell is **Tauri v2** (Rust with React and TypeScript). A Python sid
               ┌───────────┴────────────┐
               ▼                        ▼
    Native OS & CLI Tools      Set-of-Marks Vision Loop
-   (winget/brew/files)        (mss + OpenCV + qwen2.5-vl:7b)
+   (winget/brew/files)        (mss + OpenCV + qwen2.5vl:7b)
               │                        │
               └───────────┬────────────┘
                           ▼
@@ -76,7 +76,7 @@ The desktop shell is **Tauri v2** (Rust with React and TypeScript). A Python sid
 
 - **Shell:** Tauri v2, React, TypeScript, Tailwind. The HUD is a small transparent pill with a tray icon.
 - **Sidecar:** Python 3.11 and FastAPI. States move through `IDLE → LISTENING → THINKING → SPEAKING`.
-- **Models:** Ollama runs `qwen2.5:7b` for conversation and tool calls, `qwen2.5-vl:7b` for vision.
+- **Models:** Ollama runs `qwen2.5:7b` for conversation and tool calls, `qwen2.5vl:7b` for vision.
 - **Voice:** faster-whisper (`base.en`, `int8`) for speech to text, Kokoro-82M for text to speech, with Piper or pyttsx3 as fallbacks.
 - **Cache:** models and weights live in `~/.murmur-ai/models/`.
 - **Network:** the only listeners are `127.0.0.1:8765` and Ollama at `127.0.0.1:11434`. Nothing phones home.
@@ -174,7 +174,7 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 
    ```bash
    ollama pull qwen2.5:7b
-   ollama pull qwen2.5-vl:7b
+   ollama pull qwen2.5vl:7b
    ```
 
 3. **Allow screen access.** On macOS, turn on Accessibility and Screen Recording. On Linux, you need X11 (XTest) or a Wayland portal. Windows needs nothing extra.

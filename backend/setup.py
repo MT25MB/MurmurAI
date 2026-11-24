@@ -2,7 +2,7 @@
 
 Responsibilities (all local, zero paid APIs):
 - Detect whether Ollama is installed and running at http://localhost:11434.
-- Report which required local models are pulled (qwen2.5:7b, qwen2.5-vl:7b).
+- Report which required local models are pulled (qwen2.5:7b, qwen2.5vl:7b).
 - Stream Ollama `/api/pull` download progress over a WebSocket endpoint (wired in main.py).
 - Auto-download faster-whisper + Kokoro-82M weights on first launch into
   ~/.murmur-ai/models/ (a local cache owned by this app).
@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from agent.model_names import normalize_model
 from system.profiler import (
     KEEP_ALIVE,
     configure_from_hardware as _configure_hardware,
@@ -36,11 +37,11 @@ logger = logging.getLogger("murmur_ai.setup")
 OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")).rstrip("/")
 
 # Models required for a fully functional Murmur AI.
-REQUIRED_MODELS: list[str] = ["qwen2.5:7b", "qwen2.5-vl:7b"]
+REQUIRED_MODELS: list[str] = ["qwen2.5:7b", "qwen2.5vl:7b"]
 MODEL_LABELS: dict[str, str] = {
     "qwen2.5:7b": "Fast voice & tool chat model",
-    "qwen2.5-vl:7b": "Screen-vision model",
-    "qwen2.5-vl:3b": "Light screen-vision model",
+    "qwen2.5vl:7b": "Screen-vision model",
+    "qwen2.5vl:3b": "Light screen-vision model",
     "qwen3.5:9b": "Modern vision model (pixel coordinates)",
     "gemma4:12b": "Modern vision model (pixel coordinates)",
 }
@@ -336,7 +337,7 @@ def _gb(byte_count: int) -> str:
 
 async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any]:
     """Stream Ollama /api/pull progress via on_progress; return final status."""
-    model = (model or "").strip()
+    model = normalize_model(model)
     if not model:
         return {"ok": False, "error": "No model name provided."}
 

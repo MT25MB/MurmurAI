@@ -359,9 +359,16 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                   const pull = pulls[m];
                   const stalled = pull.active && tick > 0 && Date.now() - pull.updatedAt > 15000;
                   const known = pull.percent !== null && pull.percent > 0;
+                  const failed = !pull.active && !known;
                   return (
                     <div className="mt-2" aria-live="polite">
-                      <p className="truncate text-[11px] text-blue" title={pull.text} aria-hidden="true">
+                      <p
+                        className={`text-[11px] leading-snug ${
+                          failed ? "break-words text-red" : "truncate text-blue"
+                        }`}
+                        title={failed ? undefined : pull.text}
+                        aria-hidden="true"
+                      >
                         {stalled ? "No progress from the local engine" : pull.text}
                       </p>
                       <div
@@ -370,12 +377,18 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-valuenow={known ? pull.percent! : undefined}
-                        aria-valuetext={known ? `${pull.percent}%` : "Downloading, estimating remaining time"}
+                        aria-valuetext={
+                          known ? `${pull.percent}%` : failed ? "Download failed" : "Downloading, estimating remaining time"
+                        }
                       >
                         <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-2">
                           <div
                             className={`h-full rounded-full transition-all duration-200 ${
-                              known ? "bg-blue-fill" : "progress-indeterminate"
+                              known
+                                ? "bg-blue-fill"
+                                : pull.active
+                                  ? "progress-indeterminate"
+                                  : "bg-transparent"
                             }`}
                             style={known ? { width: `${pull.percent}%` } : undefined}
                           />

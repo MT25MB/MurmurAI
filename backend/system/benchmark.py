@@ -21,7 +21,7 @@ logger = logging.getLogger("murmur_ai.system.benchmark")
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 BENCHMARK_CHAT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-BENCHMARK_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5-vl:7b")
+BENCHMARK_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en")
 
 
@@ -200,7 +200,7 @@ def measure_som() -> BenchmarkResult:
 
 
 def measure_vlm_grounding() -> BenchmarkResult:
-    name = "qwen2.5-vl screen grounding"
+    name = "qwen2.5vl screen grounding"
     payload = {
         "model": BENCHMARK_VISION_MODEL,
         "messages": [{

@@ -2,15 +2,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import OnboardingModal from "./OnboardingModal";
+import * as setupLib from "../lib/setup";
 
 const status = {
   ollama: { installed: true, running: true, install_path: "/usr/bin/ollama" },
-  models: { "qwen2.5:7b": true, "qwen2.5-vl:7b": true },
-  model_labels: { "qwen2.5:7b": "Fast chat", "qwen2.5-vl:7b": "Screen vision" },
+  models: { "qwen2.5:7b": true, "qwen2.5vl:7b": true },
+  model_labels: { "qwen2.5:7b": "Fast chat", "qwen2.5vl:7b": "Screen vision" },
   weights: { whisper: true, kokoro: true },
   weights_ready: true,
   model_cache_dir: "/home/user/.murmur-ai/models",
-  required_models: ["qwen2.5:7b", "qwen2.5-vl:7b"],
+  required_models: ["qwen2.5:7b", "qwen2.5vl:7b"],
   complete: false,
   onboarding_dismissed: false,
 };
@@ -76,7 +77,7 @@ describe("OnboardingModal", () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => {
       const body = String(url).includes("permissions") ? perms : {
         ...status,
-        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": false },
+        models: { "qwen2.5:7b": false, "qwen2.5vl:7b": false },
       };
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }));
@@ -112,7 +113,7 @@ describe("OnboardingModal", () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => {
       const body = String(url).includes("permissions") ? perms : {
         ...status,
-        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": false },
+        models: { "qwen2.5:7b": false, "qwen2.5vl:7b": false },
       };
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }));
@@ -138,7 +139,7 @@ describe("OnboardingModal", () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => {
       const body = String(url).includes("permissions") ? perms : {
         ...status,
-        models: { "qwen2.5:7b": false, "qwen2.5-vl:7b": true },
+        models: { "qwen2.5:7b": false, "qwen2.5vl:7b": true },
       };
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }));
@@ -165,6 +166,34 @@ describe("OnboardingModal", () => {
     expect(screen.getByText(/no progress from the local engine/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /restart this download/i })).toBeInTheDocument();
     vi.useRealTimers();
+  });
+
+  it("shows the full pull error and stops the loading animation on failure", async () => {
+    const errorText =
+      "Not enough disk space to pull qwen2.5:7b: about 4.4 GB still needed, 2.7 GB free. Free space and try again.";
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const body = String(url).includes("permissions") ? perms : {
+        ...status,
+        models: { "qwen2.5:7b": false, "qwen2.5vl:7b": true },
+      };
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }));
+    const spy = vi.spyOn(setupLib, "pullModel").mockImplementation((_model, _onProgress, onDone) => {
+      onDone(false, errorText);
+      return () => {};
+    });
+
+    render(<OnboardingModal onComplete={() => {}} />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: /download the qwen2\.5:7b model/i }),
+    );
+
+    const visible = (await screen.findAllByText(errorText))[0];
+    expect(visible).toHaveClass("break-words");
+    const bar = screen.getByRole("progressbar", { name: /download progress for qwen2\.5:7b/i });
+    expect(bar).toHaveAttribute("aria-valuetext", "Download failed");
+    expect(bar.querySelector(".progress-indeterminate")).toBeNull();
+    spy.mockRestore();
   });
 
   it("shows the backend error alert with a retry button when fetch fails", async () => {

@@ -1,7 +1,7 @@
 """Visual computer-use agent loop for Murmur AI.
 
 Drives local GUI automation for complex desktop apps (Blender, DaVinci Resolve,
-browsers) entirely on-device via a local Ollama VLM (qwen2.5-vl:7b).
+browsers) entirely on-device via a local Ollama VLM (qwen2.5vl:7b).
 
 Accuracy upgrades:
 - Set-of-Marks (SoM): interactive UI elements are detected (OpenCV contours +
@@ -51,12 +51,13 @@ from agent.state import ServerMessage
 from agent.abort import abort_controller
 from agent.task_plan import TaskPlan, build_plan, format_history
 from agent.plan_preview import PlanPreview, extract_files
+from agent.model_names import normalize_model
 from agent.loop_detector import LoopDetector, action_fingerprint, screen_hash
 from agent.offscreen_search import ScrollSearch
 
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
 
-DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5-vl:7b")
+DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b"))
 OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 LOGS_DIR = Path(__file__).resolve().parents[1] / "logs"
 MAX_STEPS_DEFAULT = 15

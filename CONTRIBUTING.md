@@ -34,7 +34,7 @@ To run the full app, install [Ollama](https://ollama.com) and pull the models:
 
 ```bash
 ollama pull qwen2.5:7b
-ollama pull qwen2.5-vl:7b
+ollama pull qwen2.5vl:7b
 ```
 
 ## Website

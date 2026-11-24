@@ -13,19 +13,19 @@ from system.profiler import (
 
 
 def test_supported_vlm_families():
-    for model in ("qwen3.5:9b", "gemma4:12b", "qwen2.5-vl:7b", "qwen2.5-vl:3b"):
+    for model in ("qwen3.5:9b", "gemma4:12b", "qwen2.5vl:7b", "qwen2.5vl:3b"):
         assert model in VISION_MODELS
 
 
 def test_coordinate_modes_by_family():
-    assert coordinate_mode("qwen2.5-vl:7b") == "normalized_1000"
+    assert coordinate_mode("qwen2.5vl:7b") == "normalized_1000"
     assert coordinate_mode("qwen3.5:9b") == "pixels"
     assert coordinate_mode("gemma4:12b") == "pixels"
     assert coordinate_mode("unknown:model") == "normalized_1000"
 
 
 def test_normalized_coords_stay_normalized():
-    x, y = normalize_vlm_coords([500, 400], 1920, 1080, "qwen2.5-vl:7b")
+    x, y = normalize_vlm_coords([500, 400], 1920, 1080, "qwen2.5vl:7b")
     assert (x, y) == (500, 400)
 
 

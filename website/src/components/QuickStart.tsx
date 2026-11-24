@@ -11,7 +11,7 @@ const steps = [
     n: "02",
     title: "First-run model download",
     body: "Setup pulls the two models it needs and stores Whisper and Kokoro weights under ~/.murmur-ai/models/. You'll see a progress bar for each.",
-    code: "ollama pull qwen2.5:7b        # fast voice + tool chat\nollama pull qwen2.5-vl:7b     # screen vision",
+    code: "ollama pull qwen2.5:7b        # fast voice + tool chat\nollama pull qwen2.5vl:7b     # screen vision",
   },
   {
     n: "03",

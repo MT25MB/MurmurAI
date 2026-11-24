@@ -78,6 +78,10 @@ def load_settings() -> dict[str, Any]:
         settings["description_verbosity"] = "concise"
     if settings["listening_mode"] not in ("active", "wake"):
         settings["listening_mode"] = "active"
+    # Older configs used qwen2.5-vl, which Ollama does not publish.
+    from agent.model_names import normalize_model
+
+    settings["vision_model"] = normalize_model(str(settings.get("vision_model") or ""))
     _CACHE = settings
     return dict(settings)
 

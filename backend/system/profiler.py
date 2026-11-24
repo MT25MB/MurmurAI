@@ -53,8 +53,8 @@ ENV_KEEP_ALIVE = "OLLAMA_KEEP_ALIVE"
 VISION_MODELS = frozenset({
     "qwen3.5:9b",
     "gemma4:12b",
-    "qwen2.5-vl:7b",
-    "qwen2.5-vl:3b",
+    "qwen2.5vl:7b",
+    "qwen2.5vl:3b",
 })
 
 
@@ -243,7 +243,7 @@ def _tier_config(tier: str) -> dict[str, Any]:
         return {
             "tier": "high",
             "chat_model": "qwen2.5:7b",
-            "vision_model": "qwen2.5-vl:7b",
+            "vision_model": "qwen2.5vl:7b",
             "alternate_vision_model": "minicpm-v",
             "whisper_model": "small.en",
             "alternate_whisper_model": "base.en",
@@ -253,7 +253,7 @@ def _tier_config(tier: str) -> dict[str, Any]:
     return {
         "tier": "light",
         "chat_model": "qwen2.5:3b",
-        "vision_model": "qwen2.5-vl:3b",
+        "vision_model": "qwen2.5vl:3b",
         "alternate_vision_model": "minicpm-v",
         "whisper_model": "tiny.en",
         "alternate_whisper_model": "base.en",

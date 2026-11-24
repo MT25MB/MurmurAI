@@ -97,7 +97,7 @@ def test_high_tier_config():
         total_ram_gb=32, vram_gb=8, cpu_cores=16, compute_backend="CUDA", tier="high"
     ))
     assert cfg["chat_model"] == "qwen2.5:7b"
-    assert cfg["vision_model"] == "qwen2.5-vl:7b"
+    assert cfg["vision_model"] == "qwen2.5vl:7b"
     assert cfg["whisper_model"] == "small.en"
     assert cfg["whisper_compute_type"] == "float16"
     assert cfg["whisper_device"] == "cuda"
@@ -109,7 +109,7 @@ def test_light_tier_config():
         total_ram_gb=8, vram_gb=0, cpu_cores=4, compute_backend="CPU", tier="light"
     ))
     assert cfg["chat_model"] == "qwen2.5:3b"
-    assert cfg["vision_model"] == "qwen2.5-vl:3b"
+    assert cfg["vision_model"] == "qwen2.5vl:3b"
     assert cfg["whisper_model"] == "tiny.en"
     assert cfg["whisper_compute_type"] == "int8"
     assert cfg["whisper_device"] == "cpu"
@@ -166,7 +166,7 @@ def test_saved_override_wins_over_recommendation():
 
 def test_setup_recommended_setup_uses_profile():
     rec = app_setup.recommended_setup(HardwareProfile(tier="high", compute_backend="CUDA"))
-    assert rec["models"] == ["qwen2.5:7b", "qwen2.5-vl:7b"]
+    assert rec["models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
     assert len(rec["model_labels"]) == 2
 
 

@@ -23,7 +23,7 @@ Local, offline-friendly measurements. Lower is better. Cold includes model const
 | faster-whisper transcription | n/a | n/a | skipped | faster-whisper not installed |
 | Ollama tool-call routing | n/a | n/a | skipped | Ollama unreachable on localhost |
 | Set-of-Marks detection | 69 | 34 | ok | synthetic 1280x720 UI |
-| qwen2.5-vl screen grounding | n/a | n/a | skipped | vision model unreachable on localhost |
+| qwen2.5vl screen grounding | n/a | n/a | skipped | vision model unreachable on localhost |
 | Kokoro-82M time-to-first-audio | n/a | n/a | skipped | kokoro not installed |
 
 ## Comparing platforms

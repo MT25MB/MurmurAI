@@ -37,6 +37,7 @@ from tools.memory_tools import MEMORY_TOOLS
 from tools.tool_recipes import RECIPE_TOOLS
 from tools.a11y_tree import A11Y_TOOLS
 from agent.plan_preview import PlanPreview, extract_files
+from agent.model_names import normalize_model
 from skills.pack_loader import SKILL_TOOLS
 from system.profiler import (
     initial_context_window,
@@ -250,8 +251,8 @@ class Brain:
             "/"
         )
         self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-        self.vision_model = vision_model or os.getenv(
-            "OLLAMA_VISION_MODEL", "llava"
+        self.vision_model = normalize_model(
+            vision_model or os.getenv("OLLAMA_VISION_MODEL", "llava")
         )
         self.timeout = float(os.getenv("OLLAMA_REQUEST_TIMEOUT", str(timeout)))
         self.safety = SafetyGate()

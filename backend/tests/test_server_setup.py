@@ -123,10 +123,10 @@ def test_pulled_models_shape(monkeypatch):
     class FakeResp:
         status_code = 200
         def json(self):
-            return {"models": [{"name": "qwen2.5:7b"}, {"name": "qwen2.5-vl:7b"}]}
+            return {"models": [{"name": "qwen2.5:7b"}, {"name": "qwen2.5vl:7b"}]}
     monkeypatch.setattr(app_setup.httpx, "get", lambda *a, **k: FakeResp())
     result = app_setup.pulled_models()
-    assert result == {"qwen2.5:7b": True, "qwen2.5-vl:7b": True}
+    assert result == {"qwen2.5:7b": True, "qwen2.5vl:7b": True}
 
 
 def test_pulled_models_partial(monkeypatch):
@@ -136,7 +136,7 @@ def test_pulled_models_partial(monkeypatch):
             return {"models": [{"name": "qwen2.5:7b"}]}
     monkeypatch.setattr(app_setup.httpx, "get", lambda *a, **k: FakeResp())
     result = app_setup.pulled_models()
-    assert result["qwen2.5:7b"] is True and result["qwen2.5-vl:7b"] is False
+    assert result["qwen2.5:7b"] is True and result["qwen2.5vl:7b"] is False
 
 
 def test_ollama_status_offline(monkeypatch):
@@ -148,7 +148,7 @@ def test_ollama_status_offline(monkeypatch):
 
 
 def test_required_models_and_labels():
-    assert app_setup.REQUIRED_MODELS == ["qwen2.5:7b", "qwen2.5-vl:7b"]
+    assert app_setup.REQUIRED_MODELS == ["qwen2.5:7b", "qwen2.5vl:7b"]
     assert all(m in app_setup.MODEL_LABELS for m in app_setup.REQUIRED_MODELS)
 
 

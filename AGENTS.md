@@ -75,9 +75,9 @@ This file is the source of truth for every coding agent and human contributor.
 ### Hardware profiling & latency (first class)
 - `system/profiler.py` detects RAM, VRAM (nvidia-smi), CPU cores, and compute
   backend (CUDA / Apple Metal / CPU) and picks a model tier on startup:
-  - **High (16GB+ RAM or 6GB+ VRAM):** `qwen2.5:7b` + `qwen2.5-vl:7b`,
+  - **High (16GB+ RAM or 6GB+ VRAM):** `qwen2.5:7b` + `qwen2.5vl:7b`,
     `small.en` whisper (`float16`/`int8_float16`).
-  - **Light (8–12GB RAM, no GPU):** `qwen2.5:3b` + `qwen2.5-vl:3b` (or
+  - **Light (8–12GB RAM, no GPU):** `qwen2.5:3b` + `qwen2.5vl:3b` (or
     `minicpm-v`), `tiny.en` whisper (`int8`).
 - Chosen profile is saved to `~/.murmur-ai/hardware_profile.json`; settings/env
   overrides always win (`OLLAMA_MODEL`, `OLLAMA_VISION_MODEL`, `WHISPER_MODEL`,
@@ -245,7 +245,11 @@ This file is the source of truth for every coding agent and human contributor.
   of the misleading "Pull stream ended without success status." A stream that
   ends without success now reports the last progress point and disk/Ollama
   checks; if free space cannot hold the reported layer, it fails immediately
-  with the needed/free sizes instead of downloading for minutes first.
+  with the needed/free sizes instead of downloading for minutes first. The
+  vision model tag is `qwen2.5vl` (no hyphen); `agent/model_names.py` normalizes
+  the old hyphenated spelling from env vars/saved settings at every input
+  boundary. Onboarding wraps full pull errors in red and stops the loading
+  animation once a pull fails.
 - Website downloads resolve the highest stable semver from the releases list
   (`website/src/releases.ts`), not GitHub's date-based `/releases/latest`, so an
   older high-version release can't win. The README's Linux command resolves the
@@ -303,7 +307,7 @@ This file is the source of truth for every coding agent and human contributor.
   "Undo that" reverses a recorded file move or sends Ctrl/Cmd+Z.
 - Multi-step tasks save verified-subgoal checkpoints under
   `~/.murmur-ai/checkpoints/`; "What step did we stop on?" and "Resume my last
-  task" work from the last checkpoint. Local vision supports qwen2.5-vl (7b/3b)
+  task" work from the last checkpoint. Local vision supports qwen2.5vl (7b/3b)
   and pixel-coordinate families qwen3.5:9b / gemma4:12b, normalized by model.
 
 ## 2. Repository layout
@@ -323,7 +327,7 @@ Murmur AI/
 │  ├─ index.css
 │  ├─ components/{HudPill.tsx,Waveform.tsx,OnboardingModal.tsx,SettingsDrawer.tsx,TranscriptStream.tsx}
 │  ├─ lib/{websocket.ts,setup.ts,settings.ts,updater.ts}
-│  └─ components/*.test.tsx    # Vitest + Testing Library (64 tests incl. website)
+│  └─ components/*.test.tsx    # Vitest + Testing Library (65 tests incl. website)
 ├─ src-tauri/                # Rust shell
 │  ├─ Cargo.toml
 │  ├─ build.rs
@@ -341,7 +345,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 625 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 628 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,
@@ -356,7 +360,7 @@ Murmur AI/
    ├─ system/                 # hardware profiling + latency helpers (profiler.py)
    ├─ replay_log.py          # CLI: replay/diagnose saved visual-agent run logs
    ├─ audio/{__init__.py,listener.py,speaker.py,speaker_provider.py,wake_word.py,dictation.py}  # wake word + dictation mode
-   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,plan_preview.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
+   ├─ agent/{__init__.py,brain.py,state.py,vision_agent.py,som_overlay.py,app_knowledge.py,task_plan.py,plan_preview.py,model_names.py,loop_detector.py,abort.py,mid_job.py,local_providers.py,prompt_guard.py,shortcuts.json}
    ├─ tools/{__init__.py,os_tools.py,safety.py,installer_tool.py,event_bus.py,browser_tool.py,window_tools.py,context_tools.py,file_tools.py,mcp_manager.py,memory_tools.py,tool_recipes.py,text_edit_tools.py}
    ├─ memory.py               # private-filtered local memory vault (forget/undo)
    ├─ audio/{streaming.py,speech_queue.py}  # sentence chunking + priority speech
@@ -371,7 +375,7 @@ Murmur AI/
    └─ logs/                  # visual-agent step replay (screenshots + JSON)
 
 First-run setup (`setup.py`): checks Ollama at localhost:11434, required models
-(qwen2.5:7b, qwen2.5-vl:7b), auto-downloads whisper/kokoro weights into
+(qwen2.5:7b, qwen2.5vl:7b), auto-downloads whisper/kokoro weights into
 ~/.murmur-ai/models/, and exposes /setup/* endpoints + a /setup/pull-model WS
 that streams Ollama pull progress. The React OnboardingModal shows this instead
 of the HUD until setup is complete.

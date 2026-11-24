@@ -1,6 +1,6 @@
 """Set-of-Marks (SoM) Visual Grounding for Murmur AI.
 
-Before sending a screenshot to the local VLM (qwen2.5-vl:7b), this module
+Before sending a screenshot to the local VLM (qwen2.5vl:7b), this module
 detects interactive UI elements (buttons, inputs, icons) using OpenCV
 edge/contour detection plus OS accessibility trees where available, draws
 clean numbered bounding boxes onto a copy of the screenshot, and returns
