@@ -12,9 +12,10 @@ export async function setHudSize(
     ]);
     const window = getCurrentWindow();
     // Windows ignores setSize on a non-resizable window. The pill is locked at
-    // 400x84, so expanding must re-enable resizing before changing the size.
-    if (resizable !== undefined) await window.setResizable(resizable);
+    // 400x84, so every resize must briefly re-enable resizing.
+    await window.setResizable(true);
     await window.setSize(new LogicalSize(width, height));
+    if (!resizable) await window.setResizable(false);
     // Growing from the pill's top-left can push the panel off the bottom of the
     // screen; keep the expanded window fully visible.
     if (resizable) await window.center();

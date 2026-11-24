@@ -160,6 +160,7 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-ink"
                 >
                   <option value="default">Default</option>
+                  <option value="natural">Natural (best local voice)</option>
                   <option value="clear">Clear (screen-reader friendly)</option>
                   <option value="fast">Fast</option>
                   <option value="quiet">Quiet</option>

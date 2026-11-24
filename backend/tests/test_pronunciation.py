@@ -137,3 +137,17 @@ def test_voice_profile_phrase(monkeypatch):
     monkeypatch.setattr(st, "apply_settings", lambda settings=None: None)
     reply = st.handle_voice_command("Switch to my clear voice profile")
     assert reply and "clear" in reply.lower()
+
+
+def test_natural_profile_uses_the_best_local_voice():
+    values = profiles.profile_settings("natural")
+    assert values["voice"] == "af_heart"
+    assert values["speech_rate"] == 0.95
+    assert values["earcons"] is False
+
+
+def test_high_quality_voice_phrase_selects_natural(monkeypatch):
+    monkeypatch.setattr(st, "apply_settings", lambda settings=None: None)
+    reply = st.handle_voice_command("Use your high quality voice")
+    assert reply and "natural" in reply.lower()
+    assert st.load_settings()["voice_profile"] == "natural"

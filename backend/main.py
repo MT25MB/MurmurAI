@@ -82,6 +82,8 @@ class AppState:
         # HUD mute is an explicit runtime switch: utterances are ignored but the
         # listener keeps running so unmuting is instant and the waveform stays live.
         self.muted = False
+        # Typed commands get text replies only; spoken turns use local TTS.
+        self.last_input_mode = "voice"
         self._shutting_down = False
 
     def session_for(self, websocket: WebSocket) -> SessionState:
@@ -473,6 +475,7 @@ async def ws(websocket: WebSocket):
                 )
 
             elif msg.type == "text_input":
+                app_state.last_input_mode = "typed"
                 # Run in a background task so the receive loop stays free to
                 # handle confirmations/progress during long tool calls (installs).
                 asyncio.create_task(handle_text_input(session, send, msg.text or ""))
@@ -1281,6 +1284,11 @@ async def _speak_and_return(
     the whole response is assembled.
     """
     await emit_transcript(session, send, reply)
+    if getattr(app_state, "last_input_mode", "voice") == "typed":
+        # Typing mode is a silent chat: the reply is already on the HUD as a
+        # message, so speaking it would just interrupt the user's reading.
+        await _set_state(send, session, "IDLE")
+        return
     await _set_state(send, session, "SPEAKING")
     if app_state.speaker:
         try:
@@ -1314,6 +1322,7 @@ async def start_listening(session: SessionState, send) -> None:
         if app_state.muted:
             logger.info("Ignoring utterance while muted")
             return
+        app_state.last_input_mode = "voice"
         session.add_turn("user", text)
         confidence = getattr(app_state.listener, "last_confidence", "high")
         loop = app_state.loop or asyncio.get_event_loop()

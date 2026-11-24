@@ -38,6 +38,15 @@ VOICE_PROFILES: dict[str, dict[str, Any]] = {
         "description_verbosity": "concise",
         "screen_reader_friendly": True,
     },
+    # Best available fully-local voice: Kokoro's clearest voice, a calm pace,
+    # and no chimes layered under clarifying questions.
+    "natural": {
+        "speech_rate": 0.95,
+        "voice": "af_heart",
+        "earcons": False,
+        "description_verbosity": "detailed",
+        "screen_reader_friendly": False,
+    },
 }
 
 
@@ -70,7 +79,8 @@ VOICE_PROFILE_TOOLS = [
             "name": "set_voice_profile",
             "description": (
                 "Switch between named voice profiles (default, clear, fast, "
-                "quiet) that set speech rate, voice, chimes and verbosity."
+                "quiet, natural) that set speech rate, voice, chimes and "
+                "verbosity. 'natural' uses the clearest fully-local voice."
             ),
             "parameters": {
                 "type": "object",

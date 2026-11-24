@@ -148,6 +148,19 @@ describe("HudPill", () => {
     });
   });
 
+  it("shows replies as a visible message while typing", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "transcript", text: "Which file did you mean?" });
+
+    await user.click(screen.getByRole("button", { name: /type a command/i }));
+
+    const log = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(log).not.toHaveClass("sr-only");
+    expect(within(log).getByText("Which file did you mean?")).toBeInTheDocument();
+  });
+
   it("hides the typed-command field on Escape", async () => {
     const user = userEvent.setup();
     render(<HudPill />);

@@ -68,7 +68,7 @@ export default function HudPill() {
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
     if (expanded) void setHudSize(520, 620, true);
-    else if (typing) void setHudSize(400, 150, false);
+    else if (typing) void setHudSize(400, 260, false);
     else void setHudSize(400, 84, false);
   }, [expanded, typing]);
 
@@ -408,7 +408,7 @@ export default function HudPill() {
         />
       </div>
 
-      <TranscriptStream lastMessage={lastMessage} visible={expanded} />
+      <TranscriptStream lastMessage={lastMessage} visible={expanded || typing} />
 
       {(typing || expanded) && (
         <div className="app-region-no-drag flex gap-1.5">

@@ -15,7 +15,7 @@ export interface Settings {
   echo_guard_tail_ms: number;
   loopback_guard: boolean;
   spatial_audio_cues: boolean;
-  voice_profile: "default" | "clear" | "fast" | "quiet";
+  voice_profile: "default" | "natural" | "clear" | "fast" | "quiet";
   chat_model: string;
   vision_model: string;
   clear_data_on_uninstall: boolean;

@@ -135,7 +135,7 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
         settings["description_verbosity"] = "concise"
     if settings.get("listening_mode") not in ("active", "wake"):
         settings["listening_mode"] = "active"
-    if settings.get("voice_profile") not in ("default", "clear", "fast", "quiet"):
+    if settings.get("voice_profile") not in ("default", "clear", "fast", "quiet", "natural"):
         settings["voice_profile"] = "default"
     return settings
 
@@ -245,7 +245,7 @@ def handle_voice_command(text: str) -> Optional[str]:
         )
 
     profile_match = re.search(
-        r"(?:switch to|use|set|apply) (?:my )?(?:the )?(default|clear|fast|quiet)"
+        r"(?:switch to|use|set|apply) (?:my )?(?:the )?(default|clear|fast|quiet|natural)"
         r"(?: voice)? profile",
         value,
     )
@@ -253,6 +253,11 @@ def handle_voice_command(text: str) -> Optional[str]:
         from audio.voice_profiles import apply_voice_profile
 
         return _voice_reply(apply_voice_profile(profile_match.group(1)))
+
+    if re.search(r"\b(?:high quality|best|natural) voice\b", value):
+        from audio.voice_profiles import apply_voice_profile
+
+        return _voice_reply(apply_voice_profile("natural"))
 
     if re.search(r"\b(be quiet|stop talking|hush|silence yourself|shut up)\b", value):
         try:

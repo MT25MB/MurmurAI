@@ -46,6 +46,27 @@ async def test_speak_and_return_emits_transcript(monkeypatch):
     assert len(transcripts) == 1 and transcripts[0].text == "Opened Blender."
 
 
+@pytest.mark.asyncio
+async def test_typed_replies_are_text_only(monkeypatch):
+    """Typing mode gets a visible message, not unsolicited TTS."""
+    spoken = []
+    monkeypatch.setattr(
+        main,
+        "app_state",
+        type("A", (), {"speaker": None, "last_input_mode": "typed", "muted": False})(),
+    )
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    await main._speak_and_return(SessionState(), send, "Which file did you mean?")
+    assert any(m.type == "transcript" for m in sent)
+    assert not any(m.type == "state" and m.status == "SPEAKING" for m in sent)
+    assert spoken == []
+
+
 def test_transcript_message_serialization():
     message = ServerMessage(type="transcript", text="Hello.", role="assistant")
     assert '"type":"transcript"' in message.to_json()
