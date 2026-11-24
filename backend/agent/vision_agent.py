@@ -52,13 +52,14 @@ from agent.abort import abort_controller
 from agent.task_plan import TaskPlan, build_plan, format_history
 from agent.plan_preview import PlanPreview, extract_files
 from agent.model_names import normalize_model
+from local_endpoint import normalize_ollama_host
 from agent.loop_detector import LoopDetector, action_fingerprint, screen_hash
 from agent.offscreen_search import ScrollSearch
 
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
 
 DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b"))
-OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 LOGS_DIR = Path(__file__).resolve().parents[1] / "logs"
 MAX_STEPS_DEFAULT = 15
 STEP_SETTLE_S = 1.5  # let heavy apps render after each action
@@ -458,7 +459,7 @@ class VisionAgent:
         use_app_knowledge: bool = True,
     ):
         self.model = model
-        self.host = host.rstrip("/")
+        self.host = normalize_ollama_host(host).rstrip("/")
         self.max_steps = max_steps
         self.controller = controller or ScreenController()
         self.safety = safety or SafetyGate()

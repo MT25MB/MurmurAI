@@ -17,9 +17,11 @@ from typing import Optional
 
 import httpx
 
+from local_endpoint import normalize_ollama_host
+
 logger = logging.getLogger("murmur_ai.agent.task_plan")
 
-OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 PLAN_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 HISTORY_LIMIT = 6  # only the last 5-6 steps are shown to the VLM
 

@@ -78,7 +78,7 @@ hiddenimports.extend([
     "tools", "tools.os_tools", "tools.safety", "tools.installer_tool",
     "tools.event_bus", "tools.browser_tool", "tools.window_tools", "tools.context_tools",
     "tools.file_tools", "pypdf", "docx",
-    "tools.mcp_manager", "setup",
+    "tools.mcp_manager", "setup", "local_endpoint",
     "system", "system.profiler", "system.settings_tools", "system.diagnostics_bundle",
     "system.demo", "system.benchmark", "system.packaging_sync",
     "playwright", "playwright.sync_api",

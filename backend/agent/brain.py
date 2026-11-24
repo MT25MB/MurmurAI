@@ -38,6 +38,7 @@ from tools.tool_recipes import RECIPE_TOOLS
 from tools.a11y_tree import A11Y_TOOLS
 from agent.plan_preview import PlanPreview, extract_files
 from agent.model_names import normalize_model
+from local_endpoint import normalize_ollama_host
 from skills.pack_loader import SKILL_TOOLS
 from system.profiler import (
     initial_context_window,
@@ -247,9 +248,7 @@ class Brain:
         vision_model: str | None = None,
         timeout: float = 120.0,
     ):
-        self.host = (host or os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip(
-            "/"
-        )
+        self.host = normalize_ollama_host(host or os.getenv("OLLAMA_HOST")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
         self.vision_model = normalize_model(
             vision_model or os.getenv("OLLAMA_VISION_MODEL", "llava")

@@ -17,9 +17,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from local_endpoint import normalize_ollama_host
+
 logger = logging.getLogger("murmur_ai.system.benchmark")
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 BENCHMARK_CHAT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 BENCHMARK_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en")

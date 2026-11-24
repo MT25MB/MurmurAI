@@ -15,6 +15,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
+from local_endpoint import ollama_host
+
 logger = logging.getLogger("murmur_ai.system.settings_tools")
 
 CONFIG_PATH = Path.home() / ".murmur-ai" / "config.json"
@@ -446,8 +448,7 @@ def _available_models() -> list[str]:
     try:
         import httpx
 
-        host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
-        resp = httpx.get(f"{host}/api/tags", timeout=2.0)
+        resp = httpx.get(f"{ollama_host()}/api/tags", timeout=2.0)
         if resp.status_code != 200:
             return []
         return [

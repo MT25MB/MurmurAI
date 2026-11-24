@@ -25,6 +25,7 @@ from typing import Any, Callable, Optional
 import httpx
 
 from agent.model_names import normalize_model
+from local_endpoint import normalize_ollama_host, ollama_host
 from system.profiler import (
     KEEP_ALIVE,
     configure_from_hardware as _configure_hardware,
@@ -34,7 +35,7 @@ from system.profiler import (
 
 logger = logging.getLogger("murmur_ai.setup")
 
-OLLAMA_HOST = (os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")).rstrip("/")
+OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 
 # Models required for a fully functional Murmur AI.
 REQUIRED_MODELS: list[str] = ["qwen2.5:7b", "qwen2.5vl:7b"]
@@ -96,7 +97,7 @@ def _ollama_tags() -> dict[str, Any] | None:
         return _TAGS_CACHE["data"]
     data: dict[str, Any] | None = None
     try:
-        resp = httpx.get(f"{OLLAMA_HOST}/api/tags", timeout=OLLAMA_TIMEOUT_S)
+        resp = httpx.get(f"{ollama_host()}/api/tags", timeout=OLLAMA_TIMEOUT_S)
         if resp.status_code == 200:
             data = resp.json()
     except Exception:  # pragma: no cover - network dependent
@@ -341,6 +342,7 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
     if not model:
         return {"ok": False, "error": "No model name provided."}
 
+    host = ollama_host()
     on_progress(model, 0, f"Starting download of {model}…")
     last_status = "no status reported"
     last_percent: Optional[int] = None
@@ -348,7 +350,7 @@ async def pull_model(model: str, on_progress: ProgressCallback) -> dict[str, Any
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
-                f"{OLLAMA_HOST}/api/pull",
+                f"{host}/api/pull",
                 json={"name": model, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
