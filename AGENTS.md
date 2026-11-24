@@ -253,6 +253,8 @@ This file is the source of truth for every coding agent and human contributor.
   build excludes root-owned Vitest files (`website/tsconfig.json`): CI installs
   only website dependencies, so typechecking those tests broke every Pages
   deploy from v1.2.6 onward and left the live site stuck on the old resolver.
+  The primary button now opens the latest GitHub Releases page so the user picks
+  the installer; the API still shows the suggested asset for their platform.
 - Download UI has a real progress bar: determinate when byte counts exist, an
   animated indeterminate bar otherwise, and a 15s stall watchdog with a
   "Restart this download" action. The native shell stops a stale sidecar still
@@ -339,7 +341,7 @@ Murmur AI/
    ├─ .env.example
    ├─ main.py                # FastAPI /health + /ws state machine
    ├─ test_voice_loop.py     # standalone mic->STT->echo-TTS CLI test
-   ├─ tests/                 # 624 pytest tests: audio/VAD/STT/TTS, agent tools
+   ├─ tests/                 # 625 pytest tests: audio/VAD/STT/TTS, agent tools
    │                         #   + ReAct + installer + confirmations, vision/SoM,
    │                         #   WS state machine + setup, safety, planning/abort
    │                         #   (see test_agent_tools.py, test_vision.py,

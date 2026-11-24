@@ -29,3 +29,11 @@ def test_download_button_resolves_the_highest_version_not_the_date_latest():
     config = (WEBSITE / "src" / "config.ts").read_text(encoding="utf-8")
     assert "RELEASES_API" in config
     assert "releases?per_page=100" in config
+
+
+def test_primary_download_button_links_to_the_github_releases_page():
+    component = (WEBSITE / "src" / "components" / "DownloadButton.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "const primaryHref = RELEASES_URL;" in component
+    assert "download={" not in component  # no forced direct binary download

@@ -1,4 +1,4 @@
-/** Downloads the correct installer by querying the GitHub Releases API. */
+/** Suggests the matching installer, then sends the user to GitHub Releases to pick it. */
 
 import { useEffect, useState } from "react";
 import { RELEASES_API, RELEASES_URL } from "../config";
@@ -45,13 +45,9 @@ export default function DownloadButton() {
     };
   }, [os]);
 
-  const primaryHref = state.kind === "ready" ? state.asset.browser_download_url : RELEASES_URL;
-  const primaryLabel =
-    state.kind === "ready"
-      ? `Download for ${OS_LABEL[state.os]}`
-      : state.kind === "loading"
-        ? "Detecting your platform…"
-        : `Get Murmur AI for ${OS_LABEL[os]}`;
+  // Always land on the latest GitHub release so the user can choose the exact
+  // installer instead of getting a file the browser may mis-handle.
+  const primaryHref = RELEASES_URL;
 
   const assetSize = (n: number) => (n / 1024 / 1024).toFixed(0) + " MB";
 
@@ -59,10 +55,8 @@ export default function DownloadButton() {
     <div className="flex flex-col items-center gap-3 sm:items-start">
       <a
         href={primaryHref}
-        download={state.kind === "ready" ? state.asset.name : undefined}
-        target={state.kind === "ready" ? undefined : "_blank"}
-        rel={state.kind === "ready" ? undefined : "noreferrer"}
-        aria-busy={state.kind === "loading"}
+        target="_blank"
+        rel="noreferrer"
         className={`group inline-flex items-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-fill/20 transition-all hover:-translate-y-0.5 hover:shadow-blue-fill/40 ${
           state.kind === "loading" ? "bg-blue-fill/70" : "bg-blue-fill"
         }`}
@@ -70,19 +64,14 @@ export default function DownloadButton() {
         <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current" aria-hidden="true">
           <path d="M10 2a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 1.4-1.42l2.3 2.3V3a1 1 0 0 1 1-1ZM3 15a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z" />
         </svg>
-        {primaryLabel}
+        Download from GitHub Releases
       </a>
 
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:justify-start">
-        {state.kind === "ready" && (
-          <span className="mono-label">
-            {state.tag} · {state.asset.name} · {assetSize(state.asset.size)}
-          </span>
-        )}
-        <a href={RELEASES_URL} target="_blank" rel="noreferrer" className="mono-label !text-blue hover:underline">
-          All platforms ↓
-        </a>
-      </div>
+      {state.kind === "ready" && (
+        <span className="mono-label">
+          Latest: {state.tag} · suggested for {OS_LABEL[state.os]}: {state.asset.name} · {assetSize(state.asset.size)}
+        </span>
+      )}
     </div>
   );
 }
