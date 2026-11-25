@@ -47,15 +47,60 @@ ENV_WHISPER_COMPUTE = "WHISPER_COMPUTE_TYPE"
 ENV_WHISPER_DEVICE = "WHISPER_DEVICE"
 ENV_MAX_SCREEN_DIM = "MURMUR_MAX_SCREEN_DIM"
 ENV_KEEP_ALIVE = "OLLAMA_KEEP_ALIVE"
+ENV_MODEL_FAMILY = "MURMUR_MODEL_FAMILY"
+ENV_FAST_MODEL = "MURMUR_FAST_MODEL"
+
+# qwen3.5 checkpoints accept text *and* images natively, so voice chat and
+# screen inspection can share one resident Ollama model. The legacy qwen2.5
+# family needs a separate vision checkpoint and is kept as a fallback.
+UNIFIED_FAMILY = "qwen3.5"
+LEGACY_FAMILY = "qwen2.5vl"
+UNIFIED_FAMILIES = frozenset({UNIFIED_FAMILY})
 
 # Supported local vision checkpoints. Qwen2.5-VL emits 0-1000 normalized
 # boxes; newer families emit pixel coordinates (or 0-1 fractions).
 VISION_MODELS = frozenset({
+    "qwen3.5:27b",
     "qwen3.5:9b",
+    "qwen3.5:4b",
     "gemma4:12b",
     "qwen2.5vl:7b",
     "qwen2.5vl:3b",
 })
+
+
+def model_family(model: str | None) -> str:
+    """Return the checkpoint family name ('qwen3.5', 'qwen2.5vl', ...)."""
+    return (model or "").strip().lower().partition(":")[0]
+
+
+def is_unified_multimodal(model: str | None) -> bool:
+    """True when one checkpoint handles both voice chat and screen images."""
+    return model_family(model) in UNIFIED_FAMILIES
+
+
+def shared_multimodal_model(chat_model: str | None, vision_model: str | None = None) -> str | None:
+    """Return the single model to warm when chat and vision can share one.
+
+    Returns None for legacy families or when the user explicitly configured a
+    different, non-unified vision model (their choice always wins).
+    """
+    chat = (chat_model or "").strip()
+    if not is_unified_multimodal(chat):
+        return None
+    vision = (vision_model or "").strip()
+    if vision and vision != chat and not is_unified_multimodal(vision):
+        return None
+    return chat
+
+
+def tier_for_hardware(ram_gb: float, vram_gb: float) -> str:
+    """Map detected memory to workstation / high / light (legacy values kept)."""
+    if (vram_gb or 0) >= 24:
+        return "workstation"
+    if (ram_gb or 0) >= 16 or (vram_gb or 0) >= 6:
+        return "high"
+    return "light"
 
 
 def coordinate_mode(model: str | None) -> str:
@@ -120,7 +165,7 @@ class HardwareProfile:
     vram_gb: float = 0.0
     cpu_cores: int = 1
     compute_backend: str = "CPU"  # CUDA | Metal | CPU
-    tier: str = "light"  # high | light
+    tier: str = "light"  # workstation | high | light
     os: str = "Unknown"
     overrides: dict[str, str] = field(default_factory=dict)
 
@@ -218,7 +263,7 @@ def detect_hardware() -> HardwareProfile:
     else:
         backend = "CPU"
 
-    tier = "high" if (ram >= 16 or vram >= 6) else "light"
+    tier = tier_for_hardware(ram, vram)
     profile = HardwareProfile(
         total_ram_gb=ram,
         vram_gb=vram,
@@ -238,20 +283,17 @@ def detect_hardware() -> HardwareProfile:
 # Tier recommendations
 # ---------------------------------------------------------------------------
 
-def _tier_config(tier: str) -> dict[str, Any]:
-    if tier == "high":
-        return {
-            "tier": "high",
-            "chat_model": "qwen2.5:7b",
-            "vision_model": "qwen2.5vl:7b",
-            "alternate_vision_model": "minicpm-v",
-            "whisper_model": "small.en",
-            "alternate_whisper_model": "base.en",
-            "whisper_compute_type": "float16",
-            "max_screen_dim": 1600,
-        }
-    return {
-        "tier": "light",
+_LEGACY_TIERS: dict[str, dict[str, Any]] = {
+    "high": {
+        "chat_model": "qwen2.5:7b",
+        "vision_model": "qwen2.5vl:7b",
+        "alternate_vision_model": "minicpm-v",
+        "whisper_model": "small.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "float16",
+        "max_screen_dim": 1600,
+    },
+    "light": {
         "chat_model": "qwen2.5:3b",
         "vision_model": "qwen2.5vl:3b",
         "alternate_vision_model": "minicpm-v",
@@ -259,13 +301,77 @@ def _tier_config(tier: str) -> dict[str, Any]:
         "alternate_whisper_model": "base.en",
         "whisper_compute_type": "int8",
         "max_screen_dim": 1024,
-    }
+    },
+}
+
+# Unified qwen3.5 tiers: one checkpoint serves chat and vision, plus a tiny
+# text-only head for interrupt/intent routing. Workstation only needs the 27b
+# unified checkpoint; the fast head is optional there.
+_UNIFIED_TIERS: dict[str, dict[str, Any]] = {
+    "light": {
+        "chat_model": "qwen3.5:4b",
+        "vision_model": "qwen3.5:4b",
+        "fast_model": "qwen3.5:0.8b",
+        "alternate_vision_model": "qwen2.5vl:3b",
+        "whisper_model": "tiny.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "int8",
+        "max_screen_dim": 1024,
+    },
+    "high": {
+        "chat_model": "qwen3.5:9b",
+        "vision_model": "qwen3.5:9b",
+        "fast_model": "qwen3.5:2b",
+        "alternate_vision_model": "qwen2.5vl:7b",
+        "whisper_model": "small.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "float16",
+        "max_screen_dim": 1600,
+    },
+    "workstation": {
+        "chat_model": "qwen3.5:27b",
+        "vision_model": "qwen3.5:27b",
+        "fast_model": "qwen3.5:2b",
+        "alternate_vision_model": "qwen3.5:9b",
+        "whisper_model": "small.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "float16",
+        "max_screen_dim": 1920,
+    },
+}
+
+
+def _tier_config(tier: str, family: str = UNIFIED_FAMILY) -> dict[str, Any]:
+    """Return base model settings for a tier and checkpoint family."""
+    unified = model_family(family) == UNIFIED_FAMILY
+    if unified:
+        base = dict(_UNIFIED_TIERS.get(tier, _UNIFIED_TIERS["high"]))
+    else:
+        # Legacy qwen2.5vl fallback: separate text and vision checkpoints.
+        base = dict(_LEGACY_TIERS.get(tier, _LEGACY_TIERS["high"]))
+        base["fast_model"] = ""
+    cfg: dict[str, Any] = {"tier": tier, **base}
+    cfg["model_family"] = UNIFIED_FAMILY if unified else LEGACY_FAMILY
+    cfg["unified_multimodal"] = unified
+    cfg["shared_model"] = shared_multimodal_model(
+        cfg["chat_model"], cfg["vision_model"]
+    ) if unified else None
+    # Only one warm call when chat and vision share a checkpoint.
+    cfg["warm_models"] = (
+        [cfg["chat_model"]] if cfg["shared_model"] else [cfg["chat_model"], cfg["vision_model"]]
+    )
+    cfg["required_models"] = (
+        [cfg["chat_model"], cfg["fast_model"]] if cfg.get("fast_model")
+        else [cfg["chat_model"], cfg["vision_model"]]
+    )
+    return cfg
 
 
 def recommend_config(profile: HardwareProfile | None = None) -> dict[str, Any]:
     """Map a hardware profile to concrete model + latency settings."""
     profile = profile or detect_hardware()
-    cfg = _tier_config(profile.tier)
+    family = os.getenv(ENV_MODEL_FAMILY) or profile.overrides.get(ENV_MODEL_FAMILY) or UNIFIED_FAMILY
+    cfg = _tier_config(profile.tier, family)
 
     # CTranslate2 (faster-whisper) only accelerates on CUDA. Apple Metal and
     # CPU fall back to quantized int8 so the first run never fails to load.
@@ -334,6 +440,8 @@ def configure_from_hardware(
         ENV_MAX_SCREEN_DIM: "max_screen_dim",
         ENV_KEEP_ALIVE: "keep_alive",
     }
+    if cfg.get("fast_model"):
+        env_to_cfg[ENV_FAST_MODEL] = "fast_model"
 
     for env_key, cfg_key in env_to_cfg.items():
         recommended = str(cfg[cfg_key])

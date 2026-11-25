@@ -43,7 +43,11 @@ MODEL_LABELS: dict[str, str] = {
     "qwen2.5:7b": "Fast voice & tool chat model",
     "qwen2.5vl:7b": "Screen-vision model",
     "qwen2.5vl:3b": "Light screen-vision model",
-    "qwen3.5:9b": "Modern vision model (pixel coordinates)",
+    "qwen3.5:27b": "Unified text + vision model (workstation)",
+    "qwen3.5:9b": "Unified text + vision model (pixel coordinates)",
+    "qwen3.5:4b": "Unified text + vision model (light)",
+    "qwen3.5:2b": "Fast local interrupt/intent head",
+    "qwen3.5:0.8b": "Ultra-fast local interrupt/intent head",
     "gemma4:12b": "Modern vision model (pixel coordinates)",
 }
 
@@ -154,22 +158,28 @@ def pulled_models(models: Optional[list[str]] = None) -> dict[str, bool]:
 def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
     """Return the model tier recommended for this machine.
 
-    High-RAM/GPU machines get the 7b models; lightweight/CPU machines get the
-    3b models. A saved profile or an explicit ``profile`` can override this.
+    Unified qwen3.5 tiers use one multimodal checkpoint for voice chat and
+    screen inspection (plus a tiny text-only intent head); the legacy
+    qwen2.5vl family keeps a separate vision model as a fallback. A saved
+    profile or an explicit ``profile`` can override this.
     """
-    from system.profiler import HardwareProfile, load_profile
+    from system.profiler import load_profile
 
     profile = profile or load_profile()
     cfg = recommend_config(profile)
-    models = [cfg["chat_model"], cfg["vision_model"]]
-    labels = {
-        cfg["chat_model"]: "Fast voice & tool chat model",
-        cfg["vision_model"]: "Screen-vision model",
-    }
+    models = list(cfg["required_models"])
+    labels: dict[str, str] = {}
+    for name in models:
+        labels[name] = MODEL_LABELS.get(
+            name,
+            "Unified text + vision model" if cfg["unified_multimodal"] else "Local model",
+        )
     return {
         **cfg,
         "models": models,
         "model_labels": labels,
+        "warm_models": list(cfg["warm_models"]),
+        "unified_multimodal": cfg["unified_multimodal"],
         "alternatives": [cfg["alternate_vision_model"]],
     }
 
@@ -190,15 +200,17 @@ def configure_from_hardware(profile: Optional[Any] = None) -> dict[str, Any]:
 
 
 async def warm_models(models: Optional[list[str]] = None) -> dict[str, bool]:
-    """Ask Ollama to load the chat and vision models and keep them resident.
+    """Ask Ollama to load the recommended models and keep them resident.
 
-    Uses ``/api/generate`` with an empty prompt and ``keep_alive: 30m`` so the
-    first real voice command avoids a cold model reload. Non-fatal and safe to
-    call when Ollama is offline.
+    For unified qwen3.5 tiers this is a single call: chat and screen vision
+    share one checkpoint, so there is no unload/reload between voice commands
+    and visual grounding. Uses ``/api/generate`` with an empty prompt and
+    ``keep_alive: 30m``. Non-fatal and safe to call when Ollama is offline.
     """
     if models is None:
-        rec = recommended_setup()
-        models = [rec["chat_model"], rec["vision_model"]]
+        models = recommended_setup()["warm_models"]
+    # Never warm the same model twice (unified chat/vision, or duplicate input).
+    models = list(dict.fromkeys(m for m in models if m))
 
     results: dict[str, bool] = {}
     try:
@@ -571,6 +583,8 @@ def get_setup_status() -> dict[str, Any]:
         "required_models": required,
         "recommended_models": recommendation["models"],
         "recommended_model_labels": recommendation["model_labels"],
+        "unified_multimodal": recommendation.get("unified_multimodal", False),
+        "shared_model": recommendation.get("shared_model"),
         "hardware": {
             "total_ram_gb": profile.total_ram_gb,
             "vram_gb": profile.vram_gb,

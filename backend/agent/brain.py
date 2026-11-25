@@ -64,6 +64,7 @@ from system.profiler import (
     load_profile,
     needed_context,
     next_context_window,
+    shared_multimodal_model,
 )
 from agent.local_providers import load_endpoints
 from agent.prompt_guard import build_system_prompt
@@ -289,10 +290,16 @@ class Brain:
         timeout: float = 120.0,
     ):
         self.host = normalize_ollama_host(host or os.getenv("OLLAMA_HOST")).rstrip("/")
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-        self.vision_model = normalize_model(
-            vision_model or os.getenv("OLLAMA_VISION_MODEL", "llava")
-        )
+        self.model = normalize_model(model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b"))
+        explicit_vision = vision_model or os.getenv("OLLAMA_VISION_MODEL", "")
+        configured_vision = normalize_model(explicit_vision or "llava")
+        # When a unified checkpoint (qwen3.5) handles text and images, point the
+        # brain at the same model the vision agent warms, so Ollama never has to
+        # unload one model to load the other between voice and screen turns.
+        # An explicitly chosen legacy vision model still wins.
+        shared = shared_multimodal_model(self.model, explicit_vision)
+        self.vision_model = shared or configured_vision
+        self.unified_multimodal = shared is not None
         self.timeout = float(os.getenv("OLLAMA_REQUEST_TIMEOUT", str(timeout)))
         self.safety = SafetyGate()
         self._client = httpx.Client(base_url=self.host, timeout=self.timeout)

@@ -61,6 +61,7 @@ def test_detect_backend(monkeypatch, system_name, machine, vram, expected_backen
     (8.0, 8.0, "high"),    # high VRAM
     (12.0, 0.0, "light"),  # mid RAM, no GPU
     (8.0, 0.0, "light"),   # light
+    (32.0, 24.0, "workstation"),  # big GPU wins even with modest RAM
 ])
 def test_detect_tier(monkeypatch, ram, vram, expected_tier):
     monkeypatch.setattr(profiler.platform, "system", lambda: "Linux")
@@ -96,8 +97,11 @@ def test_high_tier_config():
     cfg = profiler.recommend_config(HardwareProfile(
         total_ram_gb=32, vram_gb=8, cpu_cores=16, compute_backend="CUDA", tier="high"
     ))
-    assert cfg["chat_model"] == "qwen2.5:7b"
-    assert cfg["vision_model"] == "qwen2.5vl:7b"
+    assert cfg["chat_model"] == "qwen3.5:9b"
+    assert cfg["vision_model"] == "qwen3.5:9b"
+    assert cfg["fast_model"] == "qwen3.5:2b"
+    assert cfg["unified_multimodal"] is True
+    assert cfg["shared_model"] == "qwen3.5:9b"
     assert cfg["whisper_model"] == "small.en"
     assert cfg["whisper_compute_type"] == "float16"
     assert cfg["whisper_device"] == "cuda"
@@ -108,11 +112,64 @@ def test_light_tier_config():
     cfg = profiler.recommend_config(HardwareProfile(
         total_ram_gb=8, vram_gb=0, cpu_cores=4, compute_backend="CPU", tier="light"
     ))
-    assert cfg["chat_model"] == "qwen2.5:3b"
-    assert cfg["vision_model"] == "qwen2.5vl:3b"
+    assert cfg["chat_model"] == "qwen3.5:4b"
+    assert cfg["vision_model"] == "qwen3.5:4b"
+    assert cfg["fast_model"] == "qwen3.5:0.8b"
+    assert cfg["unified_multimodal"] is True
     assert cfg["whisper_model"] == "tiny.en"
     assert cfg["whisper_compute_type"] == "int8"
     assert cfg["whisper_device"] == "cpu"
+
+
+def test_workstation_tier_config():
+    cfg = profiler.recommend_config(HardwareProfile(
+        total_ram_gb=64, vram_gb=24, cpu_cores=32, compute_backend="CUDA", tier="workstation"
+    ))
+    assert cfg["chat_model"] == "qwen3.5:27b"
+    assert cfg["vision_model"] == "qwen3.5:27b"
+    assert cfg["shared_model"] == "qwen3.5:27b"
+    assert cfg["warm_models"] == ["qwen3.5:27b"]
+    assert cfg["max_screen_dim"] == 1920
+
+
+# ---- unified multimodal tiering ----
+
+def test_unified_tiers_share_one_warm_model():
+    for tier, unified in (("light", "qwen3.5:4b"), ("high", "qwen3.5:9b"), ("workstation", "qwen3.5:27b")):
+        cfg = profiler.recommend_config(HardwareProfile(tier=tier))
+        assert cfg["unified_multimodal"] is True
+        assert cfg["chat_model"] == cfg["vision_model"] == unified
+        assert cfg["warm_models"] == [unified]  # no unload/reload between voice and screen
+        assert cfg["shared_model"] == unified
+        assert unified in profiler.VISION_MODELS
+
+
+def test_is_unified_multimodal_and_shared_model():
+    assert profiler.is_unified_multimodal("qwen3.5:9b")
+    assert profiler.is_unified_multimodal("QWEN3.5:4B")
+    assert not profiler.is_unified_multimodal("qwen2.5vl:7b")
+    assert not profiler.is_unified_multimodal("gemma4:12b")
+    assert profiler.shared_multimodal_model("qwen3.5:9b", "qwen3.5:9b") == "qwen3.5:9b"
+    assert profiler.shared_multimodal_model("qwen3.5:9b") == "qwen3.5:9b"
+    # Explicit legacy vision override is respected, never silently replaced.
+    assert profiler.shared_multimodal_model("qwen3.5:9b", "qwen2.5vl:7b") is None
+    assert profiler.shared_multimodal_model("qwen2.5:7b", "qwen2.5vl:7b") is None
+
+
+def test_legacy_family_fallback_preserved(monkeypatch):
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "qwen2.5vl")
+    high = profiler.recommend_config(HardwareProfile(tier="high"))
+    assert high["chat_model"] == "qwen2.5:7b"
+    assert high["vision_model"] == "qwen2.5vl:7b"
+    assert high["unified_multimodal"] is False
+    assert high["shared_model"] is None
+    assert high["warm_models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
+    assert high["required_models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
+
+    light = profiler.recommend_config(HardwareProfile(tier="light"))
+    assert light["chat_model"] == "qwen2.5:3b"
+    assert light["vision_model"] == "qwen2.5vl:3b"
+    assert profiler.coordinate_mode(light["vision_model"]) == "normalized_1000"
 
 
 def test_metal_high_uses_int8_float16_on_cpu():
@@ -145,9 +202,11 @@ def test_configure_applies_env_and_returns_config():
         persist=False,
     )
     import os
-    assert os.environ[profiler.ENV_CHAT_MODEL] == "qwen2.5:3b"
+    assert os.environ[profiler.ENV_CHAT_MODEL] == "qwen3.5:4b"
+    assert os.environ[profiler.ENV_VISION_MODEL] == "qwen3.5:4b"
+    assert os.environ[profiler.ENV_FAST_MODEL] == "qwen3.5:0.8b"
     assert os.environ[profiler.ENV_MAX_SCREEN_DIM] == "1024"
-    assert cfg["chat_model"] == "qwen2.5:3b"
+    assert cfg["chat_model"] == "qwen3.5:4b"
 
 
 def test_user_env_wins_over_recommendation(monkeypatch):
@@ -166,8 +225,80 @@ def test_saved_override_wins_over_recommendation():
 
 def test_setup_recommended_setup_uses_profile():
     rec = app_setup.recommended_setup(HardwareProfile(tier="high", compute_backend="CUDA"))
-    assert rec["models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
+    assert rec["models"] == ["qwen3.5:9b", "qwen3.5:2b"]
     assert len(rec["model_labels"]) == 2
+    assert rec["unified_multimodal"] is True
+    assert rec["warm_models"] == ["qwen3.5:9b"]
+    assert "Ultra-fast" not in rec["model_labels"]["qwen3.5:2b"]
+    assert "interrupt" in rec["model_labels"]["qwen3.5:2b"]
+
+
+def test_setup_recommended_setup_legacy_family(monkeypatch):
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "qwen2.5vl")
+    rec = app_setup.recommended_setup(HardwareProfile(tier="light"))
+    assert rec["models"] == ["qwen2.5:3b", "qwen2.5vl:3b"]
+    assert rec["warm_models"] == ["qwen2.5:3b", "qwen2.5vl:3b"]
+    assert rec["unified_multimodal"] is False
+
+
+def test_warm_models_uses_single_shared_instance(monkeypatch):
+    calls = []
+
+    class FakeResp:
+        status_code = 200
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None):
+            calls.append(json["model"])
+            return FakeResp()
+
+    monkeypatch.setattr(app_setup.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(
+        profiler, "load_profile", lambda: HardwareProfile(tier="high", compute_backend="CUDA")
+    )
+    result = asyncio.run(app_setup.warm_models())
+
+    assert result == {"qwen3.5:9b": True}
+    assert calls == ["qwen3.5:9b"]  # one warm call, not chat + vision + fast head
+
+
+def test_brain_and_vision_share_unified_model(monkeypatch):
+    import system.settings_tools as settings_tools
+
+    monkeypatch.setattr(settings_tools, "load_settings", lambda: {})
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:9b")
+    monkeypatch.delenv("OLLAMA_VISION_MODEL", raising=False)
+    brain = Brain()
+    assert brain.unified_multimodal is True
+    assert brain.vision_model == "qwen3.5:9b"
+
+    from agent.vision_agent import resolve_vision_model
+
+    assert resolve_vision_model() == "qwen3.5:9b"
+
+
+def test_explicit_legacy_vision_model_is_not_replaced(monkeypatch):
+    import system.settings_tools as settings_tools
+
+    monkeypatch.setattr(settings_tools, "load_settings", lambda: {})
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:9b")
+    monkeypatch.setenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b")
+    brain = Brain()
+    assert brain.unified_multimodal is False
+    assert brain.vision_model == "qwen2.5vl:7b"
+
+    from agent.vision_agent import resolve_vision_model
+
+    assert resolve_vision_model() == "qwen2.5vl:7b"
 
 
 def test_warm_models_posts_keep_alive(monkeypatch):

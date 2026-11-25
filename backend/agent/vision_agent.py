@@ -58,7 +58,7 @@ from agent.offscreen_search import ScrollSearch
 
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
 
-DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b"))
+DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen3.5:9b"))
 
 
 def resolve_vision_model() -> str:
@@ -66,7 +66,8 @@ def resolve_vision_model() -> str:
 
     The module-level default is computed before hardware profiling and settings
     are applied, so using it directly made light-tier machines call a 7B vision
-    model that was never pulled.
+    model that was never pulled. When the chat model is a unified qwen3.5
+    checkpoint, reuse it here so no second model needs to be loaded.
     """
     try:
         from system.settings_tools import load_settings
@@ -76,7 +77,10 @@ def resolve_vision_model() -> str:
         )
     except Exception:  # pragma: no cover - settings are optional
         value = os.getenv("OLLAMA_VISION_MODEL", DEFAULT_VISION_MODEL)
-    return normalize_model(value)
+    value = normalize_model(value)
+    from system.profiler import shared_multimodal_model
+
+    return shared_multimodal_model(os.getenv("OLLAMA_MODEL", ""), value) or value
 OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 LOGS_DIR = Path(__file__).resolve().parents[1] / "logs"
 MAX_STEPS_DEFAULT = 15
