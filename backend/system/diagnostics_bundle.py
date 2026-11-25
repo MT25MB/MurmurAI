@@ -147,7 +147,7 @@ def build_manifest() -> dict[str, Any]:
     settings = load_settings()
     return {
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "app_version": "1.2.38",
+        "app_version": "1.2.39",
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "redaction": (
