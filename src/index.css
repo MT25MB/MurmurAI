@@ -127,11 +127,16 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *:not(.progress-indeterminate),
+  *:not(.progress-indeterminate)::before,
+  *:not(.progress-indeterminate)::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  /* Keep a slow, visibly moving indicator: a frozen bar reads as a dead app. */
+  .progress-indeterminate {
+    animation-duration: 3s !important;
+    animation-iteration-count: infinite !important;
   }
 }
