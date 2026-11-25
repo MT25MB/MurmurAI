@@ -1,7 +1,7 @@
 # WinGet manifest template for Murmur AI.
 # Placeholders are filled by scripts/sync_packaging.py on every release.
 PackageIdentifier: MT25MB.MurmurAI
-PackageVersion: "1.2.37"
+PackageVersion: "1.2.40"
 PackageLocale: en-US
 Publisher: Murmur AI contributors
 PublisherUrl: https://github.com/MT25MB/MurmurAI
@@ -12,8 +12,8 @@ InstallerType: msi
 Installers:
   - Arch: x64
     InstallerType: msi
-    InstallerUrl: "https://github.com/MT25MB/MurmurAI/releases/download/v1.2.37/Murmur.AI_1.2.37_x64_en-US.msi"
-    InstallerSha256: "4AB743199E09A508A733C46F34E892ECD63C78AE182980970935D5E4B96F1E29"
+    InstallerUrl: "https://github.com/MT25MB/MurmurAI/releases/download/v1.2.40/Murmur.AI_1.2.40_x64_en-US.msi"
+    InstallerSha256: "7D1CC2C255ABA192CE3E24D40F7E68848D732DE906978ED18FB8B5CF3A4084C5"
     Scope: machine
 ManifestType: singleton
 ManifestVersion: 1.6.0
