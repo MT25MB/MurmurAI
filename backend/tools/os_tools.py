@@ -279,6 +279,22 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
         from agent.vision_agent import set_active_monitor
 
         return set_active_monitor(arguments.get("monitor", 1))
+    if name in ("set_secret_reference", "list_configured_secrets", "delete_secret"):
+        from security.secret_vault import (
+            delete_secret_reference,
+            list_configured_secrets,
+            set_secret_reference,
+        )
+
+        if name == "set_secret_reference":
+            return set_secret_reference(
+                arguments.get("name", ""), arguments.get("value", "")
+            )
+        if name == "list_configured_secrets":
+            return list_configured_secrets()
+        return delete_secret_reference(
+            arguments.get("name", ""), arguments.get("confirm", False)
+        )
     if name == "list_mcp_tools":
         from .mcp_manager import list_plugins
 

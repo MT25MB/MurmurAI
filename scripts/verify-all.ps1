@@ -35,7 +35,7 @@ if ($webCode -ne 0) { Fail "website build" }
 
 Write-Host "==> [6/7] Rust check"
 New-Item -ItemType Directory -Force -Path "src-tauri\binaries" | Out-Null
-foreach ($t in @("x86_64-pc-windows-msvc.exe","x86_64-apple-darwin","aarch64-apple-darwin","x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu")) {
+foreach ($t in @("x86_64-pc-windows-msvc.exe","x86_64-pc-windows-gnu.exe","x86_64-apple-darwin","aarch64-apple-darwin","x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu")) {
   $f = "src-tauri\binaries\murmur-backend-$t"
   if (-not (Test-Path $f)) { Set-Content -Path $f -Value "PLACEHOLDER" }
 }

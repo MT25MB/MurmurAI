@@ -59,6 +59,7 @@ for package in (
     "PIL",
     "numpy",
     "onnxruntime",
+    "keyring",
 ):
     try:
         # collect_all returns (datas, binaries, hiddenimports) — order matters.
@@ -82,6 +83,7 @@ hiddenimports.extend([
     "tools.mcp_manager", "setup", "local_endpoint",
     "system", "system.profiler", "system.settings_tools", "system.diagnostics_bundle",
     "system.demo", "system.benchmark", "system.packaging_sync",
+    "security", "security.secret_vault", "keyring", "keyring.backends",
     "playwright", "playwright.sync_api",
 ])
 

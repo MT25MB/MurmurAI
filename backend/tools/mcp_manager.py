@@ -191,7 +191,12 @@ class StdioMcpClient:
 
     def start(self) -> None:
         env = os.environ.copy()
-        env.update(self.config.env)
+        # ${secret:NAME} / keyring:NAME values are resolved from the OS
+        # keychain here, at launch time only. They never live in the config
+        # file, diagnostics bundle or audit log.
+        from security.secret_vault import resolve_secret_env
+
+        env.update(resolve_secret_env(self.config.env))
         self._proc = subprocess.Popen(
             [self.config.command, *self.config.args],
             stdin=subprocess.PIPE,

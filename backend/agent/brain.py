@@ -51,6 +51,7 @@ from system.demo import DEMO_TOOLS
 from tools.mcp_manager import MANAGEMENT_TOOLS
 from system.settings_tools import SETTINGS_TOOLS
 from system.diagnostics_bundle import DIAGNOSTICS_TOOLS
+from security.secret_vault import SECRET_TOOLS
 from tools.memory_tools import MEMORY_TOOLS
 from tools.tool_recipes import RECIPE_TOOLS
 from tools.a11y_tree import A11Y_TOOLS
@@ -101,7 +102,7 @@ STOP_TOOL = [
 ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
     + CONTEXT_TOOLS + TEXT_EDIT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
-    + DIAGNOSTICS_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
+    + DIAGNOSTICS_TOOLS + SECRET_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
     + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + UNDO_TOOLS + STOP_TOOL
 )
 
@@ -150,6 +151,13 @@ Available local tools:
   buttons, skipping empty icon controls. Use it for "what links are here",
   "open link 3", or "find a link about X"; then call click_web_element with
   the numbered label to activate it.
+- set_secret_reference(name, value): store an optional provider key or MCP
+  token in the OS keychain. NEVER speak or repeat the value in any reply;
+  confirm only that the named secret was stored.
+- list_configured_secrets(): report which secret references are configured or
+  missing by name only. Never read or speak secret values.
+- delete_secret(name, confirm): erase a named secret. Ask the user to confirm
+  first and pass confirm=true only after they agree; never echo the value.
 - list_open_windows(): list open windows with titles, monitor numbers and the
   focused window. Use it when the user asks what windows are open.
 - focus_or_manage_window(app_or_title, action): focus, maximize, minimize,

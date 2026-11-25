@@ -143,6 +143,7 @@ def build_manifest() -> dict[str, Any]:
     config = _read_json(CONFIG_PATH)
     mcp_config = _read_json(MCP_CONFIG_PATH)
     from system.settings_tools import load_settings
+    from security.secret_vault import secret_status_payload
 
     settings = load_settings()
     return {
@@ -152,12 +153,16 @@ def build_manifest() -> dict[str, Any]:
         "platform": platform.platform(),
         "redaction": (
             "Secrets, credentials, custom paths, env values, emails and user "
-            "identifiers are replaced with <redacted>/<path redacted>."
+            "identifiers are replaced with <redacted>/<path redacted>. Keychain "
+            "secrets are reported only as configured/missing; their values are "
+            "never read into this bundle."
         ),
         "hardware": _hardware_profile(),
         "ollama": _ollama_status(),
         "config": sanitize_config({**settings, **config}),
         "mcp_servers": sanitize_config(mcp_config),
+        # Status only: the vault helper never retrieves a secret value.
+        "secrets": secret_status_payload(),
         "environment_whitelist": {
             key: REDACTED
             for key in ("OLLAMA_MODEL", "OLLAMA_VISION_MODEL", "WHISPER_MODEL")
@@ -189,6 +194,7 @@ def export_diagnostics(output_dir: Optional[Path | str] = None, speak: bool = Tr
         bundle.writestr(
             "README.txt",
             "Murmur AI diagnostics bundle. All user paths and credentials are redacted.\n"
+            "Keychain secrets are reported by name/status only; values are never exported.\n"
             "Attach this zip to a GitHub issue to help reproduce a bug.\n",
         )
 

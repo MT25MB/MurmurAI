@@ -78,7 +78,13 @@ def test_any_named_app_uses_generic_launch_resolution(monkeypatch):
 
     opened = []
     monkeypatch.setattr(os_tools, "_sys", lambda: "Windows")
-    monkeypatch.setattr(os_tools.os, "startfile", lambda target: opened.append(target))
+    # os.startfile only exists on Windows; add it for this Linux CI run too.
+    monkeypatch.setattr(
+        os_tools.os, "startfile", lambda target: opened.append(target), raising=False
+    )
+    # No real subprocess or shortcut scan should run in this unit test.
+    monkeypatch.setattr(os_tools.subprocess, "run", lambda *_a, **_k: None)
+    monkeypatch.setattr(os_tools.subprocess, "Popen", lambda *_a, **_k: None)
     assert "steam" not in os_tools.WINDOWS_APP_ALIASES
     assert "epic games launcher" not in os_tools.WINDOWS_APP_ALIASES
 

@@ -408,6 +408,49 @@ def handle_voice_command(text: str) -> Optional[str]:
         result = restart_ollama()
         return _voice_reply(result)
 
+    # ---- OS keychain credentials (values are never spoken back) ----
+    from security.secret_vault import (
+        delete_secret_reference,
+        list_configured_secrets,
+        set_secret_reference,
+    )
+
+    confirm_delete = re.search(
+        r"\b(?:yes[, ]+)?confirm\s+delete\s+(?:my\s+)?secret\s+([\w.:-]+)\b",
+        original,
+        re.IGNORECASE,
+    )
+    if confirm_delete:
+        return _voice_reply(delete_secret_reference(confirm_delete.group(1), True))
+
+    delete_match = re.search(
+        r"\b(?:delete|remove|forget)\s+(?:my\s+)?secret\s+([\w.:-]+)\b",
+        original,
+        re.IGNORECASE,
+    )
+    if delete_match:
+        return _voice_reply(delete_secret_reference(delete_match.group(1), False))
+
+    set_match = re.search(
+        r"\b(?:set|store|save|remember)\s+(?:my\s+)?secret\s+([\w.:-]+)\s+"
+        r"(?:to|as|is)\s+(.+?)\s*$",
+        original,
+        re.IGNORECASE,
+    )
+    if set_match:
+        raw_value = set_match.group(2).strip().strip("'\"\u2018\u2019\u201c\u201d")
+        if raw_value.endswith("."):
+            raw_value = raw_value[:-1].rstrip()
+        return _voice_reply(set_secret_reference(set_match.group(1), raw_value))
+
+    if re.search(
+        r"\b(?:list|show)\s+(?:my\s+)?(?:configured\s+)?secrets\b"
+        r"|\bwhat secrets (?:are|do i have)\b"
+        r"|\bwhich secrets are (?:configured|set)\b",
+        value,
+    ):
+        return _voice_reply(list_configured_secrets())
+
     if re.search(r"show (current )?settings|read me (my )?settings", value):
         return _voice_reply(settings_summary())
 
