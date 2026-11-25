@@ -69,6 +69,9 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      # tauri-action creates the release and updates its asset policy; parallel
+      # jobs race on that single release and fail with "Error updating policy".
+      max-parallel: 1
       matrix:
         include:
           - platform: windows-latest
