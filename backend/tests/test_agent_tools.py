@@ -40,6 +40,17 @@ def test_activity_callback_reports_steps():
     assert seen == ["Running open_application…"]
 
 
+def test_cursor_event_reports_real_action_coordinates(monkeypatch):
+    import agent.vision_agent as va
+    from tools.event_bus import tool_bus
+
+    emitted = []
+    monkeypatch.setattr(tool_bus, "emit", emitted.append)
+    va.ScreenController._cursor_event(120, 340, "click")
+    assert emitted[0].type == "cursor"
+    assert (emitted[0].x, emitted[0].y, emitted[0].kind) == (120, 340, "click")
+
+
 # ---- tool schemas ----
 
 def test_all_tool_schemas_valid():

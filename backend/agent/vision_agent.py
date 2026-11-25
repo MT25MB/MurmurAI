@@ -379,25 +379,40 @@ class ScreenController:
         except Exception:  # pragma: no cover - optional audio
             pass
 
+    @staticmethod
+    def _cursor_event(px: float, py: float, kind: str = "click") -> None:
+        """Show where the agent is about to act (never a fabricated action)."""
+        try:
+            tool_bus.emit(
+                ServerMessage(type="cursor", x=int(px), y=int(py), kind=kind)
+            )
+        except Exception:  # pragma: no cover - reporting must never block an action
+            logger.debug("Cursor overlay event failed", exc_info=True)
+
     def click(self, x: float, y: float) -> None:
         self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
+        self._cursor_event(px, py)
         pyautogui.click(px, py)
 
     def double_click(self, x: float, y: float) -> None:
         self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
+        self._cursor_event(px, py)
         pyautogui.doubleClick(px, py)
 
     def right_click(self, x: float, y: float) -> None:
         self._action_cue(x, y)
         px, py = self.norm_to_global(x, y)
+        self._cursor_event(px, py)
         pyautogui.rightClick(px, py)
 
     def move_and_drag(self, start_x: float, start_y: float, end_x: float, end_y: float) -> None:
         self._action_cue(start_x, start_y)
         sx, sy = self.norm_to_global(start_x, start_y)
         ex, ey = self.norm_to_global(end_x, end_y)
+        self._cursor_event(sx, sy, "drag")
+        self._cursor_event(ex, ey, "drag")
         pyautogui.moveTo(sx, sy)
         pyautogui.dragTo(ex, ey)
 
@@ -415,6 +430,7 @@ class ScreenController:
     def click_global(self, x: int, y: int) -> None:
         """Click an absolute monitor pixel (used after crop-to-global mapping)."""
         self._action_cue(x, y)
+        self._cursor_event(x, y)
         pyautogui.click(x, y)
 
     def type_text(self, text: str) -> None:

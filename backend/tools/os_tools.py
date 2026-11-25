@@ -446,6 +446,17 @@ def open_application(app_name: str) -> str:
         return f"Failed to open {name}: {exc}"
 
 
+def _cursor_overlay_event(px: int, py: int, kind: str = "click") -> None:
+    """Mark a real automated action on the optional click-through overlay."""
+    try:
+        from agent.state import ServerMessage
+        from tools.event_bus import tool_bus
+
+        tool_bus.emit(ServerMessage(type="cursor", x=int(px), y=int(py), kind=kind))
+    except Exception:  # pragma: no cover - reporting must never block an action
+        logger.debug("Cursor overlay event failed", exc_info=True)
+
+
 def mouse_and_keyboard(action: str, x, y, text: str) -> str:
     """Control mouse and keyboard via pyautogui."""
     if pyautogui is None:
@@ -454,6 +465,7 @@ def mouse_and_keyboard(action: str, x, y, text: str) -> str:
         if action == "click":
             if x is None or y is None:
                 return "Click requires x and y coordinates."
+            _cursor_overlay_event(int(x), int(y))
             pyautogui.click(int(x), int(y))
             return "Clicked."
         if action == "type":

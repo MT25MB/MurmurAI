@@ -23,6 +23,7 @@ EXPECTED_PERMISSIONS = {
     "core:window:allow-set-size",
     "core:window:allow-set-resizable",
     "core:window:allow-center",
+    "core:window:allow-set-position",
     "core:window:allow-set-focus",
 }
 
@@ -49,7 +50,9 @@ def test_capabilities_are_scoped_to_the_main_window_only():
     assert capability_files
     for path in capability_files:
         data = json.loads(path.read_text(encoding="utf-8"))
-        assert data.get("windows") == ["main"], f"{path.name} grants IPC to extra windows"
+        assert set(data.get("windows", [])) <= {"main", "cursor"}, (
+            f"{path.name} grants IPC to an unexpected window"
+        )
         assert data.get("platforms") == ["windows", "macOS", "linux"], (
             f"{path.name} must declare explicit desktop platform guards"
         )
@@ -64,8 +67,13 @@ def test_capabilities_are_scoped_to_the_main_window_only():
 def test_tauri_config_has_one_hud_window_and_signed_updates():
     config = json.loads((TAURI / "tauri.conf.json").read_text(encoding="utf-8"))
     windows = config["app"]["windows"]
-    assert len(windows) == 1
-    assert windows[0]["label"] == "main"
+    labels = [w["label"] for w in windows]
+    assert "main" in labels
+    # The second window is a click-through action marker, not a second HUD.
+    assert "cursor" in labels
+    cursor = next(w for w in windows if w["label"] == "cursor")
+    assert cursor.get("ignoreCursorEvents") is True
+    assert cursor.get("transparent") is True
 
     updater = config["plugins"]["updater"]
     assert updater["pubkey"], "signed updater public key is required"

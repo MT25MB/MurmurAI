@@ -59,6 +59,7 @@ class ServerMessage(BaseModel):
         "update_check_request",
         "transcript",
         "activity",
+        "cursor",
     ]
     ts: float | None = None
     status: str | None = None
@@ -75,6 +76,9 @@ class ServerMessage(BaseModel):
     role: str | None = None      # transcript speaker (assistant | system)
     version: str | None = None   # update notification
     notes: str | None = None     # spoken release summary
+    x: int | None = None         # cursor overlay: physical screen pixel
+    y: int | None = None
+    kind: str | None = None      # click | drag | type
 
     def to_json(self) -> str:
         return self.model_dump_json(exclude_none=True)

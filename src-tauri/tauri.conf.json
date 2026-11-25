@@ -23,6 +23,22 @@
         "skipTaskbar": true,
         "center": false,
         "shadow": false
+      },
+      {
+        "label": "cursor",
+        "title": "Murmur AI cursor",
+        "url": "index.html?overlay=cursor",
+        "width": 1280,
+        "height": 800,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "center": false,
+        "shadow": false,
+        "focusable": false,
+        "ignoreCursorEvents": true
       }
     ],
     "security": {
