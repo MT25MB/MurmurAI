@@ -142,7 +142,7 @@ describe("HudPill", () => {
       command: "rd /s /q C:\\data",
     });
 
-    screen.getByRole("button", { name: /cancel the action/i }).focus();
+    screen.getByRole("button", { name: /cancel/i }).focus();
     await user.keyboard("{Enter}");
 
     const sent = sockets[0].sent.map((raw: string) => JSON.parse(raw));
@@ -271,7 +271,7 @@ describe("HudPill", () => {
     expect(alert).toHaveAttribute("aria-live", "assertive");
     expect(alert).toHaveTextContent("Delete file report.txt");
     expect(screen.getByRole("button", { name: /approve and run/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cancel the action/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
   });
 
   it("sends approval over the WebSocket when confirmed", async () => {
@@ -355,7 +355,7 @@ describe("HudPill", () => {
     expect(alert).toHaveAttribute("aria-live", "assertive");
     expect(alert).toHaveTextContent("Version 9.9.9");
     expect(alert).toHaveTextContent("Faster startup and better labels");
-    expect(screen.getByRole("button", { name: /download and install the update/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /install update/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /skip this update/i })).toBeInTheDocument();
   });
 
@@ -370,7 +370,7 @@ describe("HudPill", () => {
       notes: "Fixes",
       text: "Install?",
     });
-    await user.click(await screen.findByRole("button", { name: /download and install the update/i }));
+    await user.click(await screen.findByRole("button", { name: /install update/i }));
 
     expect(sockets[0].sent.some((m: string) =>
       m.includes('"type":"update_confirm"') && m.includes('"approved":true')
@@ -387,11 +387,11 @@ describe("HudPill", () => {
       notes: "Fixes",
       text: "Install?",
     });
-    await screen.findByRole("button", { name: /download and install the update/i });
+    await screen.findByRole("button", { name: /install update/i });
 
     push({ type: "update_install", request_id: "u1", version: "9.9.9", text: "Installing version 9.9.9…" });
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /download and install the update/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /install update/i })).not.toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent(/installing version 9\.9\.9/i);
   });

@@ -567,7 +567,7 @@ export default function HudPill() {
               type="button"
               onClick={() => answerUpdate(true)}
               className="flex-1 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white hover:brightness-110"
-              aria-label="Download and install the update"
+              aria-label="Install update — download and install it now"
             >
               Install update
             </button>
@@ -575,7 +575,7 @@ export default function HudPill() {
               type="button"
               onClick={() => answerUpdate(false)}
               className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[10px] font-bold text-ink hover:border-blue"
-              aria-label="Skip this update"
+              aria-label="Not now — skip this update"
             >
               Not now
             </button>
@@ -603,7 +603,7 @@ export default function HudPill() {
               type="button"
               onClick={() => answer(true)}
               className="flex-1 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white hover:brightness-110"
-              aria-label="Approve and run the action. Shortcut: Enter"
+              aria-label="Yes, do it — approve and run the action. Shortcut: Enter"
             >
               Yes, do it
             </button>
@@ -611,7 +611,7 @@ export default function HudPill() {
               type="button"
               onClick={() => answer(false)}
               className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[10px] font-bold text-ink hover:border-red"
-              aria-label="Cancel the action. Shortcut: Escape"
+              aria-label="Cancel — stop this action. Shortcut: Escape"
             >
               Cancel
             </button>

@@ -3,12 +3,13 @@
   "private": true,
   "version": "1.2.42",
   "type": "module",
-  "description": "Murmur AI \u2014 100% local voice-controlled desktop agent",
+  "description": "Murmur AI — 100% local voice-controlled desktop agent",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:a11y": "vitest run src/__tests__/a11y.test.tsx",
     "test:watch": "vitest",
     "preview": "vite preview",
     "pretauri": "node scripts/prepare-sidecar.mjs",
@@ -21,18 +22,20 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@tauri-apps/cli": "^2.8.0",
     "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.0",
-    "jsdom": "^25.0.0",
-    "vitest": "^5.1.1",
-    "@tailwindcss/vite": "^4.1.0",
-    "@tauri-apps/cli": "^2.8.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "axe-core": "^4.14.1",
+    "jsdom": "^25.0.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1",
+    "vitest-axe": "^0.1.0"
   }
 }

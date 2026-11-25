@@ -39,6 +39,27 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     };
   }, [open]);
 
+  // Remember the control that opened the dialog and give focus back to it when
+  // the dialog closes (WCAG 2.4.3 / focus order). Cleanup runs on close and on
+  // unmount, so keyboard and tray-triggered openings both restore correctly.
+  useEffect(() => {
+    if (!open) return;
+    const trigger = document.activeElement as HTMLElement | null;
+    return () => {
+      if (trigger && document.contains(trigger)) trigger.focus();
+    };
+  }, [open]);
+
+  // Move focus inside immediately on open, before settings finish loading, so
+  // a screen reader never lands on the inert page behind the modal.
+  useEffect(() => {
+    if (!open || !dialogRef.current) return;
+    const first = dialogRef.current.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    );
+    first?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
