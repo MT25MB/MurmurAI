@@ -238,12 +238,18 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
         from agent.vision_agent import describe_screen
 
         return describe_screen(arguments.get("focus", "overview"))
-    if name in ("open_url", "read_page_summary", "click_web_element", "fill_web_field"):
+    if name in (
+        "open_url", "read_page_summary", "click_web_element", "fill_web_field",
+        "list_landmarks_and_headings", "read_web_table", "list_actionable_links",
+    ):
         from .browser_tool import (
             click_web_element,
             fill_web_field,
+            list_actionable_links,
+            list_landmarks_and_headings,
             open_url,
             read_page_summary,
+            read_web_table,
         )
 
         if name == "open_url":
@@ -252,7 +258,15 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
             return read_page_summary()
         if name == "click_web_element":
             return click_web_element(arguments.get("label_or_role", ""))
-        return fill_web_field(arguments.get("field_label", ""), arguments.get("text", ""))
+        if name == "fill_web_field":
+            return fill_web_field(arguments.get("field_label", ""), arguments.get("text", ""))
+        if name == "list_landmarks_and_headings":
+            return list_landmarks_and_headings()
+        if name == "read_web_table":
+            return read_web_table(
+                arguments.get("table_index", 0), arguments.get("row_limit", 10)
+            )
+        return list_actionable_links(arguments.get("filter_text"))
     if name in ("list_open_windows", "focus_or_manage_window"):
         from .window_tools import focus_or_manage_window, list_open_windows
 

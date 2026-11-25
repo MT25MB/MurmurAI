@@ -129,6 +129,79 @@ BROWSER_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_landmarks_and_headings",
+            "description": (
+                "Read the semantic structure of the active web page: HTML "
+                "landmarks (main, navigation, article, form, aside) and the "
+                "H1-H3 heading hierarchy. Use for 'jump to main content', "
+                "'skip navigation', 'read the headings on this page', or "
+                "'what sections are on this page'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_web_table",
+            "description": (
+                "Read an HTML data table row by row with each column header "
+                "paired to its cell, instead of dumping raw text. Use when the "
+                "user asks to read a table, a schedule, prices, or comparison "
+                "data on the page. table_index is zero based (first table is 0)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table_index": {
+                        "type": "integer",
+                        "description": "Zero-based table to read. Defaults to the first table.",
+                    },
+                    "row_limit": {
+                        "type": "integer",
+                        "description": "Maximum rows to speak. Defaults to 10.",
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_actionable_links",
+            "description": (
+                "List numbered, meaningful links and buttons on the active "
+                "page, skipping empty or decorative icon controls. Use for "
+                "'what links are here', 'list the buttons', 'open link 3' or "
+                "'find a link about X'. Then click it with click_web_element "
+                "using the numbered label."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filter_text": {
+                        "type": "string",
+                        "description": (
+                            "Optional word to narrow the list (for example 'download'). "
+                            "Leave empty to list every actionable control."
+                        ),
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -380,6 +453,206 @@ def read_page_summary(page: Any | None = None) -> str:
     except Exception as exc:
         logger.exception("Page summary failed")
         return f"Could not read this page: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Semantic structure, table and actionable-link extraction
+# ---------------------------------------------------------------------------
+
+# Each script runs inside the page and returns plain JSON-safe data. Keeping
+# extraction in JavaScript (and narration in Python) makes the tools testable
+# without a real browser: tests feed the same data shape through a fake page.
+_OUTLINE_JS = """() => {
+  const clean = (el) => (el && (el.innerText || el.textContent) || '').replace(/\\s+/g, ' ').trim();
+  const visible = el => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const s = window.getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+  };
+  const sel = 'main,nav,article,form,aside,[role="main"],[role="navigation"],[role="article"],[role="form"],[role="complementary"]';
+  const landmarks = Array.from(document.querySelectorAll(sel))
+    .filter(visible).slice(0, 20).map(el => {
+      const role = el.getAttribute('role');
+      const tag = role ? role.toLowerCase() : el.tagName.toLowerCase();
+      const heading = el.querySelector('h1,h2,h3');
+      return {
+        tag,
+        label: (el.getAttribute('aria-label') || '').trim(),
+        heading: heading ? clean(heading) : '',
+        text: clean(el).slice(0, 160)
+      };
+    }).filter(l => l.label || l.heading || l.text);
+  const headings = Array.from(document.querySelectorAll('h1,h2,h3'))
+    .filter(visible).slice(0, 30)
+    .map(h => ({level: Number(h.tagName[1]), text: clean(h)}))
+    .filter(h => h.text);
+  return {title: document.title || '', landmarks, headings};
+}"""
+
+_TABLE_JS = """() => {
+  const clean = (el) => (el && (el.innerText || el.textContent) || '').replace(/\\s+/g, ' ').trim();
+  const tables = Array.from(document.querySelectorAll('table')).map(table => {
+    const headRow = table.querySelector('thead tr') || table.querySelector('tr');
+    const headers = headRow
+      ? Array.from(headRow.querySelectorAll('th')).map(clean)
+      : [];
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+    const source = bodyRows.length ? bodyRows : Array.from(table.querySelectorAll('tr'));
+    const rows = source.map(tr => Array.from(tr.querySelectorAll('td')).map(clean))
+      .filter(cells => cells.length);
+    return {headers, rows};
+  });
+  return {tables};
+}"""
+
+_LINKS_JS = """() => {
+  const clean = (el) => (el && (el.innerText || el.textContent) || '').replace(/\\s+/g, ' ').trim();
+  const visible = el => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const s = window.getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+  };
+  const decorative = /^[\\s\\u2022\\u00b7\\u25aa\\u2013\\u2014\\u2026\\u2192\\u2190\\u25ba\\u25c4\\u2605\\u2606\\u2665\\u2713\\u2717\\u00d7]*$/;
+  const items = Array.from(document.querySelectorAll('a[href],button,[role="link"],[role="button"]'))
+    .filter(visible)
+    .map(el => {
+      const tag = (el.tagName || '').toLowerCase();
+      const role = tag === 'a' || el.getAttribute('role') === 'link' ? 'link' : 'button';
+      const text = clean(el);
+      const label = (el.getAttribute('aria-label') || '').trim() || text ||
+                    (el.getAttribute('title') || '').trim();
+      return {role, label, href: el.getAttribute('href') || ''};
+    })
+    .filter(it => it.label && !decorative.test(it.label))
+    .slice(0, 60);
+  return {title: document.title || '', items};
+}"""
+
+
+def _format_outline(data: dict[str, Any]) -> str:
+    """Narrate landmarks and headings as a structured page outline."""
+    lines: list[str] = []
+    title = (data.get("title") or "").strip()
+    if title:
+        lines.append(f"Page: {title}.")
+
+    landmarks = data.get("landmarks") or []
+    if landmarks:
+        parts = []
+        for lm in landmarks[:10]:
+            tag = lm.get("tag") or "section"
+            label = (lm.get("label") or "").strip()
+            heading = (lm.get("heading") or "").strip()
+            detail = label or heading
+            parts.append(f"{tag}" + (f" ({detail})" if detail else ""))
+        lines.append("Landmarks. " + "; ".join(parts) + ".")
+
+    headings = data.get("headings") or []
+    if headings:
+        parts = [f"Heading {h.get('level', 1)}: {h.get('text', '')}" for h in headings[:12]]
+        lines.append("Headings. " + "; ".join(parts) + ".")
+
+    return "\n".join(lines) if lines else "This page has no landmarks or headings."
+
+
+def _format_table(data: dict[str, Any], table_index: int, row_limit: int) -> str:
+    """Narrate a table one row at a time, pairing each header with its cell."""
+    tables = data.get("tables") or []
+    if not tables:
+        return "This page has no data tables."
+    try:
+        index = int(table_index)
+    except (TypeError, ValueError):
+        index = 0
+    if index < 0 or index >= len(tables):
+        return (
+            f"I found {len(tables)} table{'s' if len(tables) != 1 else ''} on this page. "
+            f"Please choose a table from 1 to {len(tables)}."
+        )
+    table = tables[index]
+    headers = [str(h).strip() for h in (table.get("headers") or [])]
+    rows = table.get("rows") or []
+    try:
+        limit = max(1, min(int(row_limit), 50))
+    except (TypeError, ValueError):
+        limit = 10
+
+    lines = [f"Table {index + 1}."]
+    if headers:
+        lines.append("Columns: " + ", ".join(headers) + ".")
+    if not rows:
+        lines.append("This table has no data rows.")
+        return " ".join(lines)
+
+    for row_num, cells in enumerate(rows[:limit], start=1):
+        pairs = []
+        for col_num, cell in enumerate(cells):
+            name = headers[col_num] if col_num < len(headers) else f"Column {col_num + 1}"
+            pairs.append(f"{name} is {cell}")
+        lines.append(f"Row {row_num}: " + "; ".join(pairs) + ".")
+    if len(rows) > limit:
+        lines.append(f"Stopped after {limit} of {len(rows)} rows.")
+    return " ".join(lines)
+
+
+def _format_links(data: dict[str, Any], filter_text: str | None) -> str:
+    """Number actionable controls so 'open link 3' resolves to a clean label."""
+    items = data.get("items") or []
+    needle = (filter_text or "").strip().lower()
+    if needle:
+        items = [it for it in items if needle in (it.get("label") or "").lower()]
+    if not items:
+        if needle:
+            return f"No links or buttons matching {filter_text.strip()}."
+        return "There are no links or buttons on this page."
+    parts = [
+        f"{num}. {it.get('label', '')} ({it.get('role') or 'control'})"
+        for num, it in enumerate(items[:MAX_ELEMENTS], start=1)
+    ]
+    return f"I found {len(items)} actionable links. " + "; ".join(parts) + "."
+
+
+def list_landmarks_and_headings(page: Any | None = None) -> str:
+    """Return a spoken outline of landmarks and H1-H3 headings."""
+    try:
+        pg = _active_page(page)
+        data = pg.evaluate(_OUTLINE_JS)
+        if not isinstance(data, dict):
+            return "Could not read this page structure."
+        return _format_outline(data)
+    except Exception as exc:
+        logger.exception("Outline extraction failed")
+        return f"Could not read this page structure: {exc}"
+
+
+def read_web_table(
+    table_index: int = 0, row_limit: int = 10, page: Any | None = None
+) -> str:
+    """Read an HTML table with headers paired to each cell, row by row."""
+    try:
+        pg = _active_page(page)
+        data = pg.evaluate(_TABLE_JS)
+        if not isinstance(data, dict):
+            return "Could not read tables on this page."
+        return _format_table(data, table_index, row_limit)
+    except Exception as exc:
+        logger.exception("Table extraction failed")
+        return f"Could not read tables on this page: {exc}"
+
+
+def list_actionable_links(filter_text: str | None = None, page: Any | None = None) -> str:
+    """List numbered, meaningful links and buttons, optionally filtered."""
+    try:
+        pg = _active_page(page)
+        data = pg.evaluate(_LINKS_JS)
+        if not isinstance(data, dict):
+            return "Could not read links on this page."
+        return _format_links(data, filter_text)
+    except Exception as exc:
+        logger.exception("Link extraction failed")
+        return f"Could not read links on this page: {exc}"
 
 
 def _first_match(page: Any, strategies: list) -> Any | None:

@@ -18,12 +18,16 @@ from tools.browser_tool import (
     BROWSER_TOOLS,
     click_web_element,
     fill_web_field,
+    list_actionable_links,
+    list_landmarks_and_headings,
     open_url,
     read_page_summary,
+    read_web_table,
 )
 from tools.os_tools import dispatch_tool
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_article.html"
+SEMANTIC_FIXTURE = Path(__file__).parent / "fixtures" / "semantic_sections.html"
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +83,80 @@ def _fixture_data() -> dict:
     }
 
 
+def _semantic_html() -> str:
+    return SEMANTIC_FIXTURE.read_text(encoding="utf-8")
+
+
+def _semantic_title() -> str:
+    return re.search(r"<title>(.*?)</title>", _semantic_html(), re.S | re.I).group(1).strip()
+
+
+def _semantic_outline_data() -> dict:
+    """Emulate the outline extractor for the multi-section fixture."""
+    html = _semantic_html()
+    landmarks = []
+    for m in re.finditer(r"<(main|nav|article|form|aside)\b([^>]*)>", html, re.I):
+        tag = m.group(1).lower()
+        closing = re.search(r"</" + tag + r">", html[m.end():], re.I)
+        segment = html[m.end(): m.end() + closing.start()] if closing else html[m.end():]
+        label = re.search(r'aria-label="([^"]+)"', m.group(2))
+        heading = re.search(r"<h[1-3][^>]*>(.*?)</h[1-3]>", segment, re.S | re.I)
+        landmarks.append({
+            "tag": tag,
+            "label": label.group(1) if label else "",
+            "heading": _strip_tags(heading.group(1)) if heading else "",
+            "text": _strip_tags(segment)[:160],
+        })
+    headings = [
+        {"level": int(m.group(1)), "text": _strip_tags(m.group(2))}
+        for m in re.finditer(r"<h([1-3])[^>]*>(.*?)</h\1>", html, re.S | re.I)
+    ]
+    return {"title": _semantic_title(), "landmarks": landmarks, "headings": headings}
+
+
+def _semantic_table_data() -> dict:
+    """Emulate the table extractor for two differently shaped tables."""
+    html = _semantic_html()
+    tables = []
+    for tbl in re.finditer(r"<table>(.*?)</table>", html, re.S | re.I):
+        body = tbl.group(1)
+        head = re.search(r"<thead>(.*?)</thead>", body, re.S | re.I)
+        header_source = head.group(1) if head else body
+        first_tr = re.search(r"<tr>(.*?)</tr>", header_source, re.S | re.I)
+        headers = (
+            [_strip_tags(x) for x in re.findall(r"<th[^>]*>(.*?)</th>", first_tr.group(1), re.S | re.I)]
+            if first_tr else []
+        )
+        tbody = re.search(r"<tbody>(.*?)</tbody>", body, re.S | re.I)
+        row_source = tbody.group(1) if tbody else body
+        rows = []
+        for tr in re.finditer(r"<tr>(.*?)</tr>", row_source, re.S | re.I):
+            cells = [_strip_tags(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", tr.group(1), re.S | re.I)]
+            if cells:
+                rows.append(cells)
+        tables.append({"headers": headers, "rows": rows})
+    return {"tables": tables}
+
+
+def _semantic_links_data() -> dict:
+    """Emulate the link extractor, skipping empty and decorative-only controls."""
+    items = []
+    for m in re.finditer(r"<(a|button)\b([^>]*)>(.*?)</\1>", _semantic_html(), re.S | re.I):
+        tag = m.group(1).lower()
+        aria = re.search(r'aria-label="([^"]+)"', m.group(2))
+        text = _strip_tags(m.group(3))
+        label = aria.group(1) if aria else text
+        if not label or label in ("\U0001f517",):
+            continue
+        href = re.search(r'href="([^"]+)"', m.group(2))
+        items.append({
+            "role": "link" if tag == "a" else "button",
+            "label": label,
+            "href": href.group(1) if href else "",
+        })
+    return {"title": _semantic_title(), "items": items}
+
+
 class FakeLocator:
     def __init__(self, page, name, found=True):
         self.page = page
@@ -131,6 +209,12 @@ class FakePage:
         return self._closed
 
     def evaluate(self, script):
+        if script is bt._OUTLINE_JS:
+            return _semantic_outline_data()
+        if script is bt._TABLE_JS:
+            return _semantic_table_data()
+        if script is bt._LINKS_JS:
+            return _semantic_links_data()
         return self.data
 
     # locator factories
@@ -166,7 +250,8 @@ def _reset_browser_session():
 def test_browser_tools_registered_in_brain():
     names = [t["function"]["name"] for t in BROWSER_TOOLS]
     assert set(names) == {
-        "open_url", "read_page_summary", "click_web_element", "fill_web_field"
+        "open_url", "read_page_summary", "click_web_element", "fill_web_field",
+        "list_landmarks_and_headings", "read_web_table", "list_actionable_links",
     }
     brain_names = [t["function"]["name"] for t in ALL_TOOLS]
     for name in names:
@@ -189,13 +274,20 @@ def test_dispatch_routes_browser_tools(monkeypatch):
     monkeypatch.setattr(bt, "read_page_summary", lambda: seen.append(("read",)) or "summary")
     monkeypatch.setattr(bt, "click_web_element", lambda l: seen.append(("click", l)) or "clicked")
     monkeypatch.setattr(bt, "fill_web_field", lambda l, t: seen.append(("fill", l, t)) or "filled")
+    monkeypatch.setattr(bt, "list_landmarks_and_headings", lambda: seen.append(("outline",)) or "outline")
+    monkeypatch.setattr(bt, "read_web_table", lambda i, r: seen.append(("table", i, r)) or "table")
+    monkeypatch.setattr(bt, "list_actionable_links", lambda f: seen.append(("links", f)) or "links")
 
     assert dispatch_tool("open_url", {"url": "x"}, None) == "opened"
     assert dispatch_tool("read_page_summary", {}, None) == "summary"
     assert dispatch_tool("click_web_element", {"label_or_role": "Go"}, None) == "clicked"
     assert dispatch_tool("fill_web_field", {"field_label": "Name", "text": "Ada"}, None) == "filled"
+    assert dispatch_tool("list_landmarks_and_headings", {}, None) == "outline"
+    assert dispatch_tool("read_web_table", {"table_index": 1, "row_limit": 3}, None) == "table"
+    assert dispatch_tool("list_actionable_links", {"filter_text": "download"}, None) == "links"
     assert seen == [
-        ("open", "x"), ("read",), ("click", "Go"), ("fill", "Name", "Ada")
+        ("open", "x"), ("read",), ("click", "Go"), ("fill", "Name", "Ada"),
+        ("outline",), ("table", 1, 3), ("links", "download"),
     ]
 
 
@@ -323,6 +415,130 @@ def test_fill_by_placeholder_when_no_label():
 def test_fill_not_found():
     result = fill_web_field("Missing", "x", page=FakePage())
     assert "couldn't find a field" in result.lower()
+
+
+# ---- semantic outline / headings ----
+
+def test_list_landmarks_and_headings_reads_multiple_sections():
+    result = list_landmarks_and_headings(page=FakePage())
+    assert "Page: Workspace plans and pricing." in result
+    assert "Landmarks." in result
+    assert "main" in result and "nav" in result
+    assert "article" in result and "form" in result and "aside" in result
+    assert "Headings." in result
+    assert "Heading 1: Workspace plans and pricing" in result
+    assert "Heading 2: Starter plan" in result
+    assert "Heading 3: What is included" in result
+    # footer is not a requested landmark
+    assert "footer" not in result
+
+
+def test_list_landmarks_and_headings_empty():
+    class EmptyPage(FakePage):
+        def evaluate(self, script):
+            return {"title": "", "landmarks": [], "headings": []} if script is bt._OUTLINE_JS else super().evaluate(script)
+
+    assert "no landmarks or headings" in list_landmarks_and_headings(page=EmptyPage()).lower()
+
+
+def test_list_landmarks_and_headings_survives_evaluate_error():
+    class Broken(FakePage):
+        def evaluate(self, script):
+            raise RuntimeError("detached frame")
+
+    assert "Could not read this page structure" in list_landmarks_and_headings(page=Broken())
+
+
+# ---- tables ----
+
+def test_read_web_table_pairs_headers_to_cells():
+    result = read_web_table(page=FakePage())
+    assert "Table 1." in result
+    assert "Columns: Plan, Price, Seats." in result
+    assert "Row 1: Plan is Starter; Price is Free; Seats is 1." in result
+    assert "Row 2: Plan is Pro; Price is 12 dollars; Seats is 10." in result
+    assert "Row 3: Plan is Team; Price is 29 dollars; Seats is 50." in result
+
+
+def test_read_web_table_respects_row_limit():
+    result = read_web_table(table_index=0, row_limit=2, page=FakePage())
+    assert "Row 1:" in result and "Row 2:" in result
+    assert "Row 3:" not in result
+    assert "Stopped after 2 of 3 rows." in result
+
+
+def test_read_web_table_second_table_without_thead():
+    result = read_web_table(table_index=1, page=FakePage())
+    assert "Table 2." in result
+    assert "Columns: Region, Latency." in result
+    assert "Row 1: Region is Europe; Latency is 40 milliseconds." in result
+    # the header-only <tr> was not spoken as a data row
+    assert "Row 2: Region is Asia" in result
+    assert "Row 3:" not in result
+
+
+def test_read_web_table_out_of_range():
+    result = read_web_table(table_index=7, page=FakePage())
+    assert "I found 2 tables" in result
+    assert "from 1 to 2" in result
+
+
+def test_read_web_table_no_tables():
+    class EmptyPage(FakePage):
+        def evaluate(self, script):
+            return {"tables": []} if script is bt._TABLE_JS else super().evaluate(script)
+
+    assert "no data tables" in read_web_table(page=EmptyPage()).lower()
+
+
+# ---- actionable links ----
+
+def test_list_actionable_links_numbers_controls():
+    result = list_actionable_links(page=FakePage())
+    assert "I found" in result and "actionable links" in result
+    assert "1. Home (link)" in result
+    assert "Request a demo (button)" in result
+    assert "Download the app (link)" in result
+    # "Copy plan link" is kept because its aria-label is meaningful
+    assert "Copy plan link (button)" in result
+    assert "open link 3" in " ".join(
+        t["function"]["description"] for t in BROWSER_TOOLS
+    ).lower()
+
+
+def test_list_actionable_links_skips_empty_and_decorative():
+    data = _semantic_links_data()
+    assert len(data["items"]) == 7  # 3 nav + demo + 2 main links + aria-labelled button
+    assert all(it["label"] for it in data["items"])
+    assert not any(it["label"] == "\U0001f517" for it in data["items"])
+
+
+def test_list_actionable_links_filter():
+    result = list_actionable_links(filter_text="download", page=FakePage())
+    assert "1. Download the app (link)" in result
+    assert "Home (link)" not in result
+
+
+def test_list_actionable_links_no_matches():
+    result = list_actionable_links(filter_text="not here", page=FakePage())
+    assert "No links or buttons matching not here" in result
+
+
+def test_list_actionable_links_empty_page():
+    class EmptyPage(FakePage):
+        def evaluate(self, script):
+            return {"items": []} if script is bt._LINKS_JS else super().evaluate(script)
+
+    assert "no links or buttons" in list_actionable_links(page=EmptyPage()).lower()
+
+
+def test_brain_prompt_describes_semantic_navigation():
+    from agent.brain import SYSTEM_PROMPT
+
+    lowered = SYSTEM_PROMPT.lower()
+    assert "list_landmarks_and_headings()" in lowered
+    assert "read_web_table(table_index, row_limit)" in lowered
+    assert "list_actionable_links(filter_text)" in lowered
 
 
 # ---- session lifecycle ----

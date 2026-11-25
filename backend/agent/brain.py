@@ -138,6 +138,18 @@ Available local tools:
   or ARIA label, with no pixel coordinates.
 - fill_web_field(field_label, text): type into a web form field by label or
   placeholder.
+- list_landmarks_and_headings(): read the page's semantic structure: main,
+  navigation, article, form and aside landmarks plus the H1-H3 headings. Use
+  it for "jump to main content", "skip navigation", "read the headings on this
+  page" and "what sections are on this page".
+- read_web_table(table_index, row_limit): read an HTML table row by row with
+  column headers paired to each cell instead of dumping raw text. table_index
+  is zero based (the first table is 0). Use it for tables, schedules, prices
+  and comparison data.
+- list_actionable_links(filter_text): list numbered meaningful links and
+  buttons, skipping empty icon controls. Use it for "what links are here",
+  "open link 3", or "find a link about X"; then call click_web_element with
+  the numbered label to activate it.
 - list_open_windows(): list open windows with titles, monitor numbers and the
   focused window. Use it when the user asks what windows are open.
 - focus_or_manage_window(app_or_title, action): focus, maximize, minimize,

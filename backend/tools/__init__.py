@@ -4,7 +4,10 @@ from .os_tools import OS_TOOLS, dispatch_tool
 from .safety import SafetyGate, is_destructive
 from .installer_tool import INSTALL_TOOLS, install_application, detect_install_plan
 from .event_bus import tool_bus, ToolEventBus
-from .browser_tool import BROWSER_TOOLS, open_url, read_page_summary, click_web_element, fill_web_field
+from .browser_tool import (
+    BROWSER_TOOLS, open_url, read_page_summary, click_web_element, fill_web_field,
+    list_landmarks_and_headings, read_web_table, list_actionable_links,
+)
 from .window_tools import (
     WINDOW_TOOLS, WindowInfo, list_open_windows, focus_or_manage_window,
     get_monitors, monitor_for_rect,
@@ -49,6 +52,9 @@ __all__ = [
     "read_page_summary",
     "click_web_element",
     "fill_web_field",
+    "list_landmarks_and_headings",
+    "read_web_table",
+    "list_actionable_links",
     "WINDOW_TOOLS",
     "WindowInfo",
     "list_open_windows",
