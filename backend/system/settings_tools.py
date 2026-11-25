@@ -38,6 +38,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_profile": "default",          # default | clear | fast | quiet
     "chat_model": "",
     "vision_model": "",
+    # LAN-only phone companion is strictly opt-in and off by default.
+    "remote_companion_enabled": False,
     "clear_data_on_uninstall": False,  # keep memories/chats/keys unless opted in
 }
 
@@ -131,7 +133,8 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
         settings[key] = min(high, max(low, value))
     for key in (
         "earcons", "screen_reader_friendly", "media_ducking", "echo_guard",
-        "loopback_guard", "spatial_audio_cues", "clear_data_on_uninstall",
+        "loopback_guard", "spatial_audio_cues", "remote_companion_enabled",
+        "clear_data_on_uninstall",
     ):
         settings[key] = bool(settings.get(key, DEFAULT_SETTINGS[key]))
     try:
@@ -388,6 +391,31 @@ def handle_voice_command(text: str) -> Optional[str]:
         if not models:
             return _voice_reply("I could not reach Ollama to list models.")
         return _voice_reply("Available models: " + ", ".join(models[:10]) + ".")
+
+    # ---- LAN-only phone companion (opt-in, PIN spoken on start) ----
+    if re.search(
+        r"\b(?:start|enable|turn on|open)\b.*\bphone remote\b"
+        r"|\bstart companion\b|\bphone remote on\b",
+        value,
+    ):
+        from remote.companion_server import start_companion
+
+        result = start_companion()
+        return _voice_reply(result["summary"])
+
+    if re.search(
+        r"\b(?:stop|disable|turn off|close)\b.*\bphone remote\b"
+        r"|\bstop companion\b|\bphone remote off\b",
+        value,
+    ):
+        from remote.companion_server import stop_companion
+
+        return _voice_reply(stop_companion()["summary"])
+
+    if re.search(r"\b(?:what|show)\b.*\bphone remote\b|\bcompanion status\b", value):
+        from remote.companion_server import companion_status
+
+        return _voice_reply(companion_status()["summary"])
 
     if re.search(r"export (a |the )?diagnostics|create (a |the )?diagnostics bundle|save (a |the )?bug report", value):
         from system.diagnostics_bundle import export_diagnostics

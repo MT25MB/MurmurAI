@@ -39,6 +39,9 @@ class ToolEventBus:
         self._emit_fn: Optional[Callable[[ServerMessage], None]] = None
         self._speak_fn: Optional[Callable[[str], None]] = None
         self._pending: dict[str, tuple[threading.Event, dict]] = {}
+        # Spoken-safe metadata for remote/UIs: description + command only, no
+        # tool arguments or secrets. Never mutated outside the lock.
+        self._pending_meta: dict[str, dict[str, str]] = {}
         self._guidance: dict[str, tuple[threading.Event, dict]] = {}
         self._resolved: set[str] = set()
         self._lock = threading.Lock()
@@ -108,6 +111,10 @@ class ToolEventBus:
 
         with self._lock:
             self._pending[request_id] = (done, result)
+            self._pending_meta[request_id] = {
+                "description": str(description),
+                "command": str(command),
+            }
 
         ServerMessage = _server_message_cls()
         self.emit(
@@ -134,6 +141,7 @@ class ToolEventBus:
         signalled = done.wait(timeout)
         with self._lock:
             self._pending.pop(request_id, None)
+            self._pending_meta.pop(request_id, None)
 
         if not signalled:
             logger.info("Confirmation %s timed out", request_id)
@@ -153,6 +161,7 @@ class ToolEventBus:
             if entry is None:
                 return False
             self._resolved.add(request_id)
+            self._pending_meta.pop(request_id, None)
         done, result = entry
         result["approved"] = bool(approved)
         done.set()
@@ -169,6 +178,7 @@ class ToolEventBus:
         with self._lock:
             held = list(self._pending.items())
             self._pending.clear()
+            self._pending_meta.clear()
             for request_id in held:
                 self._resolved.add(request_id[0])
         for request_id, (done, result) in held:
@@ -185,6 +195,15 @@ class ToolEventBus:
         """Return IDs of all currently pending confirmations (insertion order)."""
         with self._lock:
             return list(self._pending.keys())
+
+    def pending_details(self) -> list[dict[str, str]]:
+        """Return spoken-safe pending approvals (id + description + command)."""
+        with self._lock:
+            return [
+                {"request_id": rid, **dict(meta)}
+                for rid, meta in self._pending_meta.items()
+                if rid in self._pending
+            ]
 
     # ---- guidance (ask the user verbally when stuck) ----
 

@@ -14,6 +14,7 @@ Target triple comes from TAURI_TARGET_TRIPLE (set in CI) with a per-OS fallback:
 import os
 import platform
 import shutil
+import glob
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -42,6 +43,10 @@ src_dir = os.getcwd()
 # ---- collect heavy optional dependencies into the bundle ----
 datas = []
 binaries = []
+# Bundle the zero-tracking phone companion UI next to the sidecar so the
+# onefile install can serve it without a source checkout.
+for ui_file in glob.glob(os.path.join(src_dir, "..", "src", "remote", "*.*")):
+    datas.append((ui_file, os.path.join("src", "remote")))
 hiddenimports = [
     "uvicorn", "uvicorn.protocols", "fastapi", "starlette", "pydantic",
     "httpx", "websockets", "dotenv",
@@ -84,6 +89,7 @@ hiddenimports.extend([
     "system", "system.profiler", "system.settings_tools", "system.diagnostics_bundle",
     "system.demo", "system.benchmark", "system.packaging_sync",
     "security", "security.secret_vault", "keyring", "keyring.backends",
+    "remote", "remote.companion_server",
     "playwright", "playwright.sync_api",
 ])
 

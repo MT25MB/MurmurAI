@@ -42,7 +42,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["audio*", "agent*", "tools*", "system*", "security*"]
+include = ["audio*", "agent*", "tools*", "system*", "security*", "remote*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
