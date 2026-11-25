@@ -26,6 +26,8 @@ export default function CursorOverlay() {
           import("@tauri-apps/api/dpi"),
         ]);
         const win = getCurrentWindow();
+        // Click-through so the marker never blocks the app underneath it.
+        await win.setIgnoreCursorEvents(true);
         await win.setSize(new LogicalSize(window.screen.width, window.screen.height));
         await win.setPosition(new LogicalPosition(0, 0));
       } catch {

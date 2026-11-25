@@ -265,9 +265,10 @@ This file is the source of truth for every coding agent and human contributor.
   holding port 8765 before spawning the new one after an update.
 - Tauri shell hardening: every `#[tauri::command]` doing I/O is `async` (Windows
   registry probes run on Tokio's blocking pool; stale-sidecar cleanup too), and
-  `capabilities/default.json` grants only the nine core window/event IPC calls
-  the HUD makes, scoped to the `main` window with explicit desktop platform
-  guards. App commands and plugins are called from Rust, not granted extra ACL.
+  `capabilities/default.json` grants only the core window/event IPC calls the
+  HUD and the click-through cursor overlay make, scoped to the `main` and
+  `cursor` windows with explicit desktop platform guards. App commands and
+  plugins are called from Rust, not granted extra ACL.
 - Focus recovery: the shell emits `murmur://window-focused` on native focus regain
   (tray/toggle/alt-tab); `src/lib/focusRecovery.ts` restores DOM focus only when
   it fell to `body`, shows a visible ring, re-announces through a polite live

@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
 import CursorOverlay from "./CursorOverlay";
 
+const overlayWindowMock = vi.hoisted(() => ({
+  setSize: vi.fn().mockResolvedValue(undefined),
+  setPosition: vi.fn().mockResolvedValue(undefined),
+  setIgnoreCursorEvents: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({
-    setSize: vi.fn().mockResolvedValue(undefined),
-    setPosition: vi.fn().mockResolvedValue(undefined),
-  }),
+  getCurrentWindow: () => overlayWindowMock,
 }));
 vi.mock("@tauri-apps/api/dpi", () => ({
   LogicalSize: class {
@@ -36,12 +38,14 @@ class TestWS {
 describe("CursorOverlay", () => {
   beforeEach(() => {
     sockets.length = 0;
+    overlayWindowMock.setIgnoreCursorEvents.mockClear();
     vi.stubGlobal("WebSocket", TestWS);
   });
 
   it("shows a ring at real action coordinates", async () => {
     render(<CursorOverlay />);
     await waitFor(() => expect(sockets.length).toBe(1));
+    expect(overlayWindowMock.setIgnoreCursorEvents).toHaveBeenCalledWith(true);
 
     act(() =>
       sockets[0].onmessage?.({

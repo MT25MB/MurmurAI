@@ -24,6 +24,7 @@ EXPECTED_PERMISSIONS = {
     "core:window:allow-set-resizable",
     "core:window:allow-center",
     "core:window:allow-set-position",
+    "core:window:allow-set-ignore-cursor-events",
     "core:window:allow-set-focus",
 }
 
@@ -72,8 +73,8 @@ def test_tauri_config_has_one_hud_window_and_signed_updates():
     # The second window is a click-through action marker, not a second HUD.
     assert "cursor" in labels
     cursor = next(w for w in windows if w["label"] == "cursor")
-    assert cursor.get("ignoreCursorEvents") is True
     assert cursor.get("transparent") is True
+    assert cursor.get("focusable") is False
 
     updater = config["plugins"]["updater"]
     assert updater["pubkey"], "signed updater public key is required"

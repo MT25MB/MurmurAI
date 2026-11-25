@@ -37,8 +37,7 @@
         "skipTaskbar": true,
         "center": false,
         "shadow": false,
-        "focusable": false,
-        "ignoreCursorEvents": true
+        "focusable": false
       }
     ],
     "security": {
