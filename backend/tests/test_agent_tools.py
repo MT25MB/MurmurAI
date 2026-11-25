@@ -73,6 +73,19 @@ def test_destructive_terminal_command_waits_for_confirmation(monkeypatch):
     assert "cancelled" in result.lower()
 
 
+def test_any_named_app_uses_generic_launch_resolution(monkeypatch):
+    import tools.os_tools as os_tools
+
+    opened = []
+    monkeypatch.setattr(os_tools, "_sys", lambda: "Windows")
+    monkeypatch.setattr(os_tools.os, "startfile", lambda target: opened.append(target))
+    assert "steam" not in os_tools.WINDOWS_APP_ALIASES
+    assert "epic games launcher" not in os_tools.WINDOWS_APP_ALIASES
+
+    assert os_tools.open_application("Some Installed App") == "Opened Some Installed App."
+    assert opened == ["Some Installed App"]
+
+
 # ---- tool schemas ----
 
 def test_all_tool_schemas_valid():

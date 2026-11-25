@@ -352,29 +352,15 @@ def _sys() -> str:
     return platform.system()
 
 
-# Windows Store apps are not .exe files on disk: "calculator" only resolves via
-# its ms-* protocol. Keep a small alias table so common spoken requests work
-# without the model having to guess a Windows-specific command.
+# Only apps that have no launchable file need a protocol hint. Everything else
+# is discovered generically from Start Menu shortcuts, PATH and the OS shell.
 WINDOWS_APP_ALIASES: dict[str, tuple[str, ...]] = {
-    "calculator": ("ms-calculator:", "calc.exe"),
-    "calc": ("ms-calculator:", "calc.exe"),
-    "settings": ("ms-settings:", "ms-settings:system"),
+    "calculator": ("ms-calculator:",),
+    "calc": ("ms-calculator:",),
+    "settings": ("ms-settings:",),
     "photos": ("ms-photos:",),
     "store": ("ms-windows-store:",),
     "mail": ("mailto:",),
-    "notepad": ("notepad.exe",),
-    "paint": ("mspaint.exe",),
-    "file explorer": ("explorer.exe",),
-    "explorer": ("explorer.exe",),
-    "edge": ("msedge.exe",),
-    "chrome": ("chrome.exe",),
-    "firefox": ("firefox.exe",),
-    "terminal": ("wt.exe",),
-    "vs code": ("code.exe",),
-    "visual studio code": ("code.exe",),
-    "word": ("winword.exe",),
-    "excel": ("excel.exe",),
-    "powerpoint": ("powerpoint.exe",),
 }
 
 
@@ -405,6 +391,34 @@ def _windows_launch(name: str) -> bool:
                     return True
                 except Exception:
                     continue
+
+    # Generic PATH lookup so we never need a per-app alias.
+    try:
+        found = subprocess.run(
+            ["where.exe", f"{name}.exe"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for line in (found.stdout or "").splitlines():
+            executable = line.strip()
+            if executable and Path(executable).is_file():
+                os.startfile(executable)  # type: ignore[attr-defined]
+                return True
+    except Exception:  # pragma: no cover - platform dependent
+        pass
+
+    # Let Windows resolve App Paths / shell associations itself.
+    try:
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", name],
+            shell=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except Exception:  # pragma: no cover - platform dependent
+        pass
 
     # Human-style fallback: Win key, type the app name, press Enter.
     if pyautogui is not None:

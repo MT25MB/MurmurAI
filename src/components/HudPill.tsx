@@ -282,7 +282,7 @@ export default function HudPill() {
     <section
       className={
         expanded
-          ? "app-region-drag relative fixed inset-0 z-[9999] flex select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
           : "app-region-drag relative fixed bottom-[6vh] left-1/2 z-[9999] w-[420px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       }
       role="region"
@@ -427,7 +427,7 @@ export default function HudPill() {
       </div>
 
       {(typing || expanded) && (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" style={{ maxHeight: expanded ? "55vh" : undefined }}>
           <TranscriptStream lastMessage={lastMessage} visible />
           {activities.length > 0 && (
             <div
