@@ -836,6 +836,7 @@ async def handle_text_input(
     if _try_verbal_confirmation(text) is not None:
         await send(ServerMessage(type="text_output", text=text))
         return
+    await _working_on_it(session, send)
     await _set_state(send, session, "THINKING")
 
     try:
