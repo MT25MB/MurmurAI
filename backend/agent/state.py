@@ -58,6 +58,7 @@ class ServerMessage(BaseModel):
         "update_install",
         "update_check_request",
         "transcript",
+        "activity",
     ]
     ts: float | None = None
     status: str | None = None

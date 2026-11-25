@@ -16,11 +16,29 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Callable, Optional
 
 import httpx
 
 from tools.os_tools import OS_TOOLS, UNDO_TOOLS, dispatch_tool
+
+# Optional hook used by the sidecar to narrate what the agent is doing. It runs
+# on the worker thread that calls Ollama, so implementations must be thread-safe.
+_activity_callback: Optional[Callable[[str], None]] = None
+
+
+def set_activity_callback(callback: Optional[Callable[[str], None]]) -> None:
+    global _activity_callback
+    _activity_callback = callback
+
+
+def _activity(text: str) -> None:
+    if _activity_callback is None:
+        return
+    try:
+        _activity_callback(text)
+    except Exception:  # pragma: no cover - reporting must never break a turn
+        logger.debug("Activity callback failed", exc_info=True)
 from tools.installer_tool import INSTALL_TOOLS
 from tools.browser_tool import BROWSER_TOOLS
 from tools.window_tools import WINDOW_TOOLS
@@ -483,6 +501,7 @@ class Brain:
         messages.append({"role": "user", "content": user_text})
 
         # First model pass: decide tool or reply.
+        _activity("Thinking about your request…")
         response = self._chat(messages, tools=ALL_TOOLS if self._tools_ready else None)
         message = response.get("message", {})
         tool_calls = message.get("tool_calls") or []
@@ -507,7 +526,9 @@ class Brain:
                 executed.append(name)
                 return self._clean_for_voice("Automation stopped. Everything is halted.")
 
+            _activity(f"Running {name}…")
             result = dispatch_tool(name, args, self.safety)
+            _activity(f"{name} finished.")
             executed.append(name)
 
             # If the tool demands confirmation, surface it instead of running blindly.
@@ -520,6 +541,7 @@ class Brain:
             )
 
         # Second model pass: turn tool results into a spoken reply.
+        _activity("Putting the result into words…")
         final = self._chat(messages)
         content = final.get("message", {}).get("content") or "Done."
         return self._clean_for_voice(guard_unverified_claim(content, executed))

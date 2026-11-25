@@ -196,7 +196,7 @@ def _drain(ws, count, timeout=5.0):
 
 @pytest.mark.parametrize("phrase_id,expected_count,expected_states", [
     # Typed commands are a silent chat: transcript + THINKING -> IDLE, no SPEAKING.
-    (1, 4, {"THINKING", "IDLE"}),
+    (1, 6, {"THINKING", "IDLE"}),
     (2, 2, {"SLEEPING"}),
     (3, 3, {"IDLE"}),
 ])

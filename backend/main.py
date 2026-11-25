@@ -24,6 +24,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import agent.brain as brain_module
 from agent.brain import Brain
 from agent.plan_preview import classify as classify_plan, pick_engine, should_auto_preview
 from agent.state import SessionState, ServerMessage
@@ -121,6 +122,23 @@ async def lifespan(app: FastAPI):
                 speaker.speak(text)
 
     tool_bus.configure(loop, emit_from_tool, speak_fn=speak_from_tool)
+
+    # The brain runs Ollama on a worker thread; surface each step to every HUD
+    # and speak it in voice mode so the user always knows what is happening.
+    async def broadcast_activity(text: str) -> None:
+        await broadcast_to_huds(ServerMessage(type="activity", text=text))
+        await broadcast_to_huds(ServerMessage(type="transcript", text=text, role="system"))
+        if app_state.speaker and getattr(app_state, "last_input_mode", "voice") != "typed":
+            try:
+                await asyncio.to_thread(app_state.speaker.speak, text)
+            except Exception:  # pragma: no cover - TTS dependent
+                logger.debug("Activity narration failed", exc_info=True)
+
+    def activity_from_brain(text: str) -> None:
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(broadcast_activity(text), loop)
+
+    brain_module.set_activity_callback(activity_from_brain)
 
     logger.info("Murmur AI backend starting on %s:%s", BACKEND_HOST, BACKEND_PORT)
     try:

@@ -28,6 +28,18 @@ def test_windows_calculator_resolves_to_a_store_protocol(monkeypatch):
     assert opened[0] == "ms-calculator:"
 
 
+def test_activity_callback_reports_steps():
+    from agent import brain as brain_module
+
+    seen = []
+    brain_module.set_activity_callback(seen.append)
+    try:
+        brain_module._activity("Running open_application…")
+    finally:
+        brain_module.set_activity_callback(None)
+    assert seen == ["Running open_application…"]
+
+
 # ---- tool schemas ----
 
 def test_all_tool_schemas_valid():

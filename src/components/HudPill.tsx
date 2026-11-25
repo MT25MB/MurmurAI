@@ -53,6 +53,7 @@ export default function HudPill() {
   const [automating, setAutomating] = useState(false);
   const [mode, setMode] = useState<"active" | "sleep">("active");
   const [typing, setTyping] = useState(false);
+  const [activities, setActivities] = useState<{ text: string; at: number }[]>([]);
   const [typeInput, setTypeInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [update, setUpdate] = useState<{
@@ -96,6 +97,11 @@ export default function HudPill() {
         command: lastMessage.command,
       });
       setStatus("CONFIRMATION_REQUIRED");
+    }
+    if (lastMessage.type === "activity") {
+      setActivities((previous) =>
+        [...previous, { text: lastMessage.text, at: Date.now() }].slice(-8)
+      );
     }
     if (lastMessage.type === "progress") {
       setProgress({ text: lastMessage.text, percent: lastMessage.percent });
@@ -241,6 +247,8 @@ export default function HudPill() {
     send({ type: "text_input", text });
     setTypeInput("");
     setTranscript(text);
+    setActivities([]);
+    setStatus("THINKING");
   }, [typeInput, send]);
 
   const submitGuidance = useCallback(() => {
@@ -411,6 +419,32 @@ export default function HudPill() {
 
       <TranscriptStream lastMessage={lastMessage} visible={expanded || typing} />
 
+      {(typing || expanded) && activities.length > 0 && (
+        <div
+          role="log"
+          aria-label="What Murmur is doing"
+          aria-live="polite"
+          className="app-region-no-drag max-h-24 space-y-1 overflow-y-auto rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
+        >
+          {activities.map((item, index) => (
+            <p key={`${item.at}-${index}`} className="flex gap-2">
+              <span className="shrink-0 font-mono text-muted">
+                {new Date(item.at).toLocaleTimeString([], { minute: "2-digit", second: "2-digit", hour12: false })}
+              </span>
+              <span>{item.text}</span>
+            </p>
+          ))}
+        </div>
+      )}
+
+      {(typing || expanded) && status === "THINKING" && (
+        <div className="app-region-no-drag" role="progressbar" aria-label="Working on it">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+            <div className="h-full progress-indeterminate" />
+          </div>
+        </div>
+      )}
+
       {(typing || expanded) && (
         <div className="app-region-no-drag flex gap-1.5">
           <label htmlFor="typed-command" className="sr-only">Command to send</label>
@@ -573,7 +607,7 @@ export default function HudPill() {
         </div>
       )}
 
-      {status === "THINKING" && (
+      {status === "THINKING" && !typing && !expanded && (
         <div
           className="pointer-events-none absolute inset-x-4 bottom-1 h-1 overflow-hidden rounded-full bg-border"
           role="progressbar"

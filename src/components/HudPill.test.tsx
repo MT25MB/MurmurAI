@@ -136,6 +136,21 @@ describe("HudPill", () => {
     expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
   });
 
+  it("shows each activity step and a working bar in typing mode", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "activity", text: "Running open_application…" });
+    push({ type: "state", status: "THINKING", uptime_s: 1 });
+
+    await user.click(screen.getByRole("button", { name: /type a command/i }));
+
+    expect(screen.getByRole("log", { name: /what murmur is doing/i })).toHaveTextContent(
+      "Running open_application…"
+    );
+    expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
+  });
+
   it("marks the pill as a drag region", async () => {
     render(<HudPill />);
     const region = screen.getByRole("region", { name: /status and controls/i });

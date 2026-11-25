@@ -50,7 +50,8 @@ export type ServerMessage =
     }
   | { type: "update_install"; request_id: string; version: string; text: string }
   | { type: "update_check_request"; text: string }
-  | { type: "transcript"; text: string; role?: "assistant" | "system" };
+  | { type: "transcript"; text: string; role?: "assistant" | "system" }
+  | { type: "activity"; text: string };
 
 export interface MurmurSocket {
   status: ConnectionStatus;
