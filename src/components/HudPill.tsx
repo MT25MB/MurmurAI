@@ -68,7 +68,7 @@ export default function HudPill() {
 
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
-    if (expanded) void setHudSize(520, 620, true);
+    if (expanded) void setHudSize(560, 620, true);
     else if (typing) void setHudSize(440, 260, false);
     else void setHudSize(440, 120, false);
   }, [expanded, typing]);
@@ -292,7 +292,7 @@ export default function HudPill() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1">
         <img
           src={logoUrl}
           alt=""
@@ -300,7 +300,7 @@ export default function HudPill() {
           className="h-7 w-7 shrink-0 object-contain"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col leading-tight">
+          <div className="flex min-w-0 flex-col leading-tight">
             <h2 className="text-xs font-semibold tracking-tight text-ink">
               MURMUR<span className="text-blue">/AI</span>
             </h2>
@@ -334,7 +334,7 @@ export default function HudPill() {
         )}
         <button
           type="button"
-          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={() => setTyping((v) => !v)}
           aria-pressed={typing}
           aria-label="Type a command (T)"
@@ -346,7 +346,7 @@ export default function HudPill() {
         </button>
         <button
           type="button"
-          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={() => changeMode(mode === "active" ? "sleep" : "active")}
           aria-pressed={mode === "sleep"}
           aria-label={mode === "sleep" ? "Wake Murmur (Ctrl+Shift+Space)" : "Put Murmur to sleep (Ctrl+Shift+Space)"}
@@ -364,7 +364,7 @@ export default function HudPill() {
         </button>
         <button
           type="button"
-          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={toggleMute}
           aria-pressed={muted}
           aria-label={muted ? "Unmute microphone (M)" : "Mute microphone (M)"}

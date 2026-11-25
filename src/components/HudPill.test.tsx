@@ -117,7 +117,7 @@ describe("HudPill", () => {
     await user.click(screen.getByRole("button", { name: /expand hud/i }));
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
-      expect(size.width).toBe(520);
+      expect(size.width).toBe(560);
       expect(size.height).toBeLessThanOrEqual(620);
       expect(size.height).toBeGreaterThanOrEqual(240);
     });
