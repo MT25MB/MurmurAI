@@ -62,7 +62,7 @@ export default function App() {
           await window.setSize(new LogicalSize(520, 620));
         } else {
           await window.setResizable(false);
-          await window.setSize(new LogicalSize(400, 120));
+          await window.setSize(new LogicalSize(440, 120));
         }
         await window.center();
       } catch {

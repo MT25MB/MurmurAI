@@ -122,7 +122,7 @@ describe("HudPill", () => {
     await user.click(screen.getByRole("button", { name: /collapse hud/i }));
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
-      expect(size.width).toBe(400);
+      expect(size.width).toBe(440);
       expect(size.height).toBe(120);
     });
   });

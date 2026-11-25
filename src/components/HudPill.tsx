@@ -68,8 +68,8 @@ export default function HudPill() {
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
     if (expanded) void setHudSize(520, 620, true);
-    else if (typing) void setHudSize(400, 260, false);
-    else void setHudSize(400, 120, false);
+    else if (typing) void setHudSize(440, 260, false);
+    else void setHudSize(440, 120, false);
   }, [expanded, typing]);
 
   useEffect(() => {
@@ -265,7 +265,7 @@ export default function HudPill() {
       className={
         expanded
           ? "app-region-drag fixed inset-0 z-[9999] flex select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
-          : "app-region-drag fixed bottom-[8vh] left-1/2 z-[9999] w-[360px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          : "app-region-drag fixed bottom-[6vh] left-1/2 z-[9999] w-[420px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       }
       role="region"
       aria-label="Murmur AI status and controls"
@@ -282,8 +282,8 @@ export default function HudPill() {
           className="h-7 w-7 shrink-0 object-contain"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <h2 className="truncate text-xs font-semibold tracking-tight text-ink">
+          <div className="flex flex-col leading-tight">
+            <h2 className="text-xs font-semibold tracking-tight text-ink">
               MURMUR<span className="text-blue">/AI</span>
             </h2>
             <span
@@ -316,7 +316,7 @@ export default function HudPill() {
         )}
         <button
           type="button"
-          className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={() => setTyping((v) => !v)}
           aria-pressed={typing}
           aria-label="Type a command (T)"
@@ -328,7 +328,7 @@ export default function HudPill() {
         </button>
         <button
           type="button"
-          className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={() => changeMode(mode === "active" ? "sleep" : "active")}
           aria-pressed={mode === "sleep"}
           aria-label={mode === "sleep" ? "Wake Murmur (Ctrl+Shift+Space)" : "Put Murmur to sleep (Ctrl+Shift+Space)"}
@@ -346,7 +346,7 @@ export default function HudPill() {
         </button>
         <button
           type="button"
-          className="app-region-no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
+          className="app-region-no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:border-blue"
           onClick={toggleMute}
           aria-pressed={muted}
           aria-label={muted ? "Unmute microphone (M)" : "Mute microphone (M)"}
