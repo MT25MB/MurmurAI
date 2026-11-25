@@ -1019,6 +1019,9 @@ async def wake_up(session: SessionState, send) -> None:
     _chime("wake")
     _announce("I'm listening")
     await send(ServerMessage(type="state", status="IDLE", uptime_s=session.uptime()))
+    # Sleep emits a visible transcript line; wake must too, or the HUD keeps
+    # showing the stale "Going to sleep" turn and looks like it never woke.
+    await emit_transcript(session, send, "I'm listening.", "system")
     # Cancel the standby monitor; active listening resumes via start_listening.
     if app_state.wake_task is not None:
         app_state.wake_task.cancel()

@@ -405,7 +405,11 @@ async def test_wake_up_broadcasts_idle_and_speaks_im_listening(monkeypatch):
 
     await main.wake_up(SessionState(), send)
     assert main.app_state.listening_mode == "active"
-    assert sent[-1].status == "IDLE"
+    states = [m for m in sent if m.type == "state"]
+    assert states and states[-1].status == "IDLE"
+    # The visible HUD log must show the wake turn, not a stale sleep message.
+    turns = [m for m in sent if m.type == "transcript"]
+    assert turns and "listening" in turns[-1].text.lower()
     assert chimes == ["wake"]
     assert spoken == ["I'm listening"]
     assert main.app_state.wake_task is None

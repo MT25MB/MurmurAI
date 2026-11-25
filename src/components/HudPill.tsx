@@ -257,7 +257,7 @@ export default function HudPill() {
   }, [send]);
 
   const meta = stateStyle[status] || stateStyle.IDLE;
-  const displayLabel = muted ? "Muted" : meta.label;
+  const displayLabel = muted ? `${meta.label} · Muted` : meta.label;
   const statusMessage = `${displayLabel}. ${muted ? "Microphone muted." : ""} ${transcript || ""}`.trim();
 
   return (
