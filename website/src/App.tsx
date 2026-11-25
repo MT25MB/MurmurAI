@@ -4,6 +4,7 @@ import DownloadButton from "./components/DownloadButton";
 import Capabilities from "./components/Capabilities";
 import QuickStart from "./components/QuickStart";
 import Footer from "./components/Footer";
+import HardwareRequirements from "./components/HardwareRequirements";
 import { REPO_URL } from "./config";
 
 const badges = [
@@ -85,6 +86,9 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* ── HARDWARE ─────────────────────────────────────────── */}
+        <HardwareRequirements />
 
         {/* ── CAPABILITIES ─────────────────────────────────────── */}
         <Capabilities />

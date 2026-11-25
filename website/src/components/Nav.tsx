@@ -1,6 +1,7 @@
 import { REPO_URL } from "../config";
 
 const links = [
+  ["hardware", "Hardware"],
   ["capabilities", "Capabilities"],
   ["quickstart", "Quick start"],
   ["docs", "Docs"],

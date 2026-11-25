@@ -36,7 +36,8 @@ if platform.system() == "Windows":
 
 # PyInstaller spec globals like SCRIPT are not available in every version/OS.
 # The release workflow runs pyinstaller from backend/, so cwd is reliable.
-src_dir = os.path.dirname(os.path.abspath(__file__))
+# PyInstaller exec()s this spec without __file__; CI runs it from backend/.
+src_dir = os.getcwd()
 
 # ---- collect heavy optional dependencies into the bundle ----
 datas = []
