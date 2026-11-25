@@ -292,7 +292,7 @@ export default function HudPill() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
-      <div className="flex items-center gap-2.5">
+      <div className="flex shrink-0 items-center gap-2.5">
         <img
           src={logoUrl}
           alt=""
@@ -419,7 +419,7 @@ export default function HudPill() {
         </div>
       </div>
 
-      <div className="my-2.5 flex w-full items-end justify-center" aria-hidden="true">
+      <div className="my-2.5 flex w-full shrink-0 items-end justify-center" aria-hidden="true">
         <Waveform
           amplitude={amplitudeRef.current}
           active={!muted && (status === "LISTENING" || status === "SPEAKING")}
@@ -433,7 +433,7 @@ export default function HudPill() {
           role="log"
           aria-label="What Murmur is doing"
           aria-live="polite"
-          className="app-region-no-drag max-h-24 space-y-1 overflow-y-auto rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
+          className="app-region-no-drag max-h-20 shrink-0 space-y-1 overflow-y-auto rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
         >
           {activities.map((item, index) => (
             <p key={`${item.at}-${index}`} className="flex gap-2">
@@ -446,44 +446,45 @@ export default function HudPill() {
         </div>
       )}
 
-      {(typing || expanded) && status === "THINKING" && (
-        <div className="app-region-no-drag" role="progressbar" aria-label="Working on it">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-            <div className="h-full progress-indeterminate" />
-          </div>
-        </div>
-      )}
-
       {(typing || expanded) && (
-        <div className="app-region-no-drag flex gap-1.5">
-          <label htmlFor="typed-command" className="sr-only">Command to send</label>
-          <input
-            id="typed-command"
-            ref={typeInputRef}
-            type="text"
-            value={typeInput}
-            onChange={(e) => setTypeInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submitTyped();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                setTyping(false);
-              }
-            }}
-            placeholder="Type a command, then press Enter…"
-            className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-3 py-2.5 text-xs text-ink placeholder:text-muted"
-          />
-          <button
-            type="button"
-            onClick={submitTyped}
-            disabled={!typeInput.trim()}
-            aria-label="Send typed command"
-            className="min-w-[88px] shrink-0 rounded-md bg-blue-fill px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
-          >
-            Send
-          </button>
+        <div className="mt-auto shrink-0 space-y-2">
+          {status === "THINKING" && (
+            <div className="app-region-no-drag" role="progressbar" aria-label="Working on it">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+                <div className="h-full progress-indeterminate" />
+              </div>
+            </div>
+          )}
+          <div className="app-region-no-drag flex gap-1.5">
+            <label htmlFor="typed-command" className="sr-only">Command to send</label>
+            <input
+              id="typed-command"
+              ref={typeInputRef}
+              type="text"
+              value={typeInput}
+              onChange={(e) => setTypeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitTyped();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setTyping(false);
+                }
+              }}
+              placeholder="Type a command, then press Enter…"
+              className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-3 py-2.5 text-xs text-ink placeholder:text-muted"
+            />
+            <button
+              type="button"
+              onClick={submitTyped}
+              disabled={!typeInput.trim()}
+              aria-label="Send typed command"
+              className="min-w-[88px] shrink-0 rounded-md bg-blue-fill px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
         </div>
       )}
 

@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import webbrowser
 from typing import Any, Optional
 from urllib.parse import quote_plus, urlparse
 
@@ -173,7 +174,20 @@ def _start_session() -> None:
             _browser = _manager.chromium.connect_over_cdp(CDP_URL)
             _context = _browser.contexts[0] if _browser.contexts else _browser.new_context()
         else:
-            _browser = _manager.chromium.launch(headless=HEADLESS)
+            # Prefer a browser the user already has installed over Playwright's
+            # bundled Chromium, which is often missing and needs a big download.
+            for engine, channel in (
+                (_manager.chromium, "chrome"),
+                (_manager.chromium, "msedge"),
+                (_manager.firefox, "firefox"),
+            ):
+                try:
+                    _browser = engine.launch(headless=HEADLESS, channel=channel)
+                    break
+                except Exception:  # pragma: no cover - depends on installed browsers
+                    continue
+            if _browser is None:
+                _browser = _manager.chromium.launch(headless=HEADLESS)
             _context = _browser.new_context()
         _page = _context.pages[0] if _context.pages else _context.new_page()
         logger.info("Browser session ready (CDP: %s)", _cdp_available())
@@ -202,6 +216,13 @@ def reset() -> None:
     global _playwright_factory
     _stop_session()
     _playwright_factory = None
+
+
+def _existing_page() -> Any | None:
+    """Return an already-open Playwright page without launching a browser."""
+    if _page is not None and not _page.is_closed():
+        return _page
+    return None
 
 
 def _active_page(page: Any | None = None) -> Any:
@@ -250,18 +271,26 @@ def open_url(url: str, page: Any | None = None) -> str:
     target = _normalize_target(url)
     if not target or target == _search_url(""):
         return "Please provide a URL or something to search for."
+    # Always use the user's own default browser first. No Playwright download
+    # is needed just to open a page; reading/clicking can attach later.
     try:
-        pg = _active_page(page)
-        pg.goto(target, wait_until="domcontentloaded", timeout=30000)
-        title = ""
-        try:
-            title = pg.title() or ""
-        except Exception:
-            pass
-        return f"Opened {title or target}. {pg.url}"
+        webbrowser.open(target)
+    except Exception:  # pragma: no cover - platform dependent
+        logger.debug("webbrowser.open failed", exc_info=True)
+
+    try:
+        pg = _existing_page() if page is None else page
+        if pg is not None:
+            pg.goto(target, wait_until="domcontentloaded", timeout=30000)
+            title = ""
+            try:
+                title = pg.title() or ""
+            except Exception:
+                pass
+            return f"Opened {title or target}. {pg.url}"
     except Exception as exc:
-        logger.exception("Failed to open %s", target)
-        return f"Could not open that page: {exc}. Install Playwright's Chromium with: playwright install chromium"
+        logger.debug("Browser page navigation failed", exc_info=True)
+    return f"Opened {target} in your default browser."
 
 
 # JS runs in the page: collect only accessible, meaningful content.

@@ -26,6 +26,12 @@ from tools.os_tools import dispatch_tool
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_article.html"
 
 
+@pytest.fixture(autouse=True)
+def _no_real_browser(monkeypatch):
+    """Unit tests must never open a real browser window."""
+    monkeypatch.setattr(bt.webbrowser, "open", lambda target: True)
+
+
 def _strip_tags(html: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
 
@@ -233,11 +239,16 @@ def test_open_url_startpage_override(monkeypatch):
     assert page.goto_calls[0][0].startswith("https://www.startpage.com")
 
 
-def test_open_url_missing_playwright_message(monkeypatch):
+def test_open_url_uses_the_installed_default_browser(monkeypatch):
+    opened = []
     monkeypatch.setattr(bt, "_load_playwright", lambda: None)
+    monkeypatch.setattr(bt.webbrowser, "open", lambda target: opened.append(target))
+
     result = open_url("anything")
-    assert "Playwright is not installed" in result
-    assert "playwright install chromium" in result
+
+    assert opened and "duckduckgo" in opened[0]
+    assert "default browser" in result
+    assert "Playwright" not in result
 
 
 # ---- page summaries ----
