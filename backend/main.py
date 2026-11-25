@@ -1264,6 +1264,18 @@ def _chime(kind: str) -> None:
             logger.debug("Earcon failed", exc_info=True)
 
 
+async def _working_on_it(session: SessionState, send) -> None:
+    """Tell the user immediately that a slow command has been accepted."""
+    await emit_transcript(session, send, "Working on it.", "system")
+    if getattr(app_state, "last_input_mode", "voice") == "typed":
+        return  # typed mode is a silent chat; the message is already visible
+    if app_state.speaker is not None:
+        try:
+            await asyncio.to_thread(app_state.speaker.speak, "Working on it.")
+        except Exception:  # pragma: no cover - TTS dependent
+            logger.debug("Working announcement failed", exc_info=True)
+
+
 async def _set_state(send, session: SessionState, status: str) -> None:
     await send(ServerMessage(type="state", status=status, uptime_s=session.uptime()))
     cue = {
@@ -1381,6 +1393,7 @@ async def _on_utterance_async(
     if _try_verbal_confirmation(text) is not None:
         await send(ServerMessage(type="text_output", text=text))
         return
+    await _working_on_it(session, send)
     await _set_state(send, session, "THINKING")
     try:
         reply = await asyncio.to_thread(

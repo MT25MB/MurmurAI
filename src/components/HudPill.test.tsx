@@ -127,6 +127,15 @@ describe("HudPill", () => {
     });
   });
 
+  it("shows a working indicator while the backend is thinking", async () => {
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "state", status: "THINKING", uptime_s: 1 });
+
+    expect(screen.getByText("Working on it")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
+  });
+
   it("marks the pill as a drag region", async () => {
     render(<HudPill />);
     const region = screen.getByRole("region", { name: /status and controls/i });
@@ -239,7 +248,7 @@ describe("HudPill", () => {
     render(<HudPill />);
     await waitFor(() => expect(sockets.length).toBe(1));
     push({ type: "progress", text: "Downloading 45%", percent: 45 });
-    const bar = await screen.findByRole("progressbar");
+    const bar = await screen.findByRole("progressbar", { name: /download progress/i });
     expect(bar).toHaveAttribute("aria-valuenow", "45");
   });
 

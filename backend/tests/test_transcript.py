@@ -67,6 +67,46 @@ async def test_typed_replies_are_text_only(monkeypatch):
     assert spoken == []
 
 
+@pytest.mark.asyncio
+async def test_working_on_it_is_announced(monkeypatch):
+    """A slow command is acknowledged immediately, in text and by voice."""
+    spoken = []
+
+    class Speaker:
+        def speak(self, text):
+            spoken.append(text)
+
+    monkeypatch.setattr(
+        main,
+        "app_state",
+        type("A", (), {"speaker": Speaker(), "last_input_mode": "voice"})(),
+    )
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    await main._working_on_it(SessionState(), send)
+    assert any(m.type == "transcript" and "Working on it" in m.text for m in sent)
+    assert spoken == ["Working on it."]
+
+
+@pytest.mark.asyncio
+async def test_working_on_it_stays_silent_for_typed_commands(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "app_state",
+        type("A", (), {"speaker": None, "last_input_mode": "typed"})(),
+    )
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    await main._working_on_it(SessionState(), send)
+    assert any(m.type == "transcript" and "Working on it" in m.text for m in sent)
+
+
 def test_transcript_message_serialization():
     message = ServerMessage(type="transcript", text="Hello.", role="assistant")
     assert '"type":"transcript"' in message.to_json()
