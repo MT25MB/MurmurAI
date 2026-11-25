@@ -119,7 +119,7 @@ export default function HudPreview() {
           <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
           <span className="mono-label !text-ink">murmur / agent</span>
         </div>
-        <span className="mono-label">v1.2.34 · local</span>
+        <span className="mono-label">v1.2.35 · local</span>
       </div>
 
       {/* waveform */}
