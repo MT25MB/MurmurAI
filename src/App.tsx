@@ -54,7 +54,7 @@ export default function App() {
         const window = getCurrentWindow();
         if (ready === null) {
           // "Connecting…" shows a two-line progress message plus a hint; the
-          // 400x84 pill would clip it. Give it room until status is known.
+          // 400x120 pill would clip it. Give it room until status is known.
           await window.setResizable(false);
           await window.setSize(new LogicalSize(520, 220));
         } else if (ready === false) {
@@ -62,7 +62,7 @@ export default function App() {
           await window.setSize(new LogicalSize(520, 620));
         } else {
           await window.setResizable(false);
-          await window.setSize(new LogicalSize(400, 84));
+          await window.setSize(new LogicalSize(400, 120));
         }
         await window.center();
       } catch {

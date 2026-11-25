@@ -69,7 +69,7 @@ export default function HudPill() {
   useEffect(() => {
     if (expanded) void setHudSize(520, 620, true);
     else if (typing) void setHudSize(400, 260, false);
-    else void setHudSize(400, 84, false);
+    else void setHudSize(400, 120, false);
   }, [expanded, typing]);
 
   useEffect(() => {

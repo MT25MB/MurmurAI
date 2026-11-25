@@ -216,7 +216,7 @@ describe("SettingsDrawer", () => {
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
       expect(size?.width).toBe(400);
-      expect(size?.height).toBe(84);
+      expect(size?.height).toBe(120);
     });
     expect(windowMock.setResizable).toHaveBeenCalledWith(false);
   });

@@ -12,7 +12,7 @@ export async function setHudSize(
     ]);
     const window = getCurrentWindow();
     // Windows ignores setSize on a non-resizable window. The pill is locked at
-    // 400x84, so every resize must briefly re-enable resizing.
+    // 400x120, so every resize must briefly re-enable resizing.
     await window.setResizable(true);
     await window.setSize(new LogicalSize(width, height));
     if (!resizable) await window.setResizable(false);

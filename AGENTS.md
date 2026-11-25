@@ -232,7 +232,7 @@ This file is the source of truth for every coding agent and human contributor.
   polls too. `/setup/status` shares a cached, 0.8s Ollama tags probe (failures
   cached for 2s) so it returns in <1s instead of ~8s.
 - The HUD has an optional typed-command mode (keyboard button or `T`): it
-  temporarily resizes the 400x84 window, sends the existing `text_input` WS
+  temporarily resizes the 400x120 window, sends the existing `text_input` WS
   message, and ignores global M/Q shortcuts while the field is focused.
 - Window management: the pill is a CSS drag region (`app-region-drag`) with all
   controls opted out. Compact minimize / expand / close buttons call the native
