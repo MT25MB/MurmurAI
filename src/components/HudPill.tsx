@@ -429,14 +429,14 @@ export default function HudPill() {
               }
             }}
             placeholder="Type a command, then press Enter…"
-            className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-2 py-1.5 text-[11px] text-ink placeholder:text-muted"
+            className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-3 py-2.5 text-xs text-ink placeholder:text-muted"
           />
           <button
             type="button"
             onClick={submitTyped}
             disabled={!typeInput.trim()}
             aria-label="Send typed command"
-            className="shrink-0 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white disabled:opacity-40"
+            className="min-w-[88px] shrink-0 rounded-md bg-blue-fill px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
           >
             Send
           </button>
@@ -485,13 +485,13 @@ export default function HudPill() {
               onChange={(e) => setGuidanceInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitGuidance(); }}
               placeholder="Type it, or just say it out loud…"
-              className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-2 py-1.5 text-[11px] text-ink placeholder:text-muted"
+              className="min-w-0 flex-1 rounded-md border border-border bg-obsidian px-3 py-2.5 text-xs text-ink placeholder:text-muted"
             />
             <button
               type="button"
               onClick={submitGuidance}
               disabled={!guidanceInput.trim()}
-              className="shrink-0 rounded-md bg-blue-fill px-2 py-1.5 text-[10px] font-bold text-white disabled:opacity-40"
+              className="min-w-[88px] shrink-0 rounded-md bg-blue-fill px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
             >
               Send
             </button>
