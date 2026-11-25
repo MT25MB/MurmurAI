@@ -15,6 +15,12 @@ import tools.os_tools as os_tools
 from agent.state import SessionState
 
 
+def test_invalid_numeric_settings_fall_back_to_defaults():
+    saved = st.update_settings({"speech_rate": "abc", "mic_threshold": None})
+    assert saved["speech_rate"] == 1.0
+    assert saved["mic_threshold"] == 0.5
+
+
 @pytest.fixture(autouse=True)
 def _isolated_config(monkeypatch, tmp_path):
     monkeypatch.setattr(st, "CONFIG_PATH", tmp_path / "config.json")
@@ -100,12 +106,35 @@ def test_detailed_and_concise_descriptions(no_runtime):
 
 
 def test_listening_modes(no_runtime, monkeypatch):
-    monkeypatch.setattr(main, "app_state", type("S", (), {"listening_mode": "active"})())
+    # Settings only persists the choice; the live transition belongs to main.
     st.handle_voice_command("Switch to wake-word mode")
     assert st.load_settings()["listening_mode"] == "wake"
-    assert main.app_state.listening_mode == "sleep"
     st.handle_voice_command("Switch to continuous listening")
     assert st.load_settings()["listening_mode"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_spoken_mode_change_updates_runtime(monkeypatch):
+    from types import SimpleNamespace
+
+    slept = []
+    monkeypatch.setattr(
+        main, "app_state", SimpleNamespace(listening_mode="active", speaker=None)
+    )
+
+    async def fake_sleep(session, send):
+        slept.append(True)
+        main.app_state.listening_mode = "sleep"
+
+    monkeypatch.setattr(main, "enter_sleep", fake_sleep)
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    handled = await main._try_settings_phrase(SessionState(), send, "Switch to wake-word mode")
+    assert handled is True
+    assert slept == [True]
 
 
 def test_mic_threshold(no_runtime):

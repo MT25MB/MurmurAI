@@ -72,6 +72,8 @@ export function useMurmurSocket(url: string = WS_URL): MurmurSocket {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
+  // Messages sent while reconnecting are queued, never silently dropped.
+  const queueRef = useRef<ClientMessage[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -86,6 +88,8 @@ export function useMurmurSocket(url: string = WS_URL): MurmurSocket {
         attemptsRef.current = 0;
         setStatus("connected");
         ws.send(JSON.stringify({ type: "ping" } satisfies ClientMessage));
+        const queued = queueRef.current.splice(0);
+        for (const message of queued) ws.send(JSON.stringify(message));
       };
 
       ws.onmessage = (event: MessageEvent<string>) => {
@@ -122,7 +126,9 @@ export function useMurmurSocket(url: string = WS_URL): MurmurSocket {
     const ws = socketRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
+      return;
     }
+    queueRef.current.push(message);
   }, []);
 
   return { status, lastMessage, send };

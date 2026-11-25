@@ -3,7 +3,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Emitter, Manager, Position, WebviewWindow};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use serde::Serialize;
 
@@ -124,19 +124,33 @@ fn stop_stale_sidecar() {
         return;
     }
     eprintln!("[Murmur AI] stale backend on 127.0.0.1:8765; stopping it");
+    // PyInstaller names the sidecar with the Tauri target triple, not the
+    // bare "murmur-backend.exe". Match only that sidecar family.
     #[cfg(windows)]
     let _ = std::process::Command::new("taskkill")
-        .args(["/F", "/IM", "murmur-backend.exe"])
+        .args(["/F", "/IM", "murmur-backend-*.exe"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
     #[cfg(not(windows))]
     let _ = std::process::Command::new("pkill")
-        .args(["-f", "murmur-backend"])
+        .args(["-f", "murmur-backend-[a-z0-9_]+-unknown-linux-gnu"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    let _ = std::process::Command::new("pkill")
+        .args(["-f", "murmur-backend-[a-z0-9_]+-apple-darwin"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
     std::thread::sleep(std::time::Duration::from_millis(600));
+}
+
+/// HUD Quit: stop the sidecar and exit the whole app, including the overlay.
+#[tauri::command]
+async fn quit_app(app: tauri::AppHandle) {
+    kill_backend();
+    app.exit(0);
 }
 
 /// Spawn the backend sidecar via tauri-plugin-shell.
@@ -362,7 +376,10 @@ pub fn run() {
                 let handle = app.handle().clone();
                 if let Err(e) = app.global_shortcut().on_shortcut(
                     shortcut,
-                    move |_app, _shortcut, _event| {
+                    move |_app, _shortcut, event| {
+                        if event.state != ShortcutState::Pressed {
+                            return;
+                        }
                         // Ask the frontend (which owns the WS connection) to
                         // toggle mode. The backend speaks the announcement.
                         let _ = handle.emit("toggle-sleep-wake", ());
@@ -383,7 +400,10 @@ pub fn run() {
                 let handle = app.handle().clone();
                 if let Err(e) = app.global_shortcut().on_shortcut(
                     quiet_shortcut,
-                    move |_app, _shortcut, _event| {
+                    move |_app, _shortcut, event| {
+                        if event.state != ShortcutState::Pressed {
+                            return;
+                        }
                         let _ = handle.emit("backend:be-quiet", ());
                     },
                 ) {
@@ -394,7 +414,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
+            // Only the main HUD owns the sidecar. Closing the click-through
+            // cursor overlay must never kill the backend or leave a zombie app.
+            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
+                if window.label() == "main" =>
+            {
                 kill_backend();
             }
             // Native alt-tab / tray return: let the webview restore DOM focus
@@ -408,7 +432,8 @@ pub fn run() {
             check_for_updates,
             install_update,
             permissions::check_os_permissions,
-            focus::restore_focus
+            focus::restore_focus,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running Murmur AI");

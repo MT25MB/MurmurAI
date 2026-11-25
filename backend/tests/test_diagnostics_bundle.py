@@ -87,6 +87,20 @@ def test_collect_recent_logs_only(tmp_path):
     assert [p.name for p in collected] == ["session.log"]
 
 
+def test_collect_logs_excludes_verbatim_screen_content(tmp_path):
+    backend = tmp_path / "backend-logs"
+    backend.mkdir()
+    (backend / "session.log").write_text("ok", encoding="utf-8")
+    (backend / "step_001.json").write_text('{"text":"password field"}', encoding="utf-8")
+    describe = backend / "describe"
+    describe.mkdir()
+    (describe / "description.txt").write_text("on-screen text", encoding="utf-8")
+
+    db.BACKEND_LOG_DIR = backend
+    db.HOME_LOG_DIR = tmp_path / "empty-home"
+    assert [p.name for p in db.collect_log_files()] == ["session.log"]
+
+
 def test_collect_logs_skips_large_files(tmp_path):
     db.BACKEND_LOG_DIR.mkdir(parents=True)
     big = db.BACKEND_LOG_DIR / "huge.log"

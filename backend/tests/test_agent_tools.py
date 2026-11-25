@@ -51,6 +51,28 @@ def test_cursor_event_reports_real_action_coordinates(monkeypatch):
     assert (emitted[0].x, emitted[0].y, emitted[0].kind) == (120, 340, "click")
 
 
+def test_wrapped_destructive_shell_commands_need_confirmation():
+    from tools.safety import SafetyGate
+
+    gate = SafetyGate()
+    assert gate.shell_requires_confirmation("cmd /c rd /s /q C:\\data")
+    assert gate.shell_requires_confirmation('powershell -c "Remove-Item -Recurse -Force C:\\data"')
+    assert gate.shell_requires_confirmation("python -c \"import shutil; shutil.rmtree('data')\"")
+    assert not gate.shell_requires_confirmation("dir C:\\")
+
+
+def test_destructive_terminal_command_waits_for_confirmation(monkeypatch):
+    import tools.os_tools as os_tools
+    from tools.event_bus import tool_bus
+    from tools.safety import SafetyGate
+
+    monkeypatch.setattr(tool_bus, "request_confirmation", lambda *_a: False)
+    monkeypatch.setattr(os_tools.subprocess, "run", lambda *_a, **_k: pytest.fail("ran without approval"))
+
+    result = os_tools.run_terminal_command("rd /s /q C:\\data", SafetyGate())
+    assert "cancelled" in result.lower()
+
+
 # ---- tool schemas ----
 
 def test_all_tool_schemas_valid():

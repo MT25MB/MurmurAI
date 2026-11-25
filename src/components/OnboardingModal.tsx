@@ -38,6 +38,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
   const [busy, setBusy] = useState(false);
   const closePullRefs = useRef<Record<string, () => void>>({});
   const micCleanupRef = useRef<(() => void) | null>(null);
+  const micTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async (): Promise<boolean> => {
     try {
@@ -78,6 +79,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
       Object.values(closePullRefs.current).forEach((close) => close());
       closePullRefs.current = {};
       micCleanupRef.current?.();
+      if (micTimerRef.current) clearTimeout(micTimerRef.current);
     };
   }, [refresh]);
 
@@ -130,6 +132,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
 
   const testMic = async () => {
     micCleanupRef.current?.();
+    if (micTimerRef.current) clearTimeout(micTimerRef.current);
     setMicState("listening");
     setMicLevel(0);
     try {
@@ -152,13 +155,14 @@ export default function OnboardingModal({ onComplete }: { onComplete: () => void
       tick();
       const stop = () => {
         cancelAnimationFrame(raf);
+        if (micTimerRef.current) clearTimeout(micTimerRef.current);
         stream.getTracks().forEach((t) => t.stop());
         ctx.close();
         setMicState("done");
       };
       micCleanupRef.current = stop;
-      // Auto-stop after 5 seconds.
-      setTimeout(() => micCleanupRef.current?.(), 5000);
+      // Auto-stop after 5 seconds; a restarted test replaces this timer.
+      micTimerRef.current = setTimeout(() => micCleanupRef.current?.(), 5000);
     } catch {
       setMicState("error");
     }

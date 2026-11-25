@@ -55,6 +55,22 @@ def test_ws_set_muted_toggles_the_runtime_mute_flag():
         main.app_state.muted = False
 
 
+def test_ws_rejects_cross_origin_browser():
+    """A random website must not be able to drive the local agent."""
+    from starlette.websockets import WebSocketDisconnect
+
+    client = TestClient(main.app)
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws", headers={"origin": "https://evil.example"}):
+            pass
+
+
+def test_ws_allows_tauri_origin():
+    client = TestClient(main.app)
+    with client.websocket_connect("/ws", headers={"origin": "http://tauri.localhost"}) as ws:
+        assert ws.receive_json()["type"] == "state"
+
+
 def test_server_message_serialization_omits_none():
     msg = ServerMessage(type="progress", text="45%", percent=45)
     assert '"percent":45' in msg.to_json()

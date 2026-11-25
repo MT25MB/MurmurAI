@@ -120,8 +120,15 @@ def update_settings(changes: dict[str, Any]) -> dict[str, Any]:
 
 
 def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
-    settings["speech_rate"] = min(2.0, max(0.5, float(settings.get("speech_rate", 1.0))))
-    settings["mic_threshold"] = min(1.0, max(0.0, float(settings.get("mic_threshold", 0.5))))
+    for key, default, low, high in (
+        ("speech_rate", 1.0, 0.5, 2.0),
+        ("mic_threshold", 0.5, 0.0, 1.0),
+    ):
+        try:
+            value = float(settings.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        settings[key] = min(high, max(low, value))
     for key in (
         "earcons", "screen_reader_friendly", "media_ducking", "echo_guard",
         "loopback_guard", "spatial_audio_cues", "clear_data_on_uninstall",
@@ -347,22 +354,12 @@ def handle_voice_command(text: str) -> Optional[str]:
 
     if re.search(r"wake[- ]word mode|only listen for (hey )?murmur|go to standby mode", value):
         update_settings({"listening_mode": "wake"})
-        try:
-            import main
-
-            main.app_state.listening_mode = "sleep"
-        except Exception:
-            pass
+        # The runtime transition is performed by main._try_settings_phrase,
+        # which owns the listener and wake task.
         return _voice_reply("Wake word mode. I will only listen for hey Murmur.")
 
     if re.search(r"continuous listening|always listen|active listening mode", value):
         update_settings({"listening_mode": "active"})
-        try:
-            import main
-
-            main.app_state.listening_mode = "active"
-        except Exception:
-            pass
         return _voice_reply("Continuous listening is on.")
 
     if re.search(r"increase (mic|microphone) threshold|noisy room|less sensitive microphone", value):

@@ -15,6 +15,27 @@ from agent.state import ServerMessage
 from tools.event_bus import ToolEventBus
 
 
+def test_setup_requires_the_recommended_model_tier(monkeypatch, tmp_path):
+    """Light-tier users must not be stuck onboarding for unpulled 7B models."""
+    recommended = {
+        "models": ["qwen2.5:3b", "qwen2.5vl:3b"],
+        "model_labels": {},
+    }
+    monkeypatch.setattr(app_setup, "recommended_setup", lambda *a, **k: recommended)
+    monkeypatch.setattr(
+        app_setup, "pulled_models", lambda models=None: {m: True for m in (models or [])}
+    )
+    monkeypatch.setattr(app_setup, "ollama_status", lambda: {"running": True})
+    monkeypatch.setattr(app_setup, "local_weights_status", lambda: {"whisper": True})
+    marker = tmp_path / "setup_complete.json"
+    marker.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(app_setup, "COMPLETE_MARKER", marker)
+
+    status = app_setup.get_setup_status()
+    assert status["required_models"] == recommended["models"]
+    assert status["complete"] is True
+
+
 # ---- WebSocket state broadcasts ----
 
 @pytest.mark.parametrize("status", ["IDLE", "LISTENING", "THINKING", "SPEAKING",

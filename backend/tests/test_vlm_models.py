@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+def test_vision_agent_resolves_saved_model_at_construction(monkeypatch):
+    import agent.vision_agent as va
+
+    monkeypatch.setattr(
+        "system.settings_tools.load_settings",
+        lambda: {"vision_model": "qwen2.5vl:3b"},
+    )
+    assert va.resolve_vision_model() == "qwen2.5vl:3b"
+
+
 from system.profiler import (
     VISION_MODELS,
     coordinate_mode,

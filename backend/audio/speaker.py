@@ -194,7 +194,11 @@ class LocalSpeaker:
         return self.duck_media
 
     def be_quiet(self) -> None:
-        """Immediately stop speaking (voice command / hotkey 'be quiet')."""
+        """Stop current speech and drop all queued narration, including urgent."""
+        try:
+            self._queue.clear_all()
+        except Exception:  # pragma: no cover - defensive
+            pass
         self.interrupt()
 
     def chime(self, kind: str) -> None:

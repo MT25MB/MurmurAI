@@ -30,6 +30,8 @@ fn build(mic: PermissionState, screen: PermissionState, accessibility: Permissio
     let mut recovery = Vec::new();
     if mic == PermissionState::Denied {
         recovery.push("Allow microphone access in your system privacy settings.".into());
+    } else if mic == PermissionState::Unknown {
+        recovery.push("Could not check microphone permission; check your system privacy settings.".into());
     }
     if screen == PermissionState::Denied {
         recovery.push("Allow screen recording for Murmur AI in your system privacy settings.".into());

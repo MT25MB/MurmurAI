@@ -551,14 +551,16 @@ def get_setup_status() -> dict[str, Any]:
     from system.profiler import detect_hardware, load_profile
 
     ollama = ollama_status()
-    models = pulled_models()
     weights = local_weights_status()
+    profile = load_profile() or detect_hardware()
+    recommendation = recommended_setup(profile)
+    # Light-tier machines are recommended 3B models; requiring the hardcoded
+    # 7B set made onboarding impossible to complete after pulling what we asked.
+    required = recommendation["models"] or REQUIRED_MODELS
+    models = pulled_models(required)
     required_ready = all(models.values())
     weights_ready = all(weights.values())
     complete = COMPLETE_MARKER.exists() and ollama["running"] and required_ready and weights_ready
-
-    profile = load_profile() or detect_hardware()
-    recommendation = recommended_setup(profile)
     return {
         "ollama": ollama,
         "models": models,
@@ -566,7 +568,7 @@ def get_setup_status() -> dict[str, Any]:
         "weights": weights,
         "weights_ready": weights_ready,
         "model_cache_dir": str(MODEL_CACHE_DIR),
-        "required_models": REQUIRED_MODELS,
+        "required_models": required,
         "recommended_models": recommendation["models"],
         "recommended_model_labels": recommendation["model_labels"],
         "hardware": {

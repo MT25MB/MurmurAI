@@ -33,9 +33,18 @@ DESTRUCTIVE_FILE_OPS = {"delete", "remove", "write", "overwrite"}
 
 # Regex catching common rm/flags variants.
 DESTRUCTIVE_SHELL_RE = re.compile(
-    r"\b(rm|del|erase|rmdir|format|mkfs|shutdown|reboot|kill|taskkill|sudo|runas|chmod|chown|icacls)\b",
+    r"\b(rm|del|erase|rd|rmdir|remove-item|format|mkfs|fdisk|dd|shred|"
+    r"shutdown|reboot|halt|kill|taskkill|sudo|runas|chmod|chown|icacls|"
+    r"rmtree|remove_tree|unlink)\b",
     re.IGNORECASE,
 )
+
+# Shell wrappers hide the real command from a first-token check. Unwrap the
+# common ones so `cmd /c rd /s /q ...` or `python -c "shutil.rmtree(...)"`
+# cannot bypass confirmation.
+_SHELL_WRAPPERS = {"cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh",
+                  "sh", "bash", "zsh", "python", "python3", "python.exe"}
+_WRAPPER_FLAGS = {"/c", "-c", "--command"}
 
 
 @dataclass
@@ -55,12 +64,27 @@ class SafetyGate:
 
     def shell_requires_confirmation(self, command: str) -> bool:
         """True if the shell command is destructive and needs approval."""
-        shell = shlex.split(command)[0] if shlex.split(command) else ""
-        if shell.lower() in DESTRUCTIVE_COMMANDS:
+        try:
+            # Windows paths with backslashes are not POSIX shell syntax.
+            tokens = shlex.split(command or "", posix=os.name != "nt")
+        except ValueError:
+            tokens = (command or "").split()
+        if not tokens:
+            return False
+        if tokens[0].lower() in DESTRUCTIVE_COMMANDS:
             return True
-        if DESTRUCTIVE_SHELL_RE.search(command):
-            return True
-        return False
+        # Inspect the inner command of common wrappers as well as the whole
+        # string; the raw string catches PowerShell/script forms directly.
+        index = 0
+        while index < len(tokens) and tokens[index].lower() in _SHELL_WRAPPERS:
+            index += 1
+            if index < len(tokens) and tokens[index].lower() in _WRAPPER_FLAGS:
+                index += 1
+            if index >= len(tokens):
+                break
+            if tokens[index].lower() in DESTRUCTIVE_COMMANDS:
+                return True
+        return bool(DESTRUCTIVE_SHELL_RE.search(command or ""))
 
     def decide_shell(self, command: str) -> SafetyDecision:
         if not self.shell_requires_confirmation(command):

@@ -103,6 +103,11 @@ def collect_log_files() -> list[Path]:
             for path in root.rglob("*"):
                 if not path.is_file() or path.suffix.lower() not in {".log", ".json", ".txt", ".jsonl"}:
                     continue
+                # Visual-agent step logs and screen descriptions contain verbatim
+                # on-screen text; a "privacy-safe" bundle must not include them.
+                relative = path.relative_to(root).as_posix()
+                if relative.startswith(("step_", "describe/")) or "/describe/" in relative:
+                    continue
                 stat = path.stat()
                 if stat.st_mtime < cutoff or stat.st_size > LOG_MAX_BYTES:
                     continue

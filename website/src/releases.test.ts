@@ -18,6 +18,8 @@ describe("compareVersions", () => {
   it("orders patch releases correctly", () => {
     expect(compareVersions("v1.2.9", "v1.2.10")).toBeLessThan(0);
     expect(compareVersions("v1.3.0", "v1.2.9")).toBeGreaterThan(0);
+    expect(compareVersions("v1.2.14-beta.1", "v1.2.14")).toBeLessThan(0);
+    expect(compareVersions("v1.2.14+build.5", "v1.2.14")).toBeLessThan(0);
   });
 });
 

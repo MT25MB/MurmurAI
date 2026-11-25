@@ -98,6 +98,9 @@ export function useAutoUpdater(
     handled.current = lastMessage;
     if (!lastMessage) return;
     if (lastMessage.type === "update_check_request") {
+      // An explicit re-check must always answer, even if the same version was
+      // already announced at startup.
+      lastNotified.current = null;
       void checkForUpdates().then((info) => relayCheck(info, send, lastNotified));
     } else if (lastMessage.type === "update_install") {
       void installUpdate();

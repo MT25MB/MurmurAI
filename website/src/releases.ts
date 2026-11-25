@@ -13,8 +13,13 @@ export type Os = "windows" | "macos" | "linux";
 
 /** Compare dotted version numbers, ignoring a leading `v` and build suffixes. */
 export function compareVersions(a: string, b: string): number {
-  const parts = (value: string) =>
-    value.replace(/^v/i, "").split(/[.+-]/).map((p) => parseInt(p, 10) || 0);
+  const parts = (value: string) => {
+    const [core, ...suffix] = value.replace(/^v/i, "").split(/[+-]/);
+    const numbers = core.split(".").map((p) => parseInt(p, 10) || 0);
+    // A text suffix (-beta, +build) sorts below the plain stable version.
+    if (suffix.length) numbers.push(-1);
+    return numbers;
+  };
   const left = parts(a);
   const right = parts(b);
   for (let i = 0; i < Math.max(left.length, right.length); i += 1) {

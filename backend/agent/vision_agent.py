@@ -59,6 +59,24 @@ from agent.offscreen_search import ScrollSearch
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
 
 DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b"))
+
+
+def resolve_vision_model() -> str:
+    """Read the live saved/env vision model at construction time.
+
+    The module-level default is computed before hardware profiling and settings
+    are applied, so using it directly made light-tier machines call a 7B vision
+    model that was never pulled.
+    """
+    try:
+        from system.settings_tools import load_settings
+
+        value = load_settings().get("vision_model") or os.getenv(
+            "OLLAMA_VISION_MODEL", DEFAULT_VISION_MODEL
+        )
+    except Exception:  # pragma: no cover - settings are optional
+        value = os.getenv("OLLAMA_VISION_MODEL", DEFAULT_VISION_MODEL)
+    return normalize_model(value)
 OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
 LOGS_DIR = Path(__file__).resolve().parents[1] / "logs"
 MAX_STEPS_DEFAULT = 15
@@ -466,7 +484,7 @@ class VisionAgent:
 
     def __init__(
         self,
-        model: str = DEFAULT_VISION_MODEL,
+        model: str | None = None,
         host: str = OLLAMA_HOST,
         max_steps: int = MAX_STEPS_DEFAULT,
         controller: Optional[ScreenController] = None,
@@ -474,7 +492,7 @@ class VisionAgent:
         use_som: bool = True,
         use_app_knowledge: bool = True,
     ):
-        self.model = model
+        self.model = resolve_vision_model() if model is None else normalize_model(model)
         self.host = normalize_ollama_host(host).rstrip("/")
         self.max_steps = max_steps
         self.controller = controller or ScreenController()
@@ -1068,6 +1086,14 @@ class VisionAgent:
 
     # ---- accessibility: blind-user screen description ----
 
+    def close(self) -> None:
+        """Release listeners/clients owned by this short-lived agent."""
+        self.abort.remove_listener(self._announce_stop)
+        try:
+            self._client.close()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
     def describe(self, focus: str = "overview") -> str:
         """Capture the screen and return a blind-friendly spoken description.
 
@@ -1153,7 +1179,12 @@ def describe_screen(focus: str = "overview") -> str:
     never has to read a visual HUD. Returns the spoken description as text.
     """
     agent = VisionAgent()
-    description = agent.describe(focus=focus)
+    try:
+        description = agent.describe(focus=focus)
+    finally:
+        # describe_screen is called per question; leaving the abort listener
+        # registered made one abort announce N times after N descriptions.
+        agent.close()
 
     # Speak it directly rather than requiring the user to look at any UI.
     speaker = None

@@ -41,7 +41,7 @@ foreach ($t in @("x86_64-pc-windows-msvc.exe","x86_64-apple-darwin","aarch64-app
 }
 $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 Push-Location src-tauri
-& cargo check --quiet 2>$null
+& cargo check --quiet
 $code = $LASTEXITCODE
 Pop-Location
 if ($code -ne 0) { Fail "cargo check" }

@@ -28,6 +28,7 @@ except Exception:  # pragma: no cover - optional dep may be installed but unusab
 import base64
 
 from .safety import SafetyGate
+from .event_bus import tool_bus
 from . import undo_journal as journal
 
 logger = logging.getLogger("murmur_ai.tools.os_tools")
@@ -508,10 +509,9 @@ def run_terminal_command(command: str, safety: SafetyGate) -> str:
         return "No command provided."
     decision = safety.decide_shell(command)
     if decision.requires_confirmation:
-        return (
-            "Confirmation required before running destructive command: "
-            f"{command}. Say 'yes' to approve or 'cancel' to deny."
-        )
+        description = f"Run shell command: {command}"
+        if not tool_bus.request_confirmation(description, command):
+            return "Action cancelled by user."
     try:
         proc = subprocess.run(
             command,
@@ -537,10 +537,9 @@ def manage_files(operation: str, path: str, content: str | None, safety: SafetyG
         return "No file path provided."
     decision = safety.decide_file(operation, path)
     if decision.requires_confirmation:
-        return (
-            "Confirmation required before file operation: "
-            f"{decision.reason}. Say 'yes' to approve or 'cancel' to deny."
-        )
+        command = f"{operation} {path}"
+        if not tool_bus.request_confirmation(decision.reason, command):
+            return "Action cancelled by user."
     p = Path(path)
     try:
         if operation == "read":

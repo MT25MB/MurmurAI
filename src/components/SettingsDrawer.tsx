@@ -19,6 +19,7 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [diagnostics, setDiagnostics] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
+  const saveSeqRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -74,10 +75,13 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   if (!open) return null;
 
   const change = async (patch: Partial<Settings>) => {
+    const seq = ++saveSeqRef.current;
     setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
     try {
       const saved = await saveSettings(patch);
-      setSettings(saved);
+      // Sliders can fire several overlapping saves; only the newest response
+      // may replace the optimistic UI state.
+      if (seq === saveSeqRef.current) setSettings(saved);
       setStatus("Settings saved.");
     } catch {
       setStatus("Could not save settings.");

@@ -129,6 +129,22 @@ async def test_dictation_routes_speech_to_typing_without_a_model_call(
 
 
 @pytest.mark.asyncio
+async def test_physical_abort_phrase_stops_automation_even_while_dictating(
+    dictation_env, monkeypatch
+):
+    sent, send = dictation_env
+    session = SessionState()
+    await main._route_dictation(session, send, "Start dictating")
+    aborted = []
+    monkeypatch.setattr(main.abort_controller, "abort", lambda reason: aborted.append(reason))
+
+    handled, routed = await main._route_dictation(session, send, "stop automation")
+
+    assert handled is True and routed == ""
+    assert aborted and main.app_state.dictation.active is True
+
+
+@pytest.mark.asyncio
 async def test_command_trigger_leaves_dictation_and_routes_the_remainder(
     dictation_env,
 ):

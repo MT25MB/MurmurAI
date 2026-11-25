@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write # required for tauri-action to create/upload releases
+  contents: read # verify job only reads; build/package-sync opt in to write
 
 jobs:
   verify:
@@ -65,6 +65,8 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     needs: verify
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -181,6 +183,8 @@ jobs:
   package-sync:
     name: Sync package manifests and checksums
     needs: build
+    permissions:
+      contents: write
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout main (for manifest updates)

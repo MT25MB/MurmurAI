@@ -58,6 +58,9 @@ class AppState:
         self.listener: Optional[VoiceListener] = None
         self.speaker: Optional[LocalSpeaker] = None
         self.sessions: dict[str, SessionState] = {}
+        # One agent turn at a time: two quick utterances must not run competing
+        # tool loops and interleave state frames.
+        self.turn_lock = asyncio.Lock()
         self.listening_task: Optional[asyncio.Task] = None
         self.speaking_task: Optional[asyncio.Task] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
@@ -217,6 +220,22 @@ async def lifespan(app: FastAPI):
     logger.info("Murmur AI backend shut down")
 
 
+# Browsers can open ws://127.0.0.1 from any website; CORS does not apply to
+# WebSocket handshakes. Only the local Tauri webview and localhost dev origins
+# may drive the agent. Clients without an Origin header (native CLI/tests) pass.
+_WS_ORIGIN_ALLOW = re.compile(
+    r"^(tauri://localhost|https?://tauri\.localhost|"
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?)$",
+    re.IGNORECASE,
+)
+
+
+def _ws_origin_allowed(websocket: WebSocket) -> bool:
+    headers = getattr(websocket, "headers", {})
+    origin = headers.get("origin") if headers else None
+    return not origin or bool(_WS_ORIGIN_ALLOW.match(origin.strip()))
+
+
 app = FastAPI(title="Murmur AI Local Voice Sidecar", lifespan=lifespan)
 
 # The Tauri webview runs on a different origin (tauri://localhost on macOS/Linux,
@@ -331,6 +350,9 @@ async def get_diagnostics() -> JSONResponse:
 
 @app.websocket("/setup/pull-model")
 async def setup_pull_model(websocket: WebSocket):
+    if not _ws_origin_allowed(websocket):
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
     await websocket.accept()
     logger.info("Setup pull-model client connected")
 
@@ -452,6 +474,9 @@ async def emit_transcript(session: SessionState, send, text: str, role: str = "a
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
+    if not _ws_origin_allowed(websocket):
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
     await websocket.accept()
     session = app_state.session_for(websocket)
     app_state.hud_sockets.add(websocket)
@@ -459,7 +484,12 @@ async def ws(websocket: WebSocket):
     logger.info("HUD connected (session %s)", id(websocket))
 
     async def send(msg: ServerMessage) -> None:
-        async with app_state.send_locks[id(websocket)]:
+        # Background tasks may outlive this connection; no-op instead of
+        # raising KeyError after the lock was removed on disconnect.
+        lock = app_state.send_locks.get(id(websocket))
+        if lock is None:
+            return
+        async with lock:
             await websocket.send_text(msg.to_json())
 
     # Greet with current state.
@@ -585,6 +615,20 @@ async def ws(websocket: WebSocket):
         app_state.send_locks.pop(id(websocket), None)
         if id(websocket) in app_state.sessions:
             del app_state.sessions[id(websocket)]
+        # With no HUD left, stop listening; an always-hot mic with no visible
+        # state is both a privacy problem and a source of dead-send errors.
+        if not app_state.hud_sockets:
+            for task in (app_state.listening_task, app_state.wake_task):
+                if task and not task.done():
+                    task.cancel()
+            app_state.listening_task = None
+            app_state.wake_task = None
+            if app_state.listener is not None:
+                try:
+                    app_state.listener.stop()
+                except Exception:
+                    logger.debug("Listener stop on disconnect failed", exc_info=True)
+                app_state.listener = None
 
 
 # ---- handlers ----
@@ -786,6 +830,10 @@ async def _route_dictation(
     """
     dictation = app_state.dictation
     phrase = (text or "").strip()
+    # Physical stop phrases always abort, even while dictating a document.
+    if is_abort_phrase(phrase):
+        abort_controller.abort(f"user said {phrase}")
+        return True, ""
     if not dictation.active:
         if DICTATION_START_RE.match(phrase):
             await _announce_local(session, send, dictation.start())
@@ -860,11 +908,12 @@ async def handle_text_input(
     try:
         # Offload the synchronous Ollama/tool loop so the event loop keeps
         # streaming progress and accepting confirmations during installs.
-        reply = await asyncio.to_thread(
-            app_state.brain.think_and_act,
-            user_text=_augment_with_context(text, session),
-            conversation_history=session.turns,
-        )
+        async with app_state.turn_lock:
+            reply = await asyncio.to_thread(
+                app_state.brain.think_and_act,
+                user_text=_augment_with_context(text, session),
+                conversation_history=session.turns,
+            )
     except Exception:
         logger.exception("Brain turn failed")
         await _set_state(send, session, "IDLE")
@@ -885,23 +934,13 @@ async def handle_confirm(
         await _set_state(send, session, "IDLE")
         return
 
-    if approved:
-        # Re-run the brain with approval so the tool proceeds.
-        # The brain's confirm_callback returns True for this request_id.
-        app_state.brain.safety.confirm_callback = lambda desc, cmd: True
-        reply = await asyncio.to_thread(
-            app_state.brain.think_and_act,
-            user_text=f"User confirmed: {pending.description}",
-            conversation_history=session.turns,
-        )
-        session.add_turn("assistant", reply)
-        await _speak_and_return(session, send, reply)
-    else:
-        session.add_turn("assistant", "Cancelled.")
-        await send(ServerMessage(type="text_output", text="Cancelled."))
-        await _set_state(send, session, "IDLE")
-
+    # All approvals are resolved through tool_bus (single-use, echo-gated).
+    # Never install a process-wide auto-approve callback here.
     session.pending.pop(request_id, None)
+    await send(
+        ServerMessage(type="info", text="That approval is no longer pending.")
+    )
+    await _set_state(send, session, "IDLE")
 
 
 # ---- verbal confirmation ----
@@ -1056,7 +1095,7 @@ async def _wake_monitor(session: SessionState, send) -> None:
         with sd.InputStream(samplerate=16000, channels=1, dtype="int16",
                             blocksize=int(SAMPLE_RATE * 0.5)) as stream:
             while not app_state._shutting_down and app_state.listening_mode == "sleep":
-                indata, _ = stream.read(int(SAMPLE_RATE * 0.5))
+                indata, _ = await asyncio.to_thread(stream.read, int(SAMPLE_RATE * 0.5))
                 pcm = indata.tobytes()
                 if detector is not None and detector.detect(pcm):
                     await wake_up(session, send)
@@ -1152,6 +1191,9 @@ async def _try_update_verbal_confirmation(session, send, text: str) -> bool:
     """Answer a spoken update prompt with yes/no before tool confirmations."""
     if not app_state.pending_update:
         return False
+    if _echo_is_active():
+        # TTS bleed from the spoken update prompt must not trigger an install.
+        return False
     lowered = (text or "").lower()
     if _YES_RE.search(lowered):
         await resolve_update_confirmation(session, send, True)
@@ -1239,6 +1281,20 @@ async def _try_settings_phrase(session: SessionState, send, text: str) -> bool:
     reply = settings_tools.handle_voice_command(text)
     if reply is None:
         return False
+    # A spoken mode change must also change the live state machine; updating
+    # the setting alone left the VAD listener or standby monitor inconsistent.
+    # Only do this for actual mode commands, not every settings reply.
+    if not re.search(r"wake[- ]word|standby|continuous listening|always listen|active listening", text or "", re.I):
+        await send(ServerMessage(type="info", text=reply))
+        await emit_transcript(session, send, reply, "system")
+        await _set_state(send, session, "IDLE")
+        return True
+    wanted = settings_tools.load_settings().get("listening_mode", "active")
+    if wanted == "wake" and app_state.listening_mode != "sleep":
+        await enter_sleep(session, send)
+    elif wanted == "active" and app_state.listening_mode == "sleep":
+        await wake_up(session, send)
+        await start_listening(session, send)
     await send(ServerMessage(type="info", text=reply))
     await emit_transcript(session, send, reply, "system")
     await _set_state(send, session, "IDLE")
@@ -1415,12 +1471,13 @@ async def _on_utterance_async(
     await _working_on_it(session, send)
     await _set_state(send, session, "THINKING")
     try:
-        reply = await asyncio.to_thread(
-            app_state.brain.think_and_act,
-            user_text=_augment_with_context(text, session),
-            conversation_history=session.turns,
-            asr_confidence=asr_confidence,
-        )
+        async with app_state.turn_lock:
+            reply = await asyncio.to_thread(
+                app_state.brain.think_and_act,
+                user_text=_augment_with_context(text, session),
+                conversation_history=session.turns,
+                asr_confidence=asr_confidence,
+            )
     except Exception:
         logger.exception("Brain turn failed")
         await _set_state(send, session, "IDLE")
@@ -1445,7 +1502,7 @@ async def _listen_amplitude(session: SessionState, send) -> None:
         )
         with stream:
             while not app_state._shutting_down:
-                indata, _ = stream.read(1600)
+                indata, _ = await asyncio.to_thread(stream.read, 1600)
                 rms = float((indata ** 2).mean() ** 0.5) if indata.size else 0.0
                 # 0..1-ish amplitude for the UI.
                 amp = 0.0 if app_state.muted else min(rms * 8.0, 1.0)

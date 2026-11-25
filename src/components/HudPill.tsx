@@ -20,7 +20,7 @@ const stateStyle: Record<Phase, { label: string; color: string; fill: string }> 
 };
 
 export default function HudPill() {
-  const { lastMessage, send } = useMurmurSocket();
+  const { lastMessage, send, status: socketStatus } = useMurmurSocket();
 
   // One-shot OS permission check from the native shell; the backend surfaces it
   // on /health and speaks any plain-language recovery steps.
@@ -83,7 +83,11 @@ export default function HudPill() {
       const next = (lastMessage.status as Phase) || "IDLE";
       setStatus(next);
       if (next === "SLEEPING") setMode("sleep");
-      else if (next === "IDLE" || next === "LISTENING") setMode("active");
+      else if (next === "IDLE" || next === "LISTENING") {
+        setMode("active");
+        // A completed/cancelled tool turn emits no automation_stopped frame.
+        setAutomating(false);
+      }
       if (typeof lastMessage.amplitude === "number") amplitudeRef.current = lastMessage.amplitude;
     }
     if (lastMessage.type === "text_output") {
@@ -195,7 +199,10 @@ export default function HudPill() {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       if (confirmation) {
-        if (e.key === "Enter") {
+        // Let focused buttons handle their own Enter so Tab-to-Cancel then
+        // Enter cannot be hijacked into approving a destructive action.
+        const onButton = target?.closest("button, a, [role='button']");
+        if (e.key === "Enter" && !onButton) {
           e.preventDefault();
           answer(true);
         } else if (e.key === "Escape") {
@@ -266,7 +273,9 @@ export default function HudPill() {
 
   const meta = stateStyle[status] || stateStyle.IDLE;
   const baseLabel = status === "THINKING" ? "Working on it" : meta.label;
-  const displayLabel = muted ? `${baseLabel} · Muted` : baseLabel;
+  const displayLabel = `${muted ? `${baseLabel} · Muted` : baseLabel}${
+    socketStatus === "connected" ? "" : " · Reconnecting"
+  }`;
   const statusMessage = `${displayLabel}. ${muted ? "Microphone muted." : ""} ${transcript || ""}`.trim();
 
   return (

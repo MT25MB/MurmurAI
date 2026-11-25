@@ -35,8 +35,10 @@ export async function minimizeHud(): Promise<void> {
 
 export async function closeHud(): Promise<void> {
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    await getCurrentWindow().close();
+    const { invoke } = await import("@tauri-apps/api/core");
+    // Closing only the main window would leave the cursor overlay alive and
+    // the backend already dead; ask Rust to stop the sidecar and exit cleanly.
+    await invoke("quit_app");
   } catch {
     // Browser dev mode.
   }

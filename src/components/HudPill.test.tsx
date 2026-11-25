@@ -5,9 +5,8 @@ import HudPill from "./HudPill";
 
 // The updater bridge is exercised in src/lib/updater.test.ts; here we keep the
 // HUD unit tests offline so they only observe WebSocket messages.
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockRejectedValue(new Error("not running in Tauri")),
-}));
+const invokeMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -103,7 +102,7 @@ describe("HudPill", () => {
     expect(windowMock.minimize).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: /close murmur ai/i }));
-    expect(windowMock.close).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("quit_app");
   });
 
   it("expands and collapses the HUD panel", async () => {
@@ -125,6 +124,24 @@ describe("HudPill", () => {
       expect(size.width).toBe(440);
       expect(size.height).toBe(120);
     });
+  });
+
+  it("does not approve a destructive action when Cancel has focus", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({
+      type: "confirmation_required",
+      request_id: "req-1",
+      description: "Delete C:\\data",
+      command: "rd /s /q C:\\data",
+    });
+
+    screen.getByRole("button", { name: /cancel the action/i }).focus();
+    await user.keyboard("{Enter}");
+
+    const sent = sockets[0].sent.map((raw: string) => JSON.parse(raw));
+    expect(sent).not.toContainEqual({ type: "confirm", request_id: "req-1", approved: true });
   });
 
   it("shows a working indicator while the backend is thinking", async () => {

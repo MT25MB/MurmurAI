@@ -98,6 +98,16 @@ class SpeechQueue:
                 self._idle.set()
         return dropped
 
+    def clear_all(self) -> int:
+        """Drop every queued item, including urgent confirmations."""
+        dropped = 0
+        with self._lock:
+            for queue in self._queues.values():
+                dropped += len(queue.items)
+                queue.items.clear()
+            self._idle.set()
+        return dropped
+
     def _next(self) -> Optional[SpeechRequest]:
         for priority in SPEECH_PRIORITIES:
             queue = self._queues[priority]
