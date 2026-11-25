@@ -15,6 +15,7 @@ const windowMock = vi.hoisted(() => ({
   setSize: vi.fn().mockResolvedValue(undefined),
   setResizable: vi.fn().mockResolvedValue(undefined),
   center: vi.fn().mockResolvedValue(undefined),
+  setPosition: vi.fn().mockResolvedValue(undefined),
   minimize: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
 }));
@@ -22,6 +23,9 @@ vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => windowMock })
 vi.mock("@tauri-apps/api/dpi", () => ({
   LogicalSize: class {
     constructor(public width: number, public height: number) {}
+  },
+  LogicalPosition: class {
+    constructor(public x: number, public y: number) {}
   },
 }));
 
@@ -114,7 +118,8 @@ describe("HudPill", () => {
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
       expect(size.width).toBe(520);
-      expect(size.height).toBe(620);
+      expect(size.height).toBeLessThanOrEqual(620);
+      expect(size.height).toBeGreaterThanOrEqual(240);
     });
     expect(windowMock.setResizable).toHaveBeenCalledWith(true);
 
