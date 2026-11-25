@@ -45,7 +45,7 @@ export default function TranscriptStream({ lastMessage, maxTurns = 50, visible =
       aria-atomic="false"
       className={
         visible
-          ? "min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-border bg-obsidian/80 p-3 text-xs leading-relaxed text-ink"
+          ? "space-y-2 rounded-lg border border-border bg-obsidian/80 p-3 text-xs leading-relaxed text-ink"
           : "sr-only"
       }
     >

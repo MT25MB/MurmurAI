@@ -426,25 +426,30 @@ export default function HudPill() {
         />
       </div>
 
-      <TranscriptStream lastMessage={lastMessage} visible={expanded || typing} />
-
-      {(typing || expanded) && activities.length > 0 && (
-        <div
-          role="log"
-          aria-label="What Murmur is doing"
-          aria-live="polite"
-          className="app-region-no-drag max-h-20 shrink-0 space-y-1 overflow-y-auto rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
-        >
-          {activities.map((item, index) => (
-            <p key={`${item.at}-${index}`} className="flex gap-2">
-              <span className="shrink-0 font-mono text-muted">
-                {new Date(item.at).toLocaleTimeString([], { minute: "2-digit", second: "2-digit", hour12: false })}
-              </span>
-              <span>{item.text}</span>
-            </p>
-          ))}
+      {(typing || expanded) && (
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <TranscriptStream lastMessage={lastMessage} visible />
+          {activities.length > 0 && (
+            <div
+              role="log"
+              aria-label="What Murmur is doing"
+              aria-live="polite"
+              className="app-region-no-drag shrink-0 space-y-1 rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
+            >
+              {activities.map((item, index) => (
+                <p key={`${item.at}-${index}`} className="flex gap-2">
+                  <span className="shrink-0 font-mono text-muted">
+                    {new Date(item.at).toLocaleTimeString([], { minute: "2-digit", second: "2-digit", hour12: false })}
+                  </span>
+                  <span>{item.text}</span>
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {!typing && !expanded && <TranscriptStream lastMessage={lastMessage} />}
 
       {(typing || expanded) && (
         <div className="mt-auto shrink-0 space-y-2">

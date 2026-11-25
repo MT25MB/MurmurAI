@@ -153,6 +153,21 @@ describe("HudPill", () => {
     expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
   });
 
+  it("keeps the expanded log in a scrollable region", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "transcript", text: "A long reply that should scroll" });
+
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+
+    const log = screen.getByRole("log", { name: /murmur ai transcript/i });
+    const scroller = log.parentElement as HTMLElement;
+    expect(scroller.className).toContain("overflow-y-auto");
+    expect(scroller.className).toContain("min-h-0");
+    expect(screen.getByPlaceholderText(/type a command/i)).toBeInTheDocument();
+  });
+
   it("shows each activity step and a working bar in typing mode", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
