@@ -84,6 +84,19 @@ describe("HudPill", () => {
     expect(screen.getByRole("status").textContent).toContain("Muted");
   });
 
+  it("uses a moon to offer sleep and a sun to offer wake", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    const sleep = screen.getByRole("button", { name: /put murmur to sleep/i });
+    expect(sleep.querySelector("svg path")).toBeInTheDocument();
+    expect(sleep.querySelector("svg circle")).not.toBeInTheDocument();
+
+    await user.click(sleep);
+    const wake = screen.getByRole("button", { name: /wake murmur/i });
+    expect(wake.querySelector("svg circle")).toBeInTheDocument();
+    expect(wake).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("keeps the maximize control a fixed, non-shrinking square with a full icon", () => {
     render(<HudPill />);
     const expand = screen.getByRole("button", { name: /expand hud/i });

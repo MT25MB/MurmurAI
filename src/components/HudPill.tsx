@@ -353,12 +353,15 @@ export default function HudPill() {
           title={mode === "sleep" ? "Wake up" : "Go to sleep"}
         >
           {mode === "sleep" ? (
-            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
-              <path d="M10 2a1 1 0 0 1 1 1v1.1a6 6 0 1 1-4.1 4.1H6A1 1 0 0 1 5 7.2V6a4 4 0 0 1 8 0v1.1a1 1 0 0 1-.5.86 4 4 0 0 0-2.5 3.7V13a1 1 0 0 1-2 0V9.6a1 1 0 0 1 .5-.86A4 4 0 0 0 10 5V3a1 1 0 0 1 0-1Z" />
+            // Asleep: the action is "wake up", so show a sun.
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 stroke-current" fill="none" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.5" />
+              <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4" />
             </svg>
           ) : (
-            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
-              <path d="M7 3a1 1 0 0 1 1 1v9.6a3 3 0 1 0 4 0V4a1 1 0 1 1 2 0v9.6a5 5 0 1 1-8 0V4a1 1 0 0 1 1-1Z" />
+            // Awake: the action is "go to sleep", so show a crescent moon.
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+              <path d="M17.3 13.3A7.5 7.5 0 0 1 6.7 2.7 7.5 7.5 0 1 0 17.3 13.3Z" />
             </svg>
           )}
         </button>
