@@ -51,6 +51,9 @@ export default function HudPill() {
   const [guidanceInput, setGuidanceInput] = useState("");
   const [stopped, setStopped] = useState("");
   const [automating, setAutomating] = useState(false);
+  // Independent of the transient state label: an activity/status line or a
+  // typed command means work is in flight until the final reply arrives.
+  const [working, setWorking] = useState(false);
   const [mode, setMode] = useState<"active" | "sleep">("active");
   const [typing, setTyping] = useState(false);
   const [activities, setActivities] = useState<{ text: string; at: number }[]>([]);
@@ -82,17 +85,30 @@ export default function HudPill() {
     if (lastMessage.type === "state") {
       const next = (lastMessage.status as Phase) || "IDLE";
       setStatus(next);
-      if (next === "SLEEPING") setMode("sleep");
-      else if (next === "IDLE" || next === "LISTENING") {
+      if (next === "THINKING") setWorking(true);
+      if (next === "SLEEPING") {
+        setMode("sleep");
+        setWorking(false);
+      } else if (next === "IDLE" || next === "LISTENING") {
         setMode("active");
         // A completed/cancelled tool turn emits no automation_stopped frame.
         setAutomating(false);
+        // IDLE is the backend's "turn finished" signal. LISTENING can also be
+        // emitted mid-turn by barge-in, so it must not clear the working bar.
+        if (next === "IDLE") setWorking(false);
       }
       if (typeof lastMessage.amplitude === "number") amplitudeRef.current = lastMessage.amplitude;
     }
     if (lastMessage.type === "text_output") {
       setTranscript(lastMessage.text);
       setProgress(null);
+      setWorking(false);
+    }
+    if (lastMessage.type === "transcript" && lastMessage.role === "assistant") {
+      setWorking(false);
+    }
+    if (lastMessage.type === "transcript" && /working on it/i.test(lastMessage.text || "")) {
+      setWorking(true);
     }
     if (lastMessage.type === "confirmation_required") {
       setConfirmation({
@@ -101,16 +117,19 @@ export default function HudPill() {
         command: lastMessage.command,
       });
       setStatus("CONFIRMATION_REQUIRED");
+      setWorking(false); // waiting for the user, not computing
     }
     if (lastMessage.type === "activity") {
       setActivities((previous) =>
         [...previous, { text: lastMessage.text, at: Date.now() }].slice(-8)
       );
+      setWorking(true);
     }
     if (lastMessage.type === "progress") {
       setProgress({ text: lastMessage.text, percent: lastMessage.percent });
       setStatus("THINKING");
       setAutomating(true);
+      setWorking(true);
     }
     if (lastMessage.type === "guidance_required") {
       setGuidance({ request_id: lastMessage.request_id, text: lastMessage.text });
@@ -118,6 +137,7 @@ export default function HudPill() {
     if (lastMessage.type === "automation_stopped") {
       setStopped(lastMessage.text);
       setAutomating(false);
+      setWorking(false);
       setGuidance(null);
       setConfirmation(null);
       setTimeout(() => setStopped(""), 6000);
@@ -134,6 +154,7 @@ export default function HudPill() {
       setUpdate(null);
       setTranscript(lastMessage.text);
     }
+    if (lastMessage.type === "error") setWorking(false);
   }, [lastMessage]);
 
   // Startup / voice-driven update check, Tauri events and confirmed installs.
@@ -256,6 +277,7 @@ export default function HudPill() {
     setTranscript(text);
     setActivities([]);
     setStatus("THINKING");
+    setWorking(true);
   }, [typeInput, send]);
 
   const submitGuidance = useCallback(() => {
@@ -432,6 +454,21 @@ export default function HudPill() {
         />
       </div>
 
+      {working && (typing || expanded) && (
+        <div className="app-region-no-drag shrink-0">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-blue" aria-hidden="true">
+            Working on it…
+          </p>
+          <div
+            role="progressbar"
+            aria-label="Working on it"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-border"
+          >
+            <div className="h-full progress-indeterminate" />
+          </div>
+        </div>
+      )}
+
       {(typing || expanded) && (
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" style={{ maxHeight: expanded ? "55vh" : undefined }}>
           <TranscriptStream lastMessage={lastMessage} visible />
@@ -459,13 +496,6 @@ export default function HudPill() {
 
       {(typing || expanded) && (
         <div className="mt-auto shrink-0 space-y-2">
-          {status === "THINKING" && (
-            <div className="app-region-no-drag" role="progressbar" aria-label="Working on it">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-                <div className="h-full progress-indeterminate" />
-              </div>
-            </div>
-          )}
           <div className="app-region-no-drag flex gap-1.5">
             <label htmlFor="typed-command" className="sr-only">Command to send</label>
             <input
@@ -628,9 +658,9 @@ export default function HudPill() {
         </div>
       )}
 
-      {status === "THINKING" && !typing && !expanded && (
+      {working && !typing && !expanded && (
         <div
-          className="pointer-events-none absolute inset-x-4 bottom-1 h-1 overflow-hidden rounded-full bg-border"
+          className="pointer-events-none absolute inset-x-4 bottom-1 h-1.5 overflow-hidden rounded-full bg-border"
           role="progressbar"
           aria-label="Working on it"
         >

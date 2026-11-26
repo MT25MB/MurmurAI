@@ -182,6 +182,27 @@ describe("HudPill", () => {
     expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
   });
 
+  it("keeps the working bar visible when the status label flips back to listening", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+
+    // This is what the backend actually emits for a slow command: a spoken
+    // status line, an activity step, and a LISTENING state from barge-in.
+    push({ type: "transcript", text: "Working on it.", role: "system" });
+    push({ type: "activity", text: "Thinking about your request…" });
+    push({ type: "state", status: "LISTENING", uptime_s: 1 });
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+
+    expect(screen.getByText("Working on it…")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
+
+    push({ type: "transcript", text: "Done.", role: "assistant" });
+    await waitFor(() =>
+      expect(screen.queryByRole("progressbar", { name: /working on it/i })).not.toBeInTheDocument()
+    );
+  });
+
   it("keeps the expanded log in a scrollable region", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
