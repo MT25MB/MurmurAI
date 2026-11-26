@@ -117,6 +117,76 @@ fn toggle_window(window: &WebviewWindow) {
     }
 }
 
+fn backend_is_listening() -> bool {
+    std::net::TcpStream::connect_timeout(
+        &"127.0.0.1:8765".parse().unwrap(),
+        std::time::Duration::from_millis(200),
+    )
+    .is_ok()
+}
+
+/// Ask the sidecar to stop through its local HTTP endpoint. A clean uvicorn
+/// exit lets the PyInstaller onefile bootloader delete its _MEI* extraction
+/// directory; a hard kill leaves ~744 MB behind on every quit.
+fn request_backend_shutdown() {
+    if !backend_is_listening() {
+        return;
+    }
+    use std::io::{Read, Write};
+    if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
+        &"127.0.0.1:8765".parse().unwrap(),
+        std::time::Duration::from_millis(300),
+    ) {
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(400)));
+        let request = b"POST /shutdown HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(request);
+        let _ = stream.flush();
+        let mut reply = [0u8; 128];
+        let _ = stream.read(&mut reply);
+    }
+    // Bound the wait: uvicorn normally closes the listener in well under a second.
+    for _ in 0..15 {
+        if !backend_is_listening() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    eprintln!("[Murmur AI] sidecar did not stop gracefully within 1.5s");
+}
+
+/// Remove orphaned onefile extraction dirs from earlier hard kills. Only dirs
+/// carrying our bundled marker and older than ten minutes are touched, so
+/// unrelated applications' _MEI* dirs are left alone.
+fn cleanup_stale_sidecar_temp() {
+    let temp = std::env::temp_dir();
+    let entries = match std::fs::read_dir(temp) {
+        Ok(entries) => entries,
+        Err(err) => {
+            eprintln!("[Murmur AI] cannot read temp dir for sidecar cleanup: {err}");
+            return;
+        }
+    };
+    let cutoff = std::time::SystemTime::now().checked_sub(std::time::Duration::from_secs(600));
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("_MEI") || !path.join("sidecar.marker").is_file() {
+            continue;
+        }
+        if let (Some(cutoff), Ok(metadata)) = (cutoff, std::fs::metadata(&path)) {
+            if let Ok(modified) = metadata.modified() {
+                if modified > cutoff {
+                    continue;
+                }
+            }
+        }
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => eprintln!("[Murmur AI] removed stale sidecar extraction dir {name}"),
+            Err(err) => eprintln!("[Murmur AI] could not remove {name}: {err}"),
+        }
+    }
+}
+
 /// A previous app version can leave its sidecar holding port 8765 after an
 /// in-place update. Stop it so the freshly installed code actually serves.
 fn stop_stale_sidecar() {
@@ -124,6 +194,10 @@ fn stop_stale_sidecar() {
         return;
     }
     eprintln!("[Murmur AI] stale backend on 127.0.0.1:8765; stopping it");
+    request_backend_shutdown();
+    if !backend_is_listening() {
+        return;
+    }
     // PyInstaller names the sidecar with the Tauri target triple, not the
     // bare "murmur-backend.exe". Match only that sidecar family.
     #[cfg(windows)]
@@ -243,14 +317,21 @@ fn spawn_backend(app: &tauri::AppHandle) {
     }
 }
 
-/// Kill the Python backend sidecar.
+/// Stop the Python backend sidecar, preferring a clean HTTP shutdown so the
+/// onefile bootloader cleans up its extraction directory.
 fn kill_backend() {
+    request_backend_shutdown();
+    let still_running = backend_is_listening();
     if let Ok(mut guard) = BACKEND_CHILD.lock() {
         if let Some(child) = guard.take() {
-            if let Err(err) = child.kill() {
-                eprintln!("[Murmur AI] failed to kill backend sidecar: {err}");
+            if still_running {
+                if let Err(err) = child.kill() {
+                    eprintln!("[Murmur AI] failed to kill backend sidecar: {err}");
+                } else {
+                    eprintln!("[Murmur AI] backend sidecar killed after graceful shutdown failed");
+                }
             } else {
-                eprintln!("[Murmur AI] backend sidecar killed");
+                eprintln!("[Murmur AI] backend sidecar exited cleanly");
             }
         }
     }
@@ -288,7 +369,11 @@ pub fn run() {
             let backend_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if !cfg!(debug_assertions) {
-                    let _ = tauri::async_runtime::spawn_blocking(stop_stale_sidecar).await;
+                    let _ = tauri::async_runtime::spawn_blocking(|| {
+                        stop_stale_sidecar();
+                        cleanup_stale_sidecar_temp();
+                    })
+                    .await;
                 }
                 spawn_backend(&backend_handle);
             });
