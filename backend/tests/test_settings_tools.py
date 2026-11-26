@@ -144,7 +144,13 @@ def test_mic_threshold(no_runtime):
     assert st.load_settings()["mic_threshold"] == pytest.approx(0.5)
 
 
-def test_switch_vision_model(no_runtime):
+def test_switch_vision_model(no_runtime, monkeypatch, tmp_path):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(profiler, "PROFILE_PATH", tmp_path / "hardware_profile.json")
+    profiler.save_profile(profiler.HardwareProfile(
+        total_ram_gb=32, vram_gb=0, tier="high", compute_backend="CPU"
+    ))
     reply = st.handle_voice_command("Switch vision model to qwen2.5vl:7b")
     assert "qwen2.5vl:7b" in reply
     assert st.load_settings()["vision_model"] == "qwen2.5vl:7b"
@@ -171,7 +177,13 @@ def test_model_upgrade_requires_supported_hardware(no_runtime, monkeypatch, tmp_
     assert st.load_settings()["vision_model"] == "qwen3.5:4b"
 
 
-def test_select_unified_model_sets_both_roles(no_runtime, monkeypatch):
+def test_select_unified_model_sets_both_roles(no_runtime, monkeypatch, tmp_path):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(profiler, "PROFILE_PATH", tmp_path / "hardware_profile.json")
+    profiler.save_profile(profiler.HardwareProfile(
+        total_ram_gb=32, vram_gb=0, tier="high", compute_backend="CPU"
+    ))
     reply = st.select_model("qwen3.5:9b", "both")
     assert "both chat and screen" in reply.lower()
     settings = st.load_settings()
