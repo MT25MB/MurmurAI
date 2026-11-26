@@ -6,12 +6,43 @@ interface TranscriptStreamProps {
   maxTurns?: number;
   /** Show the log visually in the expanded HUD; otherwise screen-reader only. */
   visible?: boolean;
+  /** Shared history supplied by HudPill so both views show the same turns. */
+  turns?: Turn[];
 }
 
-interface Turn {
+export interface Turn {
   id: number;
   role: "assistant" | "system";
   text: string;
+}
+
+/**
+ * Owns the transcript history. HudPill calls this once and passes `turns` to
+ * both the compact and expanded views, so collapsing/restoring the window
+ * never loses the conversation.
+ */
+export function useTranscriptTurns(
+  lastMessage: ServerMessage | null,
+  maxTurns = 50,
+): Turn[] {
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const nextId = useRef(1);
+
+  useEffect(() => {
+    if (!lastMessage || lastMessage.type !== "transcript") return;
+    const text = (lastMessage.text ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return;
+    setTurns((previous) => {
+      const updated = [...previous, {
+        id: nextId.current++,
+        role: lastMessage.role ?? "assistant",
+        text,
+      }];
+      return updated.slice(-Math.max(1, maxTurns));
+    });
+  }, [lastMessage, maxTurns]);
+
+  return turns;
 }
 
 /**
@@ -22,19 +53,14 @@ interface Turn {
  * visually hidden but exposed as a polite live log so assistive tech can read
  * each turn in order.
  */
-export default function TranscriptStream({ lastMessage, maxTurns = 50, visible = false }: TranscriptStreamProps) {
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const nextId = useRef(1);
-
-  useEffect(() => {
-    if (!lastMessage || lastMessage.type !== "transcript") return;
-    const text = (lastMessage.text ?? "").replace(/\s+/g, " ").trim();
-    if (!text) return;
-    setTurns((previous) => {
-      const updated = [...previous, { id: nextId.current++, role: lastMessage.role ?? "assistant", text }];
-      return updated.slice(-Math.max(1, maxTurns));
-    });
-  }, [lastMessage, maxTurns]);
+export default function TranscriptStream({
+  lastMessage,
+  maxTurns = 50,
+  visible = false,
+  turns: controlledTurns,
+}: TranscriptStreamProps) {
+  const internalTurns = useTranscriptTurns(lastMessage, maxTurns);
+  const turns = controlledTurns ?? internalTurns;
 
   return (
     <div

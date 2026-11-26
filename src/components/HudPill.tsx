@@ -3,7 +3,7 @@ import { useMurmurSocket } from "../lib/websocket";
 import { useSleepWakeHotkey } from "../lib/useSleepWakeHotkey";
 import { useAutoUpdater } from "../lib/updater";
 import { closeHud, minimizeHud, setHudSize } from "../lib/windowControls";
-import TranscriptStream from "./TranscriptStream";
+import TranscriptStream, { useTranscriptTurns } from "./TranscriptStream";
 import { Waveform } from "./Waveform";
 import logoUrl from "../assets/logo-blue.png";
 
@@ -296,6 +296,11 @@ export default function HudPill() {
     setGuidance(null);
   }, [send]);
 
+  // One history for both layouts: the compact (screen-reader only) and the
+  // expanded (visible) log are separate DOM nodes, but the turns must survive
+  // toggling between them.
+  const turns = useTranscriptTurns(lastMessage);
+
   const meta = stateStyle[status] || stateStyle.IDLE;
   const baseLabel = status === "THINKING" ? "Working on it" : meta.label;
   const displayLabel = `${muted ? `${baseLabel} · Muted` : baseLabel}${
@@ -478,11 +483,11 @@ export default function HudPill() {
           {/* TranscriptStream already speaks every status/action line. A second
               activity log duplicated those lines and pushed the input out of the
               window, so the single live log is the only one rendered. */}
-          <TranscriptStream lastMessage={lastMessage} visible />
+          <TranscriptStream lastMessage={lastMessage} turns={turns} visible />
         </div>
       )}
 
-      {!typing && !expanded && <TranscriptStream lastMessage={lastMessage} />}
+      {!typing && !expanded && <TranscriptStream lastMessage={lastMessage} turns={turns} />}
 
       {(typing || expanded) && (
         <div className="mt-auto shrink-0 space-y-2">

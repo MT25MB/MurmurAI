@@ -97,6 +97,26 @@ describe("HudPill", () => {
     expect(wake).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("preserves the conversation across collapse and re-expand", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    push({ type: "transcript", text: "Discord has been opened for you.", role: "assistant" });
+    push({ type: "transcript", text: "Working on it.", role: "system" });
+    await waitFor(() => expect(screen.getByRole("log", { name: /murmur ai transcript/i })).toHaveTextContent("Discord has been opened"));
+
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+    const expandedLog = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(expandedLog).toHaveTextContent("Discord has been opened");
+    expect(expandedLog).toHaveTextContent("Status: Working on it.");
+
+    await user.click(screen.getByRole("button", { name: /collapse hud/i }));
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+    const restoredLog = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(restoredLog).toHaveTextContent("Discord has been opened");
+    expect(restoredLog).toHaveTextContent("Status: Working on it.");
+  });
+
   it("keeps the expanded panel fixed so the header and input cannot scroll away", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
