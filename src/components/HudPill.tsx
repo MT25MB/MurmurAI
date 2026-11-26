@@ -93,9 +93,9 @@ export default function HudPill() {
         setMode("active");
         // A completed/cancelled tool turn emits no automation_stopped frame.
         setAutomating(false);
-        // IDLE is the backend's "turn finished" signal. LISTENING can also be
-        // emitted mid-turn by barge-in, so it must not clear the working bar.
-        if (next === "IDLE") setWorking(false);
+        // LISTENING/IDLE can be emitted by barge-in or the listener while the
+        // model is still thinking. Never hide the bar on a state flip alone:
+        // only a real reply, error, stop or approval ends the work.
       }
       if (typeof lastMessage.amplitude === "number") amplitudeRef.current = lastMessage.amplitude;
     }
@@ -447,27 +447,27 @@ export default function HudPill() {
         </div>
       </div>
 
+      {working && (typing || expanded) && (
+        <div className="app-region-no-drag shrink-0 rounded-lg border border-blue/35 bg-blue-deep/20 px-2.5 py-2">
+          <p className="mb-1.5 text-[11px] font-semibold text-blue" aria-hidden="true">
+            Working on it…
+          </p>
+          <div
+            role="progressbar"
+            aria-label="Working on it"
+            className="h-2 w-full overflow-hidden rounded-full bg-border"
+          >
+            <div className="h-full progress-indeterminate" />
+          </div>
+        </div>
+      )}
+
       <div className="my-2.5 flex w-full shrink-0 items-end justify-center" aria-hidden="true">
         <Waveform
           amplitude={amplitudeRef.current}
           active={!muted && (status === "LISTENING" || status === "SPEAKING")}
         />
       </div>
-
-      {working && (typing || expanded) && (
-        <div className="app-region-no-drag shrink-0">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-blue" aria-hidden="true">
-            Working on it…
-          </p>
-          <div
-            role="progressbar"
-            aria-label="Working on it"
-            className="h-1.5 w-full overflow-hidden rounded-full bg-border"
-          >
-            <div className="h-full progress-indeterminate" />
-          </div>
-        </div>
-      )}
 
       {(typing || expanded) && (
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" style={{ maxHeight: expanded ? "55vh" : undefined }}>

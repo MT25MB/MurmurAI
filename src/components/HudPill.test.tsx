@@ -192,8 +192,10 @@ describe("HudPill", () => {
     push({ type: "transcript", text: "Working on it.", role: "system" });
     push({ type: "activity", text: "Thinking about your request…" });
     push({ type: "state", status: "LISTENING", uptime_s: 1 });
+    push({ type: "state", status: "IDLE", uptime_s: 2 });
     await user.click(screen.getByRole("button", { name: /expand hud/i }));
 
+    // No final answer yet: the bar stays even though state flipped to IDLE.
     expect(screen.getByText("Working on it…")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
 
