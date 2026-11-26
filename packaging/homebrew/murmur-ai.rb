@@ -1,10 +1,10 @@
 # Homebrew Cask template for Murmur AI (Apple Silicon).
 # Placeholders are filled by scripts/sync_packaging.py on every release.
 cask "murmur-ai" do
-  version "1.2.49"
-  sha256 "C0E5B34DE13900174DE40348C1B4FFB3B3536060EF9B129BB8DE6B608614FA97"
+  version "1.2.51"
+  sha256 "C82C6CE49B3CC89D9332412B5EBF10DC9B548AB18F7531AA999D08A51A813A3C"
 
-  url "https://github.com/MT25MB/MurmurAI/releases/download/v1.2.49/Murmur.AI_1.2.49_aarch64.dmg"
+  url "https://github.com/MT25MB/MurmurAI/releases/download/v1.2.51/Murmur.AI_1.2.51_aarch64.dmg"
   name "Murmur AI"
   desc "100% local voice-controlled desktop agent"
   homepage "https://MT25MB.github.io/MurmurAI/"
