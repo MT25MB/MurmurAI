@@ -6,6 +6,14 @@ ROOT = Path(__file__).resolve().parents[2]
 CSS = ROOT / "src" / "index.css"
 
 
+def test_hud_cannot_scroll_out_of_its_window():
+    css = CSS.read_text(encoding="utf-8")
+    assert "overflow: hidden" in css
+    assert "overscroll-behavior: none" in css
+    pill = (ROOT / "src" / "components" / "HudPill.tsx").read_text(encoding="utf-8")
+    assert "overscroll-contain" in pill
+
+
 def test_working_bar_still_animates_with_reduced_motion():
     css = CSS.read_text(encoding="utf-8")
     assert "*:not(.progress-indeterminate)" in css, (

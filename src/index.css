@@ -38,6 +38,10 @@ body,
 #root {
   height: 100%;
   width: 100%;
+  /* The HUD is a fixed-size native window: focusing the command field must
+     never scroll the document and push the header/input out of view. */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {

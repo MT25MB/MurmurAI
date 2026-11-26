@@ -142,7 +142,7 @@ describe("HudPill", () => {
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
       expect(size.width).toBe(560);
-      expect(size.height).toBeLessThanOrEqual(620);
+      expect(size.height).toBeLessThanOrEqual(680);
       expect(size.height).toBeGreaterThanOrEqual(240);
     });
     expect(windowMock.setResizable).toHaveBeenCalledWith(true);
@@ -220,18 +220,19 @@ describe("HudPill", () => {
     expect(screen.getByPlaceholderText(/type a command/i)).toBeInTheDocument();
   });
 
-  it("shows each activity step and a working bar in typing mode", async () => {
+  it("uses one live log and a working bar in typing mode", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
     await waitFor(() => expect(sockets.length).toBe(1));
-    push({ type: "activity", text: "Running open_application…" });
     push({ type: "state", status: "THINKING", uptime_s: 1 });
+    push({ type: "transcript", text: "Running open_application…", role: "system" });
 
     await user.click(screen.getByRole("button", { name: /type a command/i }));
 
-    expect(screen.getByRole("log", { name: /what murmur is doing/i })).toHaveTextContent(
+    expect(screen.getByRole("log", { name: /murmur ai transcript/i })).toHaveTextContent(
       "Running open_application…"
     );
+    expect(screen.queryByRole("log", { name: /what murmur is doing/i })).not.toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: /working on it/i })).toBeInTheDocument();
   });
 

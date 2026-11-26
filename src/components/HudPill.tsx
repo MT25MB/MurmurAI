@@ -56,7 +56,6 @@ export default function HudPill() {
   const [working, setWorking] = useState(false);
   const [mode, setMode] = useState<"active" | "sleep">("active");
   const [typing, setTyping] = useState(false);
-  const [activities, setActivities] = useState<{ text: string; at: number }[]>([]);
   const [typeInput, setTypeInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [update, setUpdate] = useState<{
@@ -71,7 +70,7 @@ export default function HudPill() {
 
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
-    if (expanded) void setHudSize(560, 620, true);
+    if (expanded) void setHudSize(560, 680, true);
     else if (typing) void setHudSize(440, 260, false);
     else void setHudSize(440, 120, false);
   }, [expanded, typing]);
@@ -120,9 +119,6 @@ export default function HudPill() {
       setWorking(false); // waiting for the user, not computing
     }
     if (lastMessage.type === "activity") {
-      setActivities((previous) =>
-        [...previous, { text: lastMessage.text, at: Date.now() }].slice(-8)
-      );
       setWorking(true);
     }
     if (lastMessage.type === "progress") {
@@ -275,7 +271,6 @@ export default function HudPill() {
     send({ type: "text_input", text });
     setTypeInput("");
     setTranscript(text);
-    setActivities([]);
     setStatus("THINKING");
     setWorking(true);
   }, [typeInput, send]);
@@ -304,7 +299,7 @@ export default function HudPill() {
     <section
       className={
         expanded
-          ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full min-h-0 select-none flex-col gap-2 overflow-y-auto overscroll-contain rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
           : "app-region-drag relative fixed bottom-[6vh] left-1/2 z-[9999] w-[420px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       }
       role="region"
@@ -471,24 +466,10 @@ export default function HudPill() {
 
       {(typing || expanded) && (
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" style={{ maxHeight: expanded ? "55vh" : undefined }}>
+          {/* TranscriptStream already speaks every status/action line. A second
+              activity log duplicated those lines and pushed the input out of the
+              window, so the single live log is the only one rendered. */}
           <TranscriptStream lastMessage={lastMessage} visible />
-          {activities.length > 0 && (
-            <div
-              role="log"
-              aria-label="What Murmur is doing"
-              aria-live="polite"
-              className="app-region-no-drag shrink-0 space-y-1 rounded-lg border border-blue/25 bg-blue-deep/10 p-2 text-[11px] text-blue"
-            >
-              {activities.map((item, index) => (
-                <p key={`${item.at}-${index}`} className="flex gap-2">
-                  <span className="shrink-0 font-mono text-muted">
-                    {new Date(item.at).toLocaleTimeString([], { minute: "2-digit", second: "2-digit", hour12: false })}
-                  </span>
-                  <span>{item.text}</span>
-                </p>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
