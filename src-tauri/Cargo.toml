@@ -1,6 +1,6 @@
 [package]
 name = "murmur-ai"
-version = "1.2.51"
+version = "1.2.52"
 description = "Murmur AI - 100% local voice-controlled desktop agent"
 authors = ["Murmur AI contributors"]
 license = "MIT"
