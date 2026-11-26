@@ -65,6 +65,7 @@ export default function HudPill() {
     text: string;
   } | null>(null);
   const amplitudeRef = useRef(0);
+  const panelRef = useRef<HTMLElement>(null);
   const approveRef = useRef<HTMLButtonElement>(null);
   const typeInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +79,13 @@ export default function HudPill() {
   useEffect(() => {
     if (typing) typeInputRef.current?.focus();
   }, [typing]);
+
+  // A minimized/restored or re-expanded window can keep its previous scroll
+  // offset in WebView2. Always show the header and input, never a scrolled-away
+  // transcript.
+  useEffect(() => {
+    if (panelRef.current) panelRef.current.scrollTop = 0;
+  }, [expanded, typing]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -297,9 +305,10 @@ export default function HudPill() {
 
   return (
     <section
+      ref={panelRef}
       className={
         expanded
-          ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full min-h-0 select-none flex-col gap-2 overflow-y-auto overscroll-contain rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full min-h-0 select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
           : "app-region-drag relative fixed bottom-[6vh] left-1/2 z-[9999] w-[420px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       }
       role="region"

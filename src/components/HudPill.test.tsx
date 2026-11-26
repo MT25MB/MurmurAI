@@ -97,6 +97,20 @@ describe("HudPill", () => {
     expect(wake).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("keeps the expanded panel fixed so the header and input cannot scroll away", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+    const panel = screen.getByRole("region", { name: /status and controls/i });
+    expect(panel).toHaveClass("overflow-hidden");
+    // Simulate the WebView2 scroll offset a minimized/restored window keeps.
+    panel.scrollTop = 240;
+    await user.click(screen.getByRole("button", { name: /collapse hud/i }));
+    await user.click(screen.getByRole("button", { name: /expand hud/i }));
+    expect(panel.scrollTop).toBe(0);
+    expect(screen.getByRole("button", { name: /collapse hud/i })).toBeInTheDocument();
+  });
+
   it("keeps the maximize control a fixed, non-shrinking square with a full icon", () => {
     render(<HudPill />);
     const expand = screen.getByRole("button", { name: /expand hud/i });

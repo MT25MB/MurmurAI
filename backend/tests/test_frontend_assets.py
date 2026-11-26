@@ -11,7 +11,8 @@ def test_hud_cannot_scroll_out_of_its_window():
     assert "overflow: hidden" in css
     assert "overscroll-behavior: none" in css
     pill = (ROOT / "src" / "components" / "HudPill.tsx").read_text(encoding="utf-8")
-    assert "overscroll-contain" in pill
+    assert "overflow-hidden" in pill
+    assert "scrollTop = 0" in pill
 
 
 def test_working_bar_still_animates_with_reduced_motion():
