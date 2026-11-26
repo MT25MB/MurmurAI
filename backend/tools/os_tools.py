@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -394,68 +396,185 @@ WINDOWS_APP_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def _normalized_app_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+
+def _app_match_score(query: str, label: str) -> int:
+    """Rank a Start Menu/registry label against the spoken app name."""
+    q = _normalized_app_name(query)
+    text = str(label or "")
+    lowered = text.casefold()
+    if not q or not lowered:
+        return 0
+    if any(block in lowered for block in ("uninstall", "remove", "readme", "help")):
+        return 0
+    # Exact spoken spelling wins over punctuation-stripped lookalikes, so
+    # "Notepad++" never resolves to "Notepad".
+    if str(query).strip().casefold() == lowered.strip():
+        return 120
+    candidate = _normalized_app_name(lowered)
+    if not candidate:
+        return 0
+    if q == candidate:
+        return 100
+    if candidate.startswith(q) or q.startswith(candidate):
+        return 80 - min(20, abs(len(candidate) - len(q)))
+    if q in candidate:
+        return 60 - min(20, len(candidate) - len(q))
+    query_words = set(re.findall(r"[a-z0-9]+", query.casefold()))
+    label_words = set(re.findall(r"[a-z0-9]+", lowered))
+    if query_words and query_words <= label_words:
+        return 40
+    return 0
+
+
+def _best_label(query: str, labels: list[str]) -> str | None:
+    scored = [(_app_match_score(query, label), label) for label in labels]
+    scored = [(score, label) for score, label in scored if score > 0]
+    if not scored:
+        return None
+    # Highest score wins; ties go to the shortest (least padded) label.
+    scored.sort(key=lambda item: (-item[0], len(item[1])))
+    return scored[0][1]
+
+
+def _start_menu_targets(name: str) -> list[Path]:
+    """All Start Menu shortcuts/URLs, ranked by how well they match."""
+    roots = [
+        Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+    ]
+    entries: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        try:
+            for entry in root.rglob("*"):
+                if entry.suffix.lower() not in (".lnk", ".url") or not entry.is_file():
+                    continue
+                key = str(entry).casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                entries.append(entry)
+        except OSError:  # pragma: no cover - permissions
+            continue
+    best = _best_label(name, [entry.stem for entry in entries])
+    if not best:
+        return []
+    return [entry for entry in entries if entry.stem == best]
+
+
+def _app_paths_target(name: str) -> str | None:
+    """Resolve a registered Windows App Paths executable."""
+    try:  # pragma: no cover - Windows only
+        import winreg
+
+        names = [name, f"{name}.exe"]
+        hives = (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER)
+        base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+        for hive in hives:
+            for candidate in names:
+                try:
+                    with winreg.OpenKey(hive, f"{base}\\{candidate}") as key:
+                        value, _ = winreg.QueryValueEx(key, "")
+                    executable = str(value).strip().strip('"')
+                    if executable and Path(executable).is_file():
+                        return executable
+                except OSError:
+                    continue
+    except Exception:  # pragma: no cover - registry unavailable
+        pass
+    return None
+
+
+def _start_apps_id(name: str) -> str | None:
+    """Ask Windows for the AppUserModelID of any registered Start Menu app."""
+    try:  # pragma: no cover - Windows only
+        # PowerShell single quotes do not expand `t, so use a literal pipe.
+        script = (
+            "Get-StartApps | Where-Object { $_.Name } | "
+            "ForEach-Object { $_.Name + '|' + $_.AppID }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=12,
+            check=False,
+        )
+        labels: list[str] = []
+        ids: dict[str, str] = {}
+        for line in (result.stdout or "").splitlines():
+            if "|" not in line:
+                continue
+            label, app_id = line.split("|", 1)
+            labels.append(label)
+            ids[label] = app_id.strip()
+        best = _best_label(name, labels)
+        return ids.get(best) if best else None
+    except Exception:  # pragma: no cover - PowerShell unavailable
+        return None
+
+
 def _windows_launch(name: str) -> bool:
-    """Try shell aliases, Start Menu shortcuts, then a Start-menu search."""
-    key = name.strip().lower().strip('"').strip("'")
-    candidates = list(WINDOWS_APP_ALIASES.get(key, ()))
-    candidates += [name, f"{name}.exe"]
-    for target in candidates:
+    """Launch any installed Windows app without a per-app alias table."""
+    key = name.strip().strip('"').strip("'")
+
+    # Protocol-only entries (Calculator, Settings, Store) have no file on disk.
+    for target in WINDOWS_APP_ALIASES.get(key.casefold(), ()):
         try:
             os.startfile(target)  # type: ignore[attr-defined]
             return True
         except Exception:
             continue
 
-    # Start Menu .lnk shortcuts (including installed desktop apps).
-    roots = [
-        Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
-        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
-    ]
-    for root in roots:
-        if not root.exists():
-            continue
-        for shortcut in root.rglob("*.lnk"):
-            if key in shortcut.stem.lower() or key.replace(" ", "") in shortcut.stem.lower().replace(" ", ""):
-                try:
-                    os.startfile(str(shortcut))  # type: ignore[attr-defined]
-                    return True
-                except Exception:
-                    continue
-
-    # Generic PATH lookup so we never need a per-app alias.
-    try:
+    # Direct name / App Paths / Start Menu shortcuts / PATH executables.
+    targets: list[str] = [key, f"{key}.exe"]
+    resolved = _app_paths_target(key)
+    if resolved:
+        targets.insert(0, resolved)
+    targets.extend(str(path) for path in _start_menu_targets(key))
+    try:  # pragma: no cover - Windows only
         found = subprocess.run(
-            ["where.exe", f"{name}.exe"],
+            ["where.exe", f"{key}.exe"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        for line in (found.stdout or "").splitlines():
-            executable = line.strip()
-            if executable and Path(executable).is_file():
-                os.startfile(executable)  # type: ignore[attr-defined]
-                return True
-    except Exception:  # pragma: no cover - platform dependent
-        pass
-
-    # Let Windows resolve App Paths / shell associations itself.
-    try:
-        subprocess.Popen(
-            ["cmd", "/c", "start", "", name],
-            shell=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        targets.extend(
+            line.strip()
+            for line in (found.stdout or "").splitlines()
+            if line.strip() and Path(line.strip()).is_file()
         )
-        return True
     except Exception:  # pragma: no cover - platform dependent
         pass
 
-    # Human-style fallback: Win key, type the app name, press Enter.
+    for target in targets:
+        try:
+            os.startfile(target)  # type: ignore[attr-defined]
+            return True
+        except Exception:
+            continue
+
+    # Store/UWP apps registered in Start (anything with an AppUserModelID).
+    app_id = _start_apps_id(key)
+    if app_id:
+        try:  # pragma: no cover - Windows only
+            os.startfile(f"shell:AppsFolder\\{app_id}")  # type: ignore[attr-defined]
+            return True
+        except Exception:
+            pass
+
+    # Last resort: drive the Start menu visually. This still covers apps whose
+    # names do not match their shortcut label.
     if pyautogui is not None:
         try:
             pyautogui.press("win")
             time.sleep(0.35)
-            pyautogui.write(name, interval=0.02)
+            pyautogui.write(key, interval=0.02)
             time.sleep(0.5)
             pyautogui.press("enter")
             return True
@@ -476,14 +595,32 @@ def open_application(app_name: str) -> str:
                 return f"Opened {name}."
             return f"Could not find a way to open {name}. Check the app name and try again."
         if system == "Darwin":
-            subprocess.run(["open", "-a", name], check=False)
-            return f"Opened {name}."
-        # Linux: try common launchers.
-        for cmd in (["xdg-open", name], ["gtk-launch", name]):
+            # `open -a` resolves any registered app by name; `open` handles
+            # files/URLs and apps whose display name differs.
+            for cmd in (["open", "-a", name], ["open", name]):
+                try:
+                    if subprocess.run(cmd, check=False).returncode == 0:
+                        return f"Opened {name}."
+                except (FileNotFoundError, OSError):
+                    continue
+            return f"Could not find a way to open {name}. Check the app name."
+        # Linux: explicit binary on PATH first, then desktop launchers.
+        executable = shutil.which(name) or shutil.which(f"{name}.exe")
+        if executable:
             try:
-                subprocess.run(cmd, check=False)
+                subprocess.Popen(
+                    [executable],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
                 return f"Opened {name}."
-            except FileNotFoundError:
+            except OSError:
+                pass
+        for cmd in (["gtk-launch", name], ["xdg-open", name]):
+            try:
+                if subprocess.run(cmd, check=False).returncode == 0:
+                    return f"Opened {name}."
+            except (FileNotFoundError, OSError):
                 continue
         return f"Could not find a launcher for {name}."
     except Exception as exc:  # pragma: no cover - platform dependent

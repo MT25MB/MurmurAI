@@ -82,14 +82,106 @@ def test_any_named_app_uses_generic_launch_resolution(monkeypatch):
     monkeypatch.setattr(
         os_tools.os, "startfile", lambda target: opened.append(target), raising=False
     )
-    # No real subprocess or shortcut scan should run in this unit test.
-    monkeypatch.setattr(os_tools.subprocess, "run", lambda *_a, **_k: None)
-    monkeypatch.setattr(os_tools.subprocess, "Popen", lambda *_a, **_k: None)
+    monkeypatch.setattr(os_tools, "_app_paths_target", lambda name: None)
+    monkeypatch.setattr(os_tools, "_start_menu_targets", lambda name: [])
+    monkeypatch.setattr(os_tools, "_start_apps_id", lambda name: None)
+    monkeypatch.setattr(os_tools, "subprocess", type("S", (), {"run": lambda *_a, **_k: None})())
+    monkeypatch.setattr(os_tools, "pyautogui", None)
     assert "steam" not in os_tools.WINDOWS_APP_ALIASES
     assert "epic games launcher" not in os_tools.WINDOWS_APP_ALIASES
 
     assert os_tools.open_application("Some Installed App") == "Opened Some Installed App."
     assert opened == ["Some Installed App"]
+
+
+def test_windows_launch_finds_fuzzy_start_menu_shortcut(monkeypatch, tmp_path):
+    import tools.os_tools as os_tools
+
+    root = tmp_path / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    root.mkdir(parents=True)
+    shortcut = root / "Epic Games Launcher.lnk"
+    shortcut.write_text("shortcut", encoding="utf-8")
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("PROGRAMDATA", str(tmp_path))
+    monkeypatch.setattr(os_tools, "_app_paths_target", lambda name: None)
+    monkeypatch.setattr(os_tools, "_start_apps_id", lambda name: None)
+    monkeypatch.setattr(os_tools, "subprocess", type("S", (), {"run": lambda *_a, **_k: None})())
+    monkeypatch.setattr(os_tools, "pyautogui", None)
+
+    opened = []
+
+    def startfile(target):
+        text = str(target)
+        # A bare spoken name is not a valid shell target; the shortcut is.
+        if "\\" not in text and "/" not in text:
+            raise OSError("not found")
+        opened.append(text)
+
+    monkeypatch.setattr(os_tools.os, "startfile", startfile, raising=False)
+    # The model may say "epic games" while the shortcut says "Epic Games Launcher".
+    assert os_tools._windows_launch("epic games") is True
+    assert str(shortcut) in opened
+
+
+def test_windows_launch_uses_start_apps_id_for_store_apps(monkeypatch):
+    import tools.os_tools as os_tools
+
+    monkeypatch.setattr(os_tools, "_app_paths_target", lambda name: None)
+    monkeypatch.setattr(os_tools, "_start_menu_targets", lambda name: [])
+    monkeypatch.setattr(
+        os_tools, "_start_apps_id", lambda name: "Contoso.PhotoEditor_1.2!App"
+    )
+    monkeypatch.setattr(os_tools, "subprocess", type("S", (), {"run": lambda *_a, **_k: None})())
+    monkeypatch.setattr(os_tools, "pyautogui", None)
+    opened = []
+
+    def startfile(target):
+        text = str(target)
+        if "\\" not in text and "/" not in text:
+            raise OSError("not found")
+        opened.append(text)
+
+    monkeypatch.setattr(os_tools.os, "startfile", startfile, raising=False)
+
+    assert os_tools._windows_launch("Photo Editor") is True
+    assert any("shell:AppsFolder" in target for target in opened)
+
+
+def test_start_apps_id_parses_powershell_output(monkeypatch):
+    import tools.os_tools as os_tools
+
+    class Result:
+        stdout = "Photo Editor|Contoso.PhotoEditor_1.2!App\nMusic|Contoso.Music!App\n"
+
+    monkeypatch.setattr(os_tools, "subprocess", type("S", (), {"run": lambda *_a, **_k: Result()})())
+    assert os_tools._start_apps_id("photo editor") == "Contoso.PhotoEditor_1.2!App"
+
+
+def test_windows_launch_never_reports_false_success(monkeypatch):
+    import tools.os_tools as os_tools
+
+    def refuse(_target):
+        raise OSError("not found")
+
+    monkeypatch.setattr(os_tools.os, "startfile", refuse, raising=False)
+    monkeypatch.setattr(os_tools, "_app_paths_target", lambda name: None)
+    monkeypatch.setattr(os_tools, "_start_menu_targets", lambda name: [])
+    monkeypatch.setattr(os_tools, "_start_apps_id", lambda name: None)
+    monkeypatch.setattr(os_tools, "subprocess", type("S", (), {"run": lambda *_a, **_k: None})())
+    monkeypatch.setattr(os_tools, "pyautogui", None)
+
+    assert os_tools._windows_launch("Definitely Not Installed XYZ") is False
+    assert "Could not find" in os_tools.open_application("Definitely Not Installed XYZ")
+
+
+def test_app_match_score_rejects_uninstall_and_accepts_fuzzy_names():
+    import tools.os_tools as os_tools
+
+    assert os_tools._app_match_score("Epic Games Launcher", "Epic Games Launcher") >= 100
+    assert os_tools._app_match_score("Notepad++", "Notepad++") > os_tools._app_match_score("Notepad++", "Notepad")
+    assert os_tools._app_match_score("epic games", "Epic Games Launcher") > 0
+    assert os_tools._app_match_score("chrome", "Google Chrome") > 0
+    assert os_tools._app_match_score("chrome", "Uninstall Google Chrome") == 0
 
 
 # ---- tool schemas ----
