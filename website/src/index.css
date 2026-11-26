@@ -66,11 +66,22 @@ body { margin: 0; min-width: 320px; }
   border-radius: 14px;
 }
 
+/* Telemetry only: code, model names, versions, measured data. */
 @utility mono-label {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Interface labels are sentence case, never a monospace costume. */
+@utility label-text {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
   color: var(--color-muted);
 }
 
@@ -79,14 +90,111 @@ body { margin: 0; min-width: 320px; }
   background: linear-gradient(90deg, var(--color-border), transparent);
 }
 
-/* Blueprint grid used behind the hero. */
-.grid-field {
-  background-image:
-    linear-gradient(to right, rgba(45, 51, 62, 0.35) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(45, 51, 62, 0.35) 1px, transparent 1px);
-  background-size: 56px 56px;
-  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 35%, #000 30%, transparent 100%);
-  mask-image: radial-gradient(ellipse 70% 65% at 50% 35%, #000 30%, transparent 100%);
+/* ---- Interaction primitives: eight states, one accent, no hover lift ---- */
+@layer components {
+  .btn-primary,
+  .btn-secondary,
+  .nav-action,
+  .tab-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 140ms ease-out, border-color 140ms ease-out,
+      color 140ms ease-out, filter 140ms ease-out, transform 80ms ease-out;
+  }
+
+  .btn-primary {
+    padding: 14px 24px;
+    background: var(--color-blue-fill);
+    color: #fff;
+  }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+
+  .btn-secondary {
+    min-height: 44px;
+    padding: 10px 20px;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-ink);
+  }
+  .btn-secondary:hover,
+  .btn-secondary:focus-visible { border-color: var(--color-blue); color: var(--color-blue); }
+  .btn-secondary:active { transform: scale(0.97); }
+
+  .nav-action {
+    min-height: 44px;
+    padding: 8px 12px;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-ink);
+    font-size: 0.8125rem;
+  }
+  .nav-action:hover,
+  .nav-action:focus-visible { border-color: var(--color-blue); color: var(--color-blue); }
+  .nav-action:active { transform: scale(0.97); }
+
+  .tab-button {
+    width: 100%;
+    padding: 16px;
+    text-align: left;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
+  .tab-button:hover { border-color: var(--color-muted); }
+  .tab-button[aria-selected="true"] {
+    background: color-mix(in srgb, var(--color-blue-deep) 20%, var(--color-surface));
+    border-color: var(--color-blue);
+  }
+  .tab-button:active { transform: scale(0.99); }
+
+  .nav-link {
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+    text-decoration: none;
+    transition: color 140ms ease-out;
+  }
+  .nav-link:hover,
+  .nav-link:focus-visible { color: var(--color-blue); }
+
+  .footer-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+    text-decoration: none;
+  }
+  .footer-link:hover,
+  .footer-link:focus-visible { color: var(--color-blue); }
+
+  /* The signature panel carries the only non-zero offset shadow. */
+  .hud-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  }
+
+  :where(.btn-primary, .btn-secondary, .nav-action, .tab-button, .footer-link, a, button):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
 }
 
 /* Scanline texture for the HUD preview. */

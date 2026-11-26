@@ -32,9 +32,8 @@ export default function QuickStart() {
     <section id="quickstart" className="border-y border-border bg-surface/40">
       <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8">
         <div className="flex flex-col gap-3">
-          <span className="mono-label"><span className="text-red">03</span> / quick start</span>
           <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-            Up and running in <span className="text-blue">four steps</span>.
+            Up and running in four steps.
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted">
             No API keys. No accounts. No cloud. If you can install Ollama, you can run Murmur AI.
@@ -45,7 +44,7 @@ export default function QuickStart() {
           {steps.map((s) => (
             <article key={s.n} className="panel min-w-0 p-5 sm:p-6">
               <div className="flex items-baseline gap-3">
-                <span className="mono-label !text-blue">{s.n}</span>
+                <span className="mono-label text-blue tabular-nums">{s.n}</span>
                 <h3 className="text-base font-semibold text-ink">{s.title}</h3>
               </div>
               <p className="mt-3 text-sm leading-relaxed text-muted">{s.body}</p>
@@ -56,7 +55,7 @@ export default function QuickStart() {
           ))}
         </div>
 
-        <div id="docs" className="mt-8 flex flex-col items-start justify-between gap-5 rounded-2xl border border-border bg-gradient-to-br from-blue-deep/25 to-transparent p-6 sm:flex-row sm:items-center sm:p-8">
+        <div id="docs" className="mt-8 flex flex-col items-start justify-between gap-5 rounded-lg border border-border bg-surface p-6 sm:flex-row sm:items-center sm:p-8">
           <div>
             <p className="text-lg font-semibold text-ink">Want the full architecture and agent rules?</p>
             <p className="mt-1 text-sm text-muted">AGENTS.md covers every module, safety gate, and design choice in the repo.</p>
@@ -65,7 +64,7 @@ export default function QuickStart() {
             href={`${REPO_URL}#readme`}
             target="_blank"
             rel="noreferrer"
-            className="shrink-0 rounded-lg border border-blue px-5 py-2.5 text-sm font-semibold text-blue transition-colors hover:bg-blue hover:text-white"
+            className="btn-secondary shrink-0"
           >
             Read the docs →
           </a>
