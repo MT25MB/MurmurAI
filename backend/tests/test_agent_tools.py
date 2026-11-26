@@ -160,6 +160,8 @@ def test_start_apps_id_parses_powershell_output(monkeypatch):
 def test_windows_launch_never_reports_false_success(monkeypatch):
     import tools.os_tools as os_tools
 
+    monkeypatch.setattr(os_tools, "_sys", lambda: "Windows")
+
     def refuse(_target):
         raise OSError("not found")
 
