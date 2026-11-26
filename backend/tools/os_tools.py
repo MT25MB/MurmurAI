@@ -370,6 +370,14 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
 
         update_settings(arguments.get("changes", {}))
         return settings_summary()
+    if name == "list_model_upgrades":
+        from system.settings_tools import list_model_upgrades
+
+        return list_model_upgrades()
+    if name == "select_model":
+        from system.settings_tools import select_model
+
+        return select_model(arguments.get("name", ""), arguments.get("role", "auto"))
     if name.startswith("mcp__"):
         from .mcp_manager import call_mcp_tool
 

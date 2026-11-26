@@ -103,6 +103,100 @@ def tier_for_hardware(ram_gb: float, vram_gb: float) -> str:
     return "light"
 
 
+# Model catalog for the Settings model picker. The "current" entries are what
+# Murmur ships with by default; the rest are opt-in upgrades. Requirements are
+# deliberately conservative: a model is offered only when the detected RAM or
+# VRAM can actually hold it.
+MODEL_CATALOG: dict[str, dict[str, Any]] = {
+    "qwen2.5:3b": {
+        "role": "chat", "tier": "current", "label": "Current chat model (3B)",
+        "min_ram_gb": 8, "min_vram_gb": 0,
+    },
+    "qwen2.5vl:3b": {
+        "role": "vision", "tier": "current", "label": "Current screen model (3B)",
+        "min_ram_gb": 8, "min_vram_gb": 0,
+    },
+    "qwen2.5:7b": {
+        "role": "chat", "tier": "current", "label": "Current chat model (7B)",
+        "min_ram_gb": 16, "min_vram_gb": 6,
+    },
+    "qwen2.5vl:7b": {
+        "role": "vision", "tier": "current", "label": "Current screen model (7B)",
+        "min_ram_gb": 16, "min_vram_gb": 6,
+    },
+    "qwen3.5:0.8b": {
+        "role": "fast", "tier": "upgrade", "label": "Ultra-fast intent head (0.8B)",
+        "min_ram_gb": 8, "min_vram_gb": 0,
+    },
+    "qwen3.5:2b": {
+        "role": "fast", "tier": "upgrade", "label": "Fast intent head (2B)",
+        "min_ram_gb": 8, "min_vram_gb": 0,
+    },
+    "qwen3.5:4b": {
+        "role": "unified", "tier": "upgrade", "label": "Unified chat + screen (4B)",
+        "min_ram_gb": 8, "min_vram_gb": 0,
+    },
+    "qwen3.5:9b": {
+        "role": "unified", "tier": "upgrade", "label": "Unified chat + screen (9B)",
+        "min_ram_gb": 16, "min_vram_gb": 6,
+    },
+    "qwen3.5:27b": {
+        "role": "unified", "tier": "upgrade", "label": "Unified chat + screen (27B)",
+        "min_ram_gb": 0, "min_vram_gb": 24, "require_vram": True,
+    },
+}
+
+
+def model_requirement(model: str) -> str:
+    """Plain-language hardware requirement for a model, for the settings UI."""
+    entry = MODEL_CATALOG.get(str(model or "").strip())
+    if not entry:
+        return "Unknown model"
+    if entry.get("require_vram"):
+        return f"{entry['min_vram_gb']} GB GPU VRAM required"
+    return f"{entry['min_ram_gb']} GB RAM or {entry['min_vram_gb']} GB GPU VRAM"
+
+
+def model_fits_hardware(model: str, profile: HardwareProfile | None = None) -> bool:
+    """True only when this machine can realistically run the model."""
+    entry = MODEL_CATALOG.get(str(model or "").strip())
+    if not entry:
+        return False
+    profile = profile or load_profile() or detect_hardware()
+    ram = profile.total_ram_gb or 8.0  # unknown RAM -> assume the light baseline
+    vram = profile.vram_gb or 0.0
+    if entry.get("require_vram"):
+        return vram >= entry["min_vram_gb"]
+    return ram >= entry["min_ram_gb"] or vram >= entry["min_vram_gb"]
+
+
+def model_options(profile: HardwareProfile | None = None) -> list[dict[str, Any]]:
+    """Catalog entries annotated with availability for the current hardware."""
+    profile = profile or load_profile() or detect_hardware()
+    options = []
+    for name, entry in MODEL_CATALOG.items():
+        available = model_fits_hardware(name, profile)
+        options.append({
+            **entry,
+            "name": name,
+            "available": available,
+            "requirement": model_requirement(name),
+            "reason": "" if available else (
+                f"Needs {model_requirement(name).lower()}; this device has "
+                f"{profile.total_ram_gb:.0f} GB RAM and {profile.vram_gb:.0f} GB VRAM."
+            ),
+        })
+    return options
+
+
+def upgrade_options(profile: HardwareProfile | None = None) -> list[dict[str, Any]]:
+    """Only the better models this machine can actually run."""
+    return [
+        option for option in model_options(profile)
+        if option["tier"] == "upgrade" and option["available"]
+    ]
+
+
 def coordinate_mode(model: str | None) -> str:
     """Return the coordinate convention used by a vision model family."""
     name = (model or "").lower()
@@ -341,7 +435,7 @@ _UNIFIED_TIERS: dict[str, dict[str, Any]] = {
 }
 
 
-def _tier_config(tier: str, family: str = UNIFIED_FAMILY) -> dict[str, Any]:
+def _tier_config(tier: str, family: str = LEGACY_FAMILY) -> dict[str, Any]:
     """Return base model settings for a tier and checkpoint family."""
     unified = model_family(family) == UNIFIED_FAMILY
     if unified:
@@ -370,7 +464,9 @@ def _tier_config(tier: str, family: str = UNIFIED_FAMILY) -> dict[str, Any]:
 def recommend_config(profile: HardwareProfile | None = None) -> dict[str, Any]:
     """Map a hardware profile to concrete model + latency settings."""
     profile = profile or detect_hardware()
-    family = os.getenv(ENV_MODEL_FAMILY) or profile.overrides.get(ENV_MODEL_FAMILY) or UNIFIED_FAMILY
+    # Current qwen2.5 models are the default. qwen3.5 is opt-in from Settings
+    # and is only applied when MURMUR_MODEL_FAMILY is explicitly set to it.
+    family = os.getenv(ENV_MODEL_FAMILY) or profile.overrides.get(ENV_MODEL_FAMILY) or LEGACY_FAMILY
     cfg = _tier_config(profile.tier, family)
 
     # CTranslate2 (faster-whisper) only accelerates on CUDA. Apple Metal and

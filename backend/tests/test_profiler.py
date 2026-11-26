@@ -93,48 +93,46 @@ def test_nvidia_vram_parses_smi(monkeypatch):
 
 # ---- tier recommendations ----
 
-def test_high_tier_config():
+def test_high_tier_config_uses_current_models():
     cfg = profiler.recommend_config(HardwareProfile(
         total_ram_gb=32, vram_gb=8, cpu_cores=16, compute_backend="CUDA", tier="high"
     ))
-    assert cfg["chat_model"] == "qwen3.5:9b"
-    assert cfg["vision_model"] == "qwen3.5:9b"
-    assert cfg["fast_model"] == "qwen3.5:2b"
-    assert cfg["unified_multimodal"] is True
-    assert cfg["shared_model"] == "qwen3.5:9b"
+    assert cfg["chat_model"] == "qwen2.5:7b"
+    assert cfg["vision_model"] == "qwen2.5vl:7b"
+    assert cfg["model_family"] == profiler.LEGACY_FAMILY
+    assert cfg["unified_multimodal"] is False
+    assert cfg["shared_model"] is None
+    assert cfg["warm_models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
     assert cfg["whisper_model"] == "small.en"
     assert cfg["whisper_compute_type"] == "float16"
     assert cfg["whisper_device"] == "cuda"
     assert cfg["keep_alive"] == "30m"
 
 
-def test_light_tier_config():
+def test_light_tier_config_uses_current_models():
     cfg = profiler.recommend_config(HardwareProfile(
         total_ram_gb=8, vram_gb=0, cpu_cores=4, compute_backend="CPU", tier="light"
     ))
-    assert cfg["chat_model"] == "qwen3.5:4b"
-    assert cfg["vision_model"] == "qwen3.5:4b"
-    assert cfg["fast_model"] == "qwen3.5:0.8b"
-    assert cfg["unified_multimodal"] is True
+    assert cfg["chat_model"] == "qwen2.5:3b"
+    assert cfg["vision_model"] == "qwen2.5vl:3b"
     assert cfg["whisper_model"] == "tiny.en"
     assert cfg["whisper_compute_type"] == "int8"
     assert cfg["whisper_device"] == "cpu"
 
 
-def test_workstation_tier_config():
+def test_workstation_tier_does_not_force_27b_by_default():
     cfg = profiler.recommend_config(HardwareProfile(
         total_ram_gb=64, vram_gb=24, cpu_cores=32, compute_backend="CUDA", tier="workstation"
     ))
-    assert cfg["chat_model"] == "qwen3.5:27b"
-    assert cfg["vision_model"] == "qwen3.5:27b"
-    assert cfg["shared_model"] == "qwen3.5:27b"
-    assert cfg["warm_models"] == ["qwen3.5:27b"]
-    assert cfg["max_screen_dim"] == 1920
+    assert cfg["chat_model"] == "qwen2.5:7b"
+    assert cfg["vision_model"] == "qwen2.5vl:7b"
+    assert "qwen3.5:27b" not in cfg["required_models"]
 
 
-# ---- unified multimodal tiering ----
+# ---- opt-in unified multimodal tiering ----
 
-def test_unified_tiers_share_one_warm_model():
+def test_unified_tiers_share_one_warm_model(monkeypatch):
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "qwen3.5")
     for tier, unified in (("light", "qwen3.5:4b"), ("high", "qwen3.5:9b"), ("workstation", "qwen3.5:27b")):
         cfg = profiler.recommend_config(HardwareProfile(tier=tier))
         assert cfg["unified_multimodal"] is True
@@ -202,11 +200,11 @@ def test_configure_applies_env_and_returns_config():
         persist=False,
     )
     import os
-    assert os.environ[profiler.ENV_CHAT_MODEL] == "qwen3.5:4b"
-    assert os.environ[profiler.ENV_VISION_MODEL] == "qwen3.5:4b"
-    assert os.environ[profiler.ENV_FAST_MODEL] == "qwen3.5:0.8b"
+    assert os.environ[profiler.ENV_CHAT_MODEL] == "qwen2.5:3b"
+    assert os.environ[profiler.ENV_VISION_MODEL] == "qwen2.5vl:3b"
+    assert profiler.ENV_FAST_MODEL not in os.environ
     assert os.environ[profiler.ENV_MAX_SCREEN_DIM] == "1024"
-    assert cfg["chat_model"] == "qwen3.5:4b"
+    assert cfg["chat_model"] == "qwen2.5:3b"
 
 
 def test_user_env_wins_over_recommendation(monkeypatch):
@@ -223,14 +221,39 @@ def test_saved_override_wins_over_recommendation():
     assert cfg["chat_model"] == "override:7b"
 
 
-def test_setup_recommended_setup_uses_profile():
+def test_setup_recommended_setup_uses_current_models():
     rec = app_setup.recommended_setup(HardwareProfile(tier="high", compute_backend="CUDA"))
-    assert rec["models"] == ["qwen3.5:9b", "qwen3.5:2b"]
+    assert rec["models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
     assert len(rec["model_labels"]) == 2
-    assert rec["unified_multimodal"] is True
-    assert rec["warm_models"] == ["qwen3.5:9b"]
-    assert "Ultra-fast" not in rec["model_labels"]["qwen3.5:2b"]
-    assert "interrupt" in rec["model_labels"]["qwen3.5:2b"]
+    assert rec["unified_multimodal"] is False
+    assert rec["warm_models"] == ["qwen2.5:7b", "qwen2.5vl:7b"]
+    assert all(item["tier"] == "upgrade" for item in rec["upgrades"])
+
+
+def test_model_gating_and_upgrade_options():
+    light = HardwareProfile(total_ram_gb=8, vram_gb=0, tier="light")
+    high = HardwareProfile(total_ram_gb=32, vram_gb=0, tier="high")
+    workstation = HardwareProfile(total_ram_gb=64, vram_gb=24, tier="workstation")
+
+    assert profiler.model_fits_hardware("qwen3.5:4b", light) is True
+    assert profiler.model_fits_hardware("qwen3.5:9b", light) is False
+    assert profiler.model_fits_hardware("qwen3.5:9b", high) is True
+    assert profiler.model_fits_hardware("qwen3.5:27b", high) is False
+    assert profiler.model_fits_hardware("qwen3.5:27b", workstation) is True
+    assert profiler.model_fits_hardware("not-a-model", workstation) is False
+
+    options = profiler.model_options(light)
+    assert any(option["name"] == "qwen2.5:3b" and option["tier"] == "current" for option in options)
+    assert all(
+        option["available"] and option["tier"] == "upgrade"
+        for option in profiler.upgrade_options(light)
+    )
+    assert not any(
+        option["name"] == "qwen3.5:9b" for option in profiler.upgrade_options(light)
+    )
+    assert "need" in next(
+        option["reason"] for option in options if option["name"] == "qwen3.5:9b"
+    ).lower()
 
 
 def test_setup_recommended_setup_legacy_family(monkeypatch):
@@ -241,7 +264,7 @@ def test_setup_recommended_setup_legacy_family(monkeypatch):
     assert rec["unified_multimodal"] is False
 
 
-def test_warm_models_uses_single_shared_instance(monkeypatch):
+def test_warm_models_defaults_to_current_pair(monkeypatch):
     calls = []
 
     class FakeResp:
@@ -267,8 +290,8 @@ def test_warm_models_uses_single_shared_instance(monkeypatch):
     )
     result = asyncio.run(app_setup.warm_models())
 
-    assert result == {"qwen3.5:9b": True}
-    assert calls == ["qwen3.5:9b"]  # one warm call, not chat + vision + fast head
+    assert result == {"qwen2.5:7b": True, "qwen2.5vl:7b": True}
+    assert calls == ["qwen2.5:7b", "qwen2.5vl:7b"]  # current pair, no upgrade forced
 
 
 def test_brain_and_vision_share_unified_model(monkeypatch):

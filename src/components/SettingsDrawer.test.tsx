@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SettingsDrawer from "./SettingsDrawer";
 import App from "../App";
@@ -87,6 +87,38 @@ function mockFetch() {
       current = { ...defaults };
       return Promise.resolve(new Response(JSON.stringify(current), { status: 200 }));
     }
+    if (url.endsWith("/model-options")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        hardware: { total_ram_gb: 32, vram_gb: 0, compute_backend: "CPU", tier: "high" },
+        current: ["qwen2.5:7b", "qwen2.5vl:7b"],
+        options: [
+          {
+            name: "qwen3.5:9b", label: "Unified chat + screen (9B)", role: "unified",
+            tier: "upgrade", available: true, requirement: "16 GB RAM or 6 GB GPU VRAM", reason: "",
+          },
+          {
+            name: "qwen3.5:27b", label: "Unified chat + screen (27B)", role: "unified",
+            tier: "upgrade", available: false, requirement: "24 GB GPU VRAM required",
+            reason: "Needs 24 GB GPU VRAM; this device has 32 GB RAM and 0 GB VRAM.",
+          },
+        ],
+      }), { status: 200 }));
+    }
+    if (url.endsWith("/models/install") && method === "POST") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    }
+    if (url.endsWith("/models/use") && method === "POST") {
+      body = JSON.parse(String(init?.body ?? "{}"));
+      const model = String(body.model);
+      const role = String(body.role);
+      current = {
+        ...current,
+        ...(role === "vision" ? { vision_model: model } : role === "chat" ? { chat_model: model } : {
+          chat_model: model, vision_model: model,
+        }),
+      } as typeof current;
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, summary: `${model} selected.` }), { status: 200 }));
+    }
     if (url.endsWith("/diagnostics")) {
       return Promise.resolve(
         new Response(JSON.stringify({ checks: {}, issues: [], summary: "Everything looks healthy." }), { status: 200 }),
@@ -104,6 +136,20 @@ describe("SettingsDrawer", () => {
     windowMock.setResizable.mockClear();
     windowMock.center.mockClear();
     vi.stubGlobal("fetch", mockFetch());
+  });
+
+  it("offers only hardware-supported model upgrades", async () => {
+    const user = userEvent.setup();
+    render(<SettingsDrawer open onClose={() => {}} />);
+    const group = await screen.findByRole("group", { name: /optional model upgrades/i });
+    expect(within(group).getByRole("button", { name: /install qwen3\.5:9b/i })).toBeEnabled();
+    const unsupported = within(group).getByRole("button", { name: /install qwen3\.5:27b/i });
+    expect(unsupported).toBeDisabled();
+    expect(group).toHaveTextContent(/24 GB GPU VRAM/);
+
+    await user.click(within(group).getByRole("button", { name: /use qwen3\.5:9b/i }));
+    await waitFor(() => expect(current.vision_model).toBe("qwen3.5:9b"));
+    expect(current.chat_model).toBe("qwen3.5:9b");
   });
 
   it("renders a full-ARIA dialog with every settings group", async () => {

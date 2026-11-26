@@ -158,10 +158,9 @@ def pulled_models(models: Optional[list[str]] = None) -> dict[str, bool]:
 def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
     """Return the model tier recommended for this machine.
 
-    Unified qwen3.5 tiers use one multimodal checkpoint for voice chat and
-    screen inspection (plus a tiny text-only intent head); the legacy
-    qwen2.5vl family keeps a separate vision model as a fallback. A saved
-    profile or an explicit ``profile`` can override this.
+    These are the *current* models Murmur ships with (7b on capable machines,
+    3b on light ones). Better qwen3.5 checkpoints are opt-in from Settings and
+    are only offered when the hardware can actually run them.
     """
     from system.profiler import load_profile
 
@@ -181,7 +180,15 @@ def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
         "warm_models": list(cfg["warm_models"]),
         "unified_multimodal": cfg["unified_multimodal"],
         "alternatives": [cfg["alternate_vision_model"]],
+        "upgrades": upgrade_models(profile),
     }
+
+
+def upgrade_models(profile: Optional[Any] = None) -> list[dict[str, Any]]:
+    """Better models this machine can run, with hardware requirements."""
+    from system.profiler import upgrade_options
+
+    return upgrade_options(profile)
 
 
 def configure_from_hardware(profile: Optional[Any] = None) -> dict[str, Any]:
@@ -585,6 +592,7 @@ def get_setup_status() -> dict[str, Any]:
         "recommended_model_labels": recommendation["model_labels"],
         "unified_multimodal": recommendation.get("unified_multimodal", False),
         "shared_model": recommendation.get("shared_model"),
+        "model_upgrades": recommendation.get("upgrades", []),
         "hardware": {
             "total_ram_gb": profile.total_ram_gb,
             "vram_gb": profile.vram_gb,

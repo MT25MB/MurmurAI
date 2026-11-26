@@ -339,6 +339,56 @@ async def reset_settings_endpoint() -> JSONResponse:
     return JSONResponse(settings_tools.reset_settings())
 
 
+@app.get("/model-options")
+async def model_options_endpoint() -> JSONResponse:
+    """Current vs optional models, annotated with hardware availability."""
+    import setup as setup_module
+    from system.profiler import detect_hardware, load_profile, model_options
+
+    profile = load_profile() or detect_hardware()
+    return JSONResponse({
+        "hardware": profile.to_dict(),
+        "options": model_options(profile),
+        "current": setup_module.recommended_setup(profile)["models"],
+    })
+
+
+@app.post("/models/install")
+async def install_model_endpoint(request: Request) -> JSONResponse:
+    """Pull an opt-in model locally. Only known, hardware-compatible tags."""
+    import setup as setup_module
+    from system.profiler import MODEL_CATALOG, model_fits_hardware
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    model = str((body or {}).get("model", "")).strip()
+    if model not in MODEL_CATALOG:
+        return JSONResponse({"ok": False, "error": "Unknown model."}, status_code=400)
+    if not model_fits_hardware(model):
+        return JSONResponse(
+            {"ok": False, "error": f"This device cannot run {model}."}, status_code=400
+        )
+    result = await setup_module.pull_model(model, lambda *_args: None)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.post("/models/use")
+async def use_model_endpoint(request: Request) -> JSONResponse:
+    from system.settings_tools import select_model
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    summary = select_model(
+        str((body or {}).get("model", "")), str((body or {}).get("role", "auto"))
+    )
+    ok = "now the" in summary
+    return JSONResponse({"ok": ok, "summary": summary}, status_code=200 if ok else 400)
+
+
 @app.get("/diagnostics")
 async def get_diagnostics() -> JSONResponse:
     from system import settings_tools

@@ -21,6 +21,51 @@ export interface Settings {
   clear_data_on_uninstall: boolean;
 }
 
+export interface ModelOption {
+  name: string;
+  label: string;
+  role: "chat" | "vision" | "fast" | "unified";
+  tier: "current" | "upgrade";
+  available: boolean;
+  requirement: string;
+  reason: string;
+}
+
+export interface ModelOptions {
+  hardware: {
+    total_ram_gb: number;
+    vram_gb: number;
+    compute_backend: string;
+    tier: string;
+  };
+  options: ModelOption[];
+  current: string[];
+}
+
+export async function fetchModelOptions(): Promise<ModelOptions> {
+  const res = await fetch(`${API_BASE}/model-options`);
+  if (!res.ok) throw new Error(`Model options request failed: ${res.status}`);
+  return res.json();
+}
+
+export async function installModel(model: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/models/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+  return res.json();
+}
+
+export async function useModel(model: string, role: "chat" | "vision" | "both" | "auto"): Promise<{ ok: boolean; summary: string }> {
+  const res = await fetch(`${API_BASE}/models/use`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, role }),
+  });
+  return res.json();
+}
+
 export interface Diagnostics {
   checks: Record<string, unknown>;
   issues: string[];

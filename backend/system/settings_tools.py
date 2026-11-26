@@ -374,17 +374,24 @@ def handle_voice_command(text: str) -> Optional[str]:
         update_settings({"mic_threshold": threshold})
         return _voice_reply(f"Microphone threshold lowered to {threshold}.")
 
+    if re.search(r"show (model )?upgrades|optional models|better models", value):
+        return _voice_reply(list_model_upgrades())
+
+    use_match = re.search(
+        r"(?:use|switch to|set) (?:the )?([\w.:-]+) (?:as|for) (?:my )?(chat|vision|screen)(?: model)?\b",
+        value,
+    )
+    if use_match:
+        role = "vision" if use_match.group(2) in ("vision", "screen") else "chat"
+        return _voice_reply(select_model(use_match.group(1), role))
+
     vision_match = re.search(r"(?:switch|change|set) (?:the )?vision model to ([\w.:-]+)", value)
     if vision_match:
-        model = vision_match.group(1)
-        update_settings({"vision_model": model})
-        return _voice_reply(f"Vision model set to {model}.")
+        return _voice_reply(select_model(vision_match.group(1), "vision"))
 
     chat_match = re.search(r"(?:switch|change|set) (?:the )?(?:chat|language) model to ([\w.:-]+)", value)
     if chat_match:
-        model = chat_match.group(1)
-        update_settings({"chat_model": model})
-        return _voice_reply(f"Chat model set to {model}.")
+        return _voice_reply(select_model(chat_match.group(1), "chat"))
 
     if re.search(r"show (current|available) models|what models|which models", value):
         models = _available_models()
@@ -494,6 +501,50 @@ def settings_summary() -> str:
         f"listening {s['listening_mode']}, "
         f"microphone threshold {s['mic_threshold']}."
     )
+
+
+# ---------------------------------------------------------------------------
+# Opt-in model upgrades (hardware gated)
+# ---------------------------------------------------------------------------
+
+def list_model_upgrades() -> str:
+    """Speak only upgrades this machine can run, with their requirements."""
+    from system.profiler import upgrade_options
+
+    options = [option for option in upgrade_options() if option["available"]]
+    if not options:
+        return "No optional model upgrades are supported by this device."
+    names = ", ".join(f"{option['name']} ({option['label']})" for option in options)
+    return f"Optional models for this device: {names}. You can install and select them in Settings."
+
+
+def select_model(name: str, role: str = "auto") -> str:
+    """Persist a model choice after checking it fits this hardware."""
+    from system.profiler import MODEL_CATALOG, model_fits_hardware, model_requirement
+
+    model = str(name or "").strip()
+    entry = MODEL_CATALOG.get(model)
+    if entry is None:
+        return f"{model or 'That model'} is not a known local model."
+    if not model_fits_hardware(model):
+        return f"I can't use {model} here. It needs {model_requirement(model).lower()}."
+    chosen_role = str(role or "auto").casefold()
+    if chosen_role not in ("chat", "vision", "auto", "both"):
+        chosen_role = "auto"
+    if chosen_role == "auto":
+        chosen_role = "vision" if entry["role"] in ("vision", "unified") else "chat"
+    if entry["role"] == "unified" and chosen_role == "chat":
+        # A unified checkpoint handles text and images; use it for both.
+        chosen_role = "both"
+    if chosen_role == "both":
+        if entry["role"] != "unified":
+            return f"{model} cannot be used for both chat and screen on this device."
+        update_settings({"chat_model": model, "vision_model": model})
+        return f"{model} is now used for both chat and screen."
+    if chosen_role not in ("chat", "vision"):
+        return f"{model} cannot be used for {chosen_role} on this device."
+    update_settings({"chat_model" if chosen_role == "chat" else "vision_model": model})
+    return f"{model} is now the {chosen_role} model."
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +719,45 @@ SETTINGS_TOOLS = [
                     }
                 },
                 "required": ["changes"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_model_upgrades",
+            "description": (
+                "List optional better local models this device can actually run, "
+                "with their hardware requirements. Current models remain the default."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_model",
+            "description": (
+                "Select a local model for chat or screen vision. Refuses models "
+                "the detected RAM/VRAM cannot support. Use only after the user "
+                "has chosen an available upgrade in Settings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Model tag, e.g. qwen3.5:9b."},
+                    "role": {
+                        "type": "string",
+                        "description": "chat | vision | both | auto (inferred from the model).",
+                    },
+                },
+                "required": ["name"],
                 "additionalProperties": False,
             },
         },

@@ -4,7 +4,12 @@ import {
   saveSettings,
   resetSettings,
   fetchDiagnostics,
+  fetchModelOptions,
+  installModel,
+  useModel,
   type Settings,
+  type ModelOptions,
+  type ModelOption,
 } from "../lib/settings";
 
 interface SettingsDrawerProps {
@@ -17,9 +22,20 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState("");
   const [diagnostics, setDiagnostics] = useState("");
+  const [modelInfo, setModelInfo] = useState<ModelOptions | null>(null);
+  const [modelBusy, setModelBusy] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const saveSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchModelOptions()
+      .then((info) => { if (!cancelled) setModelInfo(info); })
+      .catch(() => { if (!cancelled) setModelInfo(null); });
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,6 +142,37 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       setStatus("Defaults restored.");
     } catch {
       setStatus("Could not reset settings.");
+    }
+  };
+
+  const installUpgrade = async (option: ModelOption) => {
+    setModelBusy(option.name);
+    setStatus(`Installing ${option.name} locally…`);
+    try {
+      const result = await installModel(option.name);
+      if (result.ok) {
+        setStatus(`${option.name} installed. Choose Use to switch to it.`);
+        setModelInfo(await fetchModelOptions());
+      } else {
+        setStatus(result.error || `Could not install ${option.name}.`);
+      }
+    } catch {
+      setStatus(`Could not install ${option.name}.`);
+    } finally {
+      setModelBusy("");
+    }
+  };
+
+  const selectUpgrade = async (option: ModelOption) => {
+    setModelBusy(option.name);
+    try {
+      const result = await useModel(option.name, option.role === "unified" ? "both" : "auto");
+      setStatus(result.summary);
+      if (result.ok) setSettings(await fetchSettings());
+    } catch {
+      setStatus(`Could not switch to ${option.name}.`);
+    } finally {
+      setModelBusy("");
     }
   };
 
@@ -425,6 +472,58 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-ink"
                 />
               </div>
+
+              <fieldset className="space-y-2 rounded-md border border-border p-2">
+                <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Optional model upgrades
+                </legend>
+                <p className="text-[11px] leading-snug text-muted">
+                  Current models stay the default. Better models are optional and only offered
+                  when this device has enough RAM or VRAM.
+                </p>
+                {!modelInfo ? (
+                  <p role="status" aria-live="polite" className="text-[11px] text-muted">
+                    Checking your hardware…
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {modelInfo.options
+                      .filter((option) => option.tier === "upgrade")
+                      .map((option) => (
+                        <li key={option.name} className="rounded-md border border-border bg-surface/60 p-2">
+                          <p className="text-xs font-semibold text-ink">
+                            {option.label} <span className="mono-label">{option.name}</span>
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted">
+                            {option.available ? option.requirement : option.reason}
+                          </p>
+                          <div className="mt-1.5 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={!option.available || modelBusy === option.name}
+                              onClick={() => void installUpgrade(option)}
+                              aria-label={`Install ${option.name}`}
+                              title={option.available ? option.requirement : option.reason}
+                              className="rounded-md bg-blue-fill px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                            >
+                              {modelBusy === option.name ? "Working…" : "Install"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!option.available || modelBusy === option.name}
+                              onClick={() => void selectUpgrade(option)}
+                              aria-label={`Use ${option.name}`}
+                              title={option.available ? option.requirement : option.reason}
+                              className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-40"
+                            >
+                              Use
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </fieldset>
             </fieldset>
 
             <div className="flex flex-wrap gap-2">

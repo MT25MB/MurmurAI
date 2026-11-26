@@ -103,6 +103,14 @@ beforeEach(() => {
     const target = String(url);
     let body: unknown = settings;
     if (target.includes("permissions")) body = permissions;
+    else if (target.includes("model-options")) body = {
+      hardware: { total_ram_gb: 32, vram_gb: 0, compute_backend: "CPU", tier: "high" },
+      current: ["qwen2.5:7b", "qwen2.5vl:7b"],
+      options: [{
+        name: "qwen3.5:9b", label: "Unified chat + screen (9B)", role: "unified",
+        tier: "upgrade", available: true, requirement: "16 GB RAM", reason: "",
+      }],
+    };
     else if (target.includes("setup") || target.includes("health")) body = setupStatus;
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
   }));

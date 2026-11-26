@@ -145,9 +145,38 @@ def test_mic_threshold(no_runtime):
 
 
 def test_switch_vision_model(no_runtime):
-    reply = st.handle_voice_command("Switch vision model to qwen3-vl")
-    assert "qwen3-vl" in reply
-    assert st.load_settings()["vision_model"] == "qwen3-vl"
+    reply = st.handle_voice_command("Switch vision model to qwen2.5vl:7b")
+    assert "qwen2.5vl:7b" in reply
+    assert st.load_settings()["vision_model"] == "qwen2.5vl:7b"
+
+
+def test_model_upgrade_requires_supported_hardware(no_runtime, monkeypatch, tmp_path):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(
+        profiler, "PROFILE_PATH", tmp_path / "hardware_profile.json"
+    )
+    profiler.save_profile(profiler.HardwareProfile(
+        total_ram_gb=8, vram_gb=0, tier="light", compute_backend="CPU"
+    ))
+    st._CACHE = None
+
+    reply = st.handle_voice_command("Use qwen3.5:9b for screen")
+    assert "can't use" in reply.lower()
+    assert "need" in reply.lower()
+    assert st.load_settings()["vision_model"] != "qwen3.5:9b"
+
+    reply = st.handle_voice_command("Use qwen3.5:4b for screen")
+    assert "qwen3.5:4b is now the vision model" in reply.lower()
+    assert st.load_settings()["vision_model"] == "qwen3.5:4b"
+
+
+def test_select_unified_model_sets_both_roles(no_runtime, monkeypatch):
+    reply = st.select_model("qwen3.5:9b", "both")
+    assert "both chat and screen" in reply.lower()
+    settings = st.load_settings()
+    assert settings["chat_model"] == "qwen3.5:9b"
+    assert settings["vision_model"] == "qwen3.5:9b"
 
 
 def test_show_models(no_runtime, monkeypatch):
