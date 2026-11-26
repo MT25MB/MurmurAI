@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 
 type Workflow = {
   id: string;
-  index: string;
   title: string;
   blurb: string;
   lines: { tone: "muted" | "blue" | "red" | "ink"; text: string }[];
@@ -11,7 +10,6 @@ type Workflow = {
 const workflows: Workflow[] = [
   {
     id: "gui",
-    index: "01",
     title: "Hard-to-navigate apps",
     blurb:
       "Buttons get numbered boxes drawn on a screenshot. The model reads the number and clicks the spot. Works in Blender, DaVinci Resolve, and anywhere else the accessibility tree is thin.",
@@ -26,7 +24,6 @@ const workflows: Workflow[] = [
   },
   {
     id: "install",
-    index: "02",
     title: "Installing software",
     blurb:
       "It looks for the app in winget, brew, flatpak, or apt. You see the exact command and approve it before anything runs. Then you watch the download climb.",
@@ -41,7 +38,6 @@ const workflows: Workflow[] = [
   },
   {
     id: "privacy",
-    index: "03",
     title: "Nothing leaves your machine",
     blurb:
       "Models, transcripts, screenshots: all local. There's no cloud service to trust, nothing to sign up for, and no API key to paste in.",
@@ -82,16 +78,14 @@ export default function Capabilities() {
   return (
     <section id="capabilities" className="mx-auto max-w-7xl px-5 py-24 sm:px-8">
       <div className="flex flex-col gap-3">
-        <span className="mono-label"><span className="text-red">02</span> / capabilities</span>
         <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-          Ask a question and get an answer. Or tell it to
-          <span className="text-blue"> do the work</span>.
+          Ask a question and get an answer. Or tell it to do the work.
         </h2>
       </div>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-[380px_1fr]">
         {/* Tab list */}
-        <div role="tablist" aria-label="Capabilities" aria-orientation="vertical" className="flex flex-col gap-2">
+        <div role="tablist" aria-label="Capabilities" aria-orientation="vertical" className="flex min-w-0 flex-col gap-2">
           {workflows.map((w, i) => (
             <button
               key={w.id}
@@ -103,18 +97,11 @@ export default function Capabilities() {
               tabIndex={active === i ? 0 : -1}
               onClick={() => setActive(i)}
               onKeyDown={onKeyDown}
-              className={`group min-w-0 rounded-xl border p-4 text-left transition-all ${
-                active === i
-                  ? "border-blue bg-blue-deep/20"
-                  : "border-border bg-surface hover:border-muted/50"
-              }`}
+              className="tab-button min-w-0"
             >
-              <div className="flex items-start gap-3">
-                <span className={`mono-label ${active === i ? "!text-blue" : ""}`}>{w.index}</span>
-                <div>
-                  <p className="text-sm font-semibold text-ink">{w.title}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">{w.blurb}</p>
-                </div>
+              <div>
+                <p className="text-sm font-semibold text-ink">{w.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted">{w.blurb}</p>
               </div>
             </button>
           ))}
@@ -130,7 +117,7 @@ export default function Capabilities() {
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-red" />
-              <span className="mono-label !text-ink">agent trace · {current.id}</span>
+              <span className="mono-label text-ink">agent trace · {current.id}</span>
             </div>
             <span className="mono-label">stdout</span>
           </div>

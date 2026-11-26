@@ -112,19 +112,18 @@ export default function HudPreview() {
   const meta = phases[phase];
 
   return (
-    <div className="panel scanlines relative w-full max-w-xl overflow-hidden shadow-2xl shadow-black/60">
+    <div className="hud-panel scanlines relative w-full max-w-xl overflow-hidden">
       {/* top chrome */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
-          <span className="mono-label !text-ink">murmur / agent</span>
+          <span className="mono-label text-ink">murmur / agent</span>
         </div>
-        <span className="mono-label">v1.2.56 · local</span>
+        <span className="mono-label">local build</span>
       </div>
 
       {/* waveform */}
       <div className="relative px-4 pt-6">
-        <div className="absolute inset-0 grid-field opacity-30" aria-hidden="true" />
         <canvas
           ref={canvasRef}
           className="relative h-28 w-full"
@@ -137,7 +136,7 @@ export default function HudPreview() {
       <div className="relative border-t border-border px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <span
-            className="mono-label shrink-0 !text-xs !font-bold"
+            className="mono-label shrink-0 text-xs font-bold"
             style={{ color: meta.color }}
             aria-live="polite"
           >

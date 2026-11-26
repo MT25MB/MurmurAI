@@ -26,8 +26,7 @@ export default function HardwareRequirements() {
   return (
     <section id="hardware" className="scroll-mt-24 border-y border-border bg-surface/40 px-5 py-20 sm:px-8">
       <div className="mx-auto max-w-7xl">
-        <p className="mono-label text-blue">Hardware</p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+        <h2 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
           What your machine needs
         </h2>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
@@ -39,7 +38,7 @@ export default function HardwareRequirements() {
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <caption className="sr-only">Minimum and recommended hardware requirements</caption>
             <thead>
-              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+              <tr className="border-b border-border text-xs text-muted">
                 <th scope="col" className="px-5 py-4 font-medium">Requirement</th>
                 <th scope="col" className="px-5 py-4 font-medium">Minimum</th>
                 <th scope="col" className="px-5 py-4 font-medium">Recommended</th>

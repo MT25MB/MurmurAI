@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-26T00:00:00Z",
+  "title": "Design System: Murmur AI",
+  "extensions": {
+    "colorMeta": {
+      "obsidian": { "role": "neutral", "displayName": "Obsidian", "canonical": "#080a0f", "tonalRamp": ["#080a0f", "#10141b", "#1b1f28", "#2d333e", "#4b5260", "#777e8b", "#a0a5ae", "#f1f3f9"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "#10141b", "tonalRamp": ["#080a0f", "#10141b", "#1b1f28", "#2d333e", "#4b5260", "#777e8b", "#a0a5ae", "#f1f3f9"] },
+      "border": { "role": "neutral", "displayName": "Hairline", "canonical": "#2d333e", "tonalRamp": ["#080a0f", "#10141b", "#1b1f28", "#2d333e", "#4b5260", "#777e8b", "#a0a5ae", "#f1f3f9"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#f1f3f9", "tonalRamp": ["#080a0f", "#10141b", "#1b1f28", "#2d333e", "#4b5260", "#777e8b", "#a0a5ae", "#f1f3f9"] },
+      "blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "#5598f9", "tonalRamp": ["#0c2c5a", "#123f7d", "#156cdd", "#3182e8", "#5598f9", "#84b6fb", "#b0d1fc", "#e0ecfe"] },
+      "blue-fill": { "role": "primary", "displayName": "Action Blue Fill", "canonical": "#156cdd", "tonalRamp": ["#0c2c5a", "#123f7d", "#156cdd", "#3182e8", "#5598f9", "#84b6fb", "#b0d1fc", "#e0ecfe"] },
+      "red": { "role": "secondary", "displayName": "Execution Red", "canonical": "#f05653", "tonalRamp": ["#4a0e13", "#7d121b", "#d01c29", "#e33b3b", "#f05653", "#f48482", "#f8b7b6", "#fee4e3"] },
+      "red-fill": { "role": "secondary", "displayName": "Execution Red Fill", "canonical": "#d01c29", "tonalRamp": ["#4a0e13", "#7d121b", "#d01c29", "#e33b3b", "#f05653", "#f48482", "#f8b7b6", "#fee4e3"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The single hero statement." },
+      "title": { "displayName": "Title", "purpose": "Section headings." },
+      "body": { "displayName": "Body", "purpose": "Explanations, capped at 65-75ch." },
+      "telemetry": { "displayName": "Telemetry", "purpose": "Code, model names, versions, measurements; tabular numerals." }
+    },
+    "shadows": [
+      { "name": "hud-rest", "value": "0 12px 40px rgba(0,0,0,0.35)", "purpose": "The single signature HUD preview panel only." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.23, 1, 0.32, 1)", "purpose": "State transitions; under 200ms." },
+      { "name": "reduced", "value": "0.01ms", "purpose": "Applied to all animation and transition under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action in a viewport section.",
+      "html": "<button class=\"ds-btn-primary\">Download from GitHub Releases</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:14px 24px; border-radius:8px; border:1px solid transparent; background:var(--color-blue-fill,#156cdd); color:#fff; font:500 14px/1.4 Inter,system-ui,sans-serif; cursor:pointer; transition:filter 140ms ease-out, transform 80ms ease-out; } .ds-btn-primary:hover { filter:brightness(1.08); } .ds-btn-primary:focus-visible { outline:2px solid var(--color-blue,#5598f9); outline-offset:3px; } .ds-btn-primary:active { transform:scale(0.97); } .ds-btn-primary:disabled { opacity:0.5; cursor:not-allowed; } @media (prefers-reduced-motion:reduce) { .ds-btn-primary { transition:none; } }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Supporting action with a hairline border.",
+      "html": "<button class=\"ds-btn-secondary\">Read the docs</button>",
+      "css": ".ds-btn-secondary { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:8px; border:1px solid var(--color-border,#2d333e); background:var(--color-surface,#10141b); color:var(--color-ink,#f1f3f9); font:500 14px/1.4 Inter,system-ui,sans-serif; cursor:pointer; transition:color 140ms ease-out, border-color 140ms ease-out; } .ds-btn-secondary:hover, .ds-btn-secondary:focus-visible { color:var(--color-blue,#5598f9); border-color:var(--color-blue,#5598f9); } .ds-btn-secondary:focus-visible { outline:2px solid var(--color-blue,#5598f9); outline-offset:3px; } .ds-btn-secondary:active { transform:scale(0.97); }"
+    },
+    {
+      "name": "Navigation Link",
+      "kind": "nav",
+      "refersTo": "button-secondary",
+      "description": "Sticky header link; sentence case, colour on hover only.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#hardware\">Hardware</a><a href=\"#capabilities\">Capabilities</a></nav>",
+      "css": ".ds-nav { display:flex; gap:24px; align-items:center; } .ds-nav a { color:color-mix(in srgb, var(--color-ink,#f1f3f9) 70%, transparent); font:500 14px/1.4 Inter,system-ui,sans-serif; text-decoration:none; transition:color 140ms ease-out; } .ds-nav a:hover, .ds-nav a:focus-visible { color:var(--color-blue,#5598f9); } .ds-nav a:focus-visible { outline:2px solid var(--color-blue,#5598f9); outline-offset:3px; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat tonal container with a header divider.",
+      "html": "<section class=\"ds-panel\"><header class=\"ds-panel-head\">agent trace</header><div class=\"ds-panel-body\">content</div></section>",
+      "css": ".ds-panel { border:1px solid var(--color-border,#2d333e); border-radius:14px; background:var(--color-surface,#10141b); color:var(--color-ink,#f1f3f9); } .ds-panel-head { padding:12px 16px; border-bottom:1px solid var(--color-border,#2d333e); font:400 11px/1.5 ui-monospace,Consolas,monospace; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-muted,#a0a5ae); } .ds-panel-body { padding:24px; }"
+    },
+    {
+      "name": "Fact Chip",
+      "kind": "chip",
+      "description": "A factual metadata token, not decoration.",
+      "html": "<a class=\"ds-chip\" href=\"#download\">Windows</a>",
+      "css": ".ds-chip { display:inline-flex; align-items:center; padding:4px 10px; border:1px solid var(--color-border,#2d333e); border-radius:4px; background:color-mix(in srgb, var(--color-surface,#10141b) 80%, transparent); color:var(--color-ink,#f1f3f9); font:500 13px/1.4 Inter,system-ui,sans-serif; text-decoration:none; transition:border-color 140ms ease-out, color 140ms ease-out; } .ds-chip:hover, .ds-chip:focus-visible { border-color:var(--color-blue,#5598f9); color:var(--color-blue,#5598f9); } .ds-chip:focus-visible { outline:2px solid var(--color-blue,#5598f9); outline-offset:3px; }"
+    },
+    {
+      "name": "HUD Readout",
+      "kind": "custom",
+      "description": "Signature state panel: chrome row, waveform, state line, three-segment track.",
+      "html": "<div class=\"ds-hud\"><div class=\"ds-hud-head\"><span class=\"ds-hud-dot\"></span><span>murmur / agent</span></div><div class=\"ds-hud-state\">LISTENING</div><div class=\"ds-hud-track\"><i></i><i></i><i></i></div></div>",
+      "css": ".ds-hud { max-width:576px; border:1px solid var(--color-border,#2d333e); border-radius:14px; background:var(--color-surface,#10141b); box-shadow:0 12px 40px rgba(0,0,0,0.35); overflow:hidden; } .ds-hud-head { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--color-border,#2d333e); font:400 11px/1.5 ui-monospace,Consolas,monospace; color:var(--color-muted,#a0a5ae); } .ds-hud-dot { width:8px; height:8px; border-radius:50%; background:var(--color-blue,#5598f9); } .ds-hud-state { padding:16px; font:700 12px/1.5 ui-monospace,Consolas,monospace; letter-spacing:0.14em; color:var(--color-blue,#5598f9); } .ds-hud-track { display:flex; gap:4px; padding:12px; border-top:1px solid var(--color-border,#2d333e); } .ds-hud-track i { height:4px; flex:1; border-radius:999px; background:var(--color-border,#2d333e); } .ds-hud-track i:first-child { background:var(--color-blue,#5598f9); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument Panel",
+    "overview": "The site reads as the readout of a calm, precise machine: flat obsidian surfaces, one-pixel hairlines, a single blue signal colour, and red reserved for the moment the agent acts. Nothing glows for attention; colour is information, not ornament. Density is moderate and editorial: sections breathe, but inside a section the grouping is tight. Copy is plain and technical without being cold — the product's own words, never marketing superlatives.",
+    "keyCharacteristics": [
+      "Flat, tonal layering instead of elevation shadows.",
+      "One accent in use at a time: blue for navigation and primary action, red only for execution/alert state.",
+      "Monospace is reserved for actual code, telemetry, and measurements.",
+      "Motion is a single authored state machine (the HUD waveform), with reduced-motion honoured everywhere."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Only one accent carries meaning in a viewport: blue for navigation/action, red for execution. Never use both as decoration in the same element.", "section": "colors" },
+      { "name": "The Dead Colour Rule", "body": "Soft-focus coloured blobs and gradient washes are not part of this system. A coloured surface earns its place by encoding state.", "section": "colors" },
+      { "name": "The Sentence-Case Rule", "body": "Interface labels are sentence case. Uppercase and letter-spacing are reserved for short telemetry strings that are genuinely data.", "section": "typography" },
+      { "name": "The No Gradient Type Rule", "body": "Emphasis comes from weight, size, or the single signal colour — not gradient text or a coloured highlight on one word.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "No decorative blur blobs, glass panels, or hover lift. A surface is flat at rest and changes only by border or background on state.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the measured palette in index.css as the single source of truth.",
+      "Do use monospace for code, model names, versions, and measurements, with tabular numerals.",
+      "Do give every interactive element a visible focus-visible ring and a real active response.",
+      "Do keep claims factual and sourced in the repository.",
+      "Do honour prefers-reduced-motion and keep text readable at 320px width."
+    ],
+    "donts": [
+      "Don't add blurred coloured blobs, gradient washes, or gradient text.",
+      "Don't put an uppercase eyebrow or section number above a heading.",
+      "Don't repeat a metric in badges, stat strips, and section cards.",
+      "Don't make every section the same icon-plus-heading-plus-text card grid.",
+      "Don't hardcode a release version in a component.",
+      "Don't use !important utility overrides to fight the token system."
+    ]
+  }
+}
