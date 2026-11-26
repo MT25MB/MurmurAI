@@ -292,7 +292,7 @@ export default function HudPill() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
         <img
           src={logoUrl}
           alt=""
@@ -381,38 +381,41 @@ export default function HudPill() {
         <div className="flex shrink-0 items-center gap-1 border-l border-border pl-1.5">
           <button
             type="button"
-            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink"
+            className="app-region-no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink"
             onClick={() => void minimizeHud()}
             aria-label="Minimize HUD"
             title="Minimize (restore from the tray)"
           >
-            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
-              <rect x="4" y="9" width="12" height="2" />
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+              <rect x="3" y="9" width="14" height="2" rx="1" />
             </svg>
           </button>
           <button
             type="button"
-            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink"
+            className="app-region-no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink"
             onClick={() => setExpanded((v) => !v)}
             aria-label={expanded ? "Collapse HUD" : "Expand HUD"}
             title={expanded ? "Collapse HUD" : "Expand HUD"}
           >
-            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
               {expanded ? (
-                <rect x="5" y="8" width="10" height="4" />
+                // Restore: two offset squares, drawn as solid frames so the
+                // strokes stay crisp at small sizes.
+                <path d="M6 3h11v11h-2V5H6V3ZM3 6h11v11H3V6Zm2 2v7h7V8H5Z" />
               ) : (
-                <path d="M4 4h12v2H6v8H4V4Zm0 10h2v2h8v-2h2v4H4v-4Z" />
+                // Maximize: one clean square frame (not a thin corner bracket).
+                <path d="M4 4h12v12H4V4Zm2 2v8h8V6H6Z" />
               )}
             </svg>
           </button>
           <button
             type="button"
-            className="app-region-no-drag flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-red-fill/30 hover:text-red"
+            className="app-region-no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-fill/30 hover:text-red"
             onClick={() => void closeHud()}
             aria-label="Close Murmur AI"
             title="Quit Murmur AI"
           >
-            <svg viewBox="0 0 20 20" className="h-3 w-3 fill-current" aria-hidden="true">
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
               <path d="M5.3 4.2 10 8.9l4.7-4.7 1.1 1.1-4.7 4.7 4.7 4.7-1.1 1.1-4.7-4.7-4.7 4.7-1.1-1.1 4.7-4.7-4.7-4.7 1.1-1.1Z" />
             </svg>
           </button>

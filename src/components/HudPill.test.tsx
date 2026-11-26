@@ -84,6 +84,17 @@ describe("HudPill", () => {
     expect(screen.getByRole("status").textContent).toContain("Muted");
   });
 
+  it("keeps the maximize control a fixed, non-shrinking square with a full icon", () => {
+    render(<HudPill />);
+    const expand = screen.getByRole("button", { name: /expand hud/i });
+    expect(expand.className).toContain("shrink-0");
+    expect(expand.className).toMatch(/h-8 w-8/);
+    const svg = expand.querySelector("svg");
+    expect(svg).toHaveClass("h-4", "w-4", "shrink-0");
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(svg?.querySelector("path")).toBeInTheDocument();
+  });
+
   it("fills the expanded window with a visible transcript panel", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
