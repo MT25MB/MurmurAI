@@ -47,7 +47,7 @@ body:
     id: version
     attributes:
       label: Murmur AI version
-      placeholder: "1.2.46"
+      placeholder: "1.2.47"
     validations:
       required: true
   - type: dropdown
