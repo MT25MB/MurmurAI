@@ -563,6 +563,41 @@ class VisionAgent:
             )
         return announcer
 
+    @staticmethod
+    def _launch_app_from_subgoal(text: str) -> bool:
+        """Open an app deterministically when the subgoal is just 'open X'.
+
+        A VLM cannot launch an installed app reliably by clicking; the OS tool
+        resolves Start Menu shortcuts, App Paths and Store apps instead.
+        """
+        value = str(text or "").strip()
+        if re.search(
+            r"\b(and|then|project|file|document|new|save|delete|add|create|name)\b",
+            value, re.IGNORECASE,
+        ):
+            return False
+        match = re.search(
+            r"^\s*(?:please\s+)?(?:open|launch|start|run)\s+(?:up\s+)?(?:the\s+)?"
+            r"(.+?)(?:\s+app(?:lication)?|\s+for\s+me)?\s*[.!]?\s*$",
+            value, re.IGNORECASE,
+        )
+        if not match:
+            return False
+        app = re.sub(r"^(?:my|the)\s+", "", match.group(1).strip(), flags=re.IGNORECASE)
+        app = app.strip(" '\".,")
+        if len(app) < 2 or len(app.split()) > 5:
+            return False
+        from tools.os_tools import open_application
+
+        result = open_application(app)
+        if not result.startswith("Opened"):
+            logger.info("Deterministic app launch failed for %r: %s", app, result)
+            return False
+        spoken = f"Opened {app}."
+        VisionAgent._speak(spoken)
+        tool_bus.emit(ServerMessage(type="transcript", text=spoken, role="system"))
+        return True
+
     def build_preview(self, goal: str) -> PlanPreview:
         """Read-only preview of the visual subgoals; no capture or clicking."""
         plan = build_plan(goal)
@@ -639,6 +674,12 @@ class VisionAgent:
 
             active = self.plan.current()
             subgoal_idx = self.plan.active_index
+
+            # Launch-only subgoals are handled by the OS resolver, not the VLM.
+            if self._launch_app_from_subgoal(active.text):
+                self.plan.complete_current()
+                self.loop_detector.mark_progress(self.plan.active_index)
+                continue
 
             # --- app context ---
             app_title, app_label, app_section = "", "", ""

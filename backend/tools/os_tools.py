@@ -232,6 +232,10 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
             arguments.get("content"),
             safety,
         )
+    if name == "run_visual_task":
+        from agent.vision_agent import VisionAgent
+
+        return VisionAgent().run_visual_task(arguments.get("goal", ""))
     if name == "install_application":
         from .installer_tool import install_application
 

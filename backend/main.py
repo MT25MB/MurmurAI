@@ -26,7 +26,12 @@ from fastapi.responses import JSONResponse
 
 import agent.brain as brain_module
 from agent.brain import Brain
-from agent.plan_preview import classify as classify_plan, pick_engine, should_auto_preview
+from agent.plan_preview import (
+    MULTI_STEP_RE,
+    classify as classify_plan,
+    pick_engine,
+    should_auto_preview,
+)
 from agent.state import SessionState, ServerMessage
 from audio.dictation import DictationSession, START_RE as DICTATION_START_RE
 from audio.listener import VoiceListener
@@ -909,6 +914,20 @@ async def _route_dictation(
     return True, ""
 
 
+def _is_multi_step_gui_goal(text: str) -> bool:
+    """True for goals with several desktop actions in one sentence."""
+    value = (text or "").strip()
+    if not MULTI_STEP_RE.search(value) or pick_engine(value) != "vision":
+        return False
+    actions = (
+        "open", "start", "create", "new", "delete", "remove", "add",
+        "click", "type", "save", "select", "name", "insert", "build",
+    )
+    return sum(
+        1 for verb in actions if re.search(rf"\b{verb}\b", value, re.IGNORECASE)
+    ) >= 2
+
+
 async def handle_text_input(
     session: SessionState, send, text: str
 ) -> None:
@@ -951,6 +970,21 @@ async def handle_text_input(
     # sending "yes"/"no" to the model.
     if _try_verbal_confirmation(text) is not None:
         await send(ServerMessage(type="text_output", text=text))
+        return
+    # Multi-step GUI goals go straight through the planner/verifier loop. Doing
+    # them as isolated brain tool calls lost the plan and skipped verification.
+    if _is_multi_step_gui_goal(text):
+        await _working_on_it(session, send)
+        await _set_state(send, session, "THINKING")
+        try:
+            from agent.vision_agent import VisionAgent
+
+            reply = await asyncio.to_thread(VisionAgent().run_visual_task, text)
+        except Exception:
+            logger.exception("Multi-step visual task failed")
+            reply = "I had trouble running that multi-step task."
+        session.add_turn("assistant", reply)
+        await _speak_and_return(session, send, reply)
         return
     await _working_on_it(session, send)
     await _set_state(send, session, "THINKING")

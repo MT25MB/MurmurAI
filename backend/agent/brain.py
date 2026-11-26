@@ -74,6 +74,34 @@ from agent.abort import abort_controller, is_abort_phrase
 
 logger = logging.getLogger("murmur_ai.agent.brain")
 
+VISUAL_TASK_TOOL = [
+    {
+        "type": "function",
+        "function": {
+            "name": "run_visual_task",
+            "description": (
+                "Execute a multi-step desktop GUI goal end to end: launch the app, "
+                "perform each action in order, verify each step and recover from "
+                "stalls. Use this whenever the user asks for several GUI actions "
+                "in one request (for example 'open Blender, start a new project "
+                "named fish, delete the default cube and add a sphere'), instead "
+                "of chaining single mouse/keyboard calls yourself."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The user's full multi-step GUI goal.",
+                    }
+                },
+                "required": ["goal"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 STOP_TOOL = [
     {
         "type": "function",
@@ -104,7 +132,8 @@ ALL_TOOLS = (
     OS_TOOLS + INSTALL_TOOLS + DESCRIBE_TOOL + BROWSER_TOOLS + WINDOW_TOOLS
     + CONTEXT_TOOLS + TEXT_EDIT_TOOLS + FILE_TOOLS + MANAGEMENT_TOOLS + SETTINGS_TOOLS
     + DIAGNOSTICS_TOOLS + SECRET_TOOLS + PRONUNCIATION_TOOLS + VOICE_PROFILE_TOOLS + DEMO_TOOLS
-    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + UNDO_TOOLS + STOP_TOOL
+    + MEMORY_TOOLS + RECIPE_TOOLS + A11Y_TOOLS + SKILL_TOOLS + UNDO_TOOLS
+    + VISUAL_TASK_TOOL + STOP_TOOL
 )
 
 SYSTEM_PROMPT = """You are Murmur AI, a local voice-controlled desktop assistant.
@@ -118,6 +147,9 @@ lists unless the user explicitly asks for them. Say things out loud instead of
 writing them down.
 
 Available local tools:
+- run_visual_task(goal): execute a multi-step GUI goal in order with planning,
+  per-step verification and recovery. Use it for requests with several desktop
+  actions in one sentence. Do not try to chain mouse_and_keyboard calls yourself.
 - open_application(app_name): launch an app by name. If the user asks to open,
   launch or start a named program (for example "Epic Games Launcher"), always
   use this tool with that name. Do NOT use open_url or a web search for apps.

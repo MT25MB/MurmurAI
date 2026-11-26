@@ -19,6 +19,16 @@ from agent.plan_preview import (
 )
 
 
+def test_multi_step_gui_goal_is_detected_for_voice_commands():
+    goal = (
+        "open up the blender app, start a new project and name it fish, "
+        "delete the default cube and add a sphere"
+    )
+    assert main._is_multi_step_gui_goal(goal) is True
+    assert main._is_multi_step_gui_goal("open Blender") is False
+    assert main._is_multi_step_gui_goal("rewrite notes.txt and save it") is False
+
+
 def test_preview_phrase_extracts_the_goal():
     decision = classify("Preview what you'd do to open Blender and delete the cube")
 

@@ -18,6 +18,36 @@ def test_fallback_split_multistep():
     assert parts[0].startswith("Open Blender")
 
 
+def test_user_style_multistep_goal_decomposes():
+    goal = (
+        "open up the blender app, start a new project and name it fish, "
+        "delete the default cube and add a sphere"
+    )
+    parts = _fallback_split(goal)
+    assert len(parts) >= 4
+    assert "blender" in parts[0].lower()
+    assert any("fish" in part.lower() for part in parts)
+    assert any("cube" in part.lower() for part in parts)
+    assert any("sphere" in part.lower() for part in parts)
+
+
+def test_launch_subgoal_is_resolved_by_os_tool(monkeypatch):
+    import tools.os_tools as os_tools
+
+    seen = []
+    monkeypatch.setattr(
+        os_tools, "open_application", lambda app: seen.append(app) or f"Opened {app}."
+    )
+    assert VisionAgent._launch_app_from_subgoal("Open up the Blender app") is True
+    assert seen == ["Blender"]
+    seen.clear()
+    # Multi-action subgoals must not be mistaken for an app launch.
+    assert VisionAgent._launch_app_from_subgoal(
+        "start a new project and name it fish"
+    ) is False
+    assert seen == []
+
+
 def test_plan_progress_tracking():
     plan = TaskPlan(goal="a,b", subgoals=[Subgoal(0, "a"), Subgoal(1, "b")])
     assert plan.current().text == "a"

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent.brain import ALL_TOOLS, Brain
+import tools.os_tools as os_tools
 from tools.installer_tool import detect_install_plan
 from tools.safety import SafetyGate
 
@@ -184,6 +185,26 @@ def test_app_match_score_rejects_uninstall_and_accepts_fuzzy_names():
     assert os_tools._app_match_score("epic games", "Epic Games Launcher") > 0
     assert os_tools._app_match_score("chrome", "Google Chrome") > 0
     assert os_tools._app_match_score("chrome", "Uninstall Google Chrome") == 0
+
+
+def test_visual_task_tool_registered_and_dispatched(monkeypatch):
+    from agent import brain as brain_module
+
+    names = [tool["function"]["name"] for tool in brain_module.ALL_TOOLS]
+    assert "run_visual_task" in names
+    assert "run_visual_task" in brain_module.SYSTEM_PROMPT
+
+    import agent.vision_agent as vision_agent
+
+    calls = []
+    monkeypatch.setattr(vision_agent.VisionAgent, "__init__", lambda self: None)
+    monkeypatch.setattr(
+        vision_agent.VisionAgent,
+        "run_visual_task",
+        lambda self, goal: calls.append(goal) or "done",
+    )
+    assert os_tools.dispatch_tool("run_visual_task", {"goal": "open Blender, add a sphere"}, None) == "done"
+    assert calls == ["open Blender, add a sphere"]
 
 
 # ---- tool schemas ----
