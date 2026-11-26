@@ -47,6 +47,10 @@ binaries = []
 # onefile install can serve it without a source checkout.
 for ui_file in glob.glob(os.path.join(src_dir, "..", "src", "remote", "*.*")):
     datas.append((ui_file, os.path.join("src", "remote")))
+
+# The shell uses this marker to identify *our* stale onefile extraction dirs
+# before cleaning them, so unrelated apps' _MEI* dirs are never touched.
+datas.append((os.path.join(src_dir, "sidecar.marker"), "."))
 hiddenimports = [
     "uvicorn", "uvicorn.protocols", "fastapi", "starlette", "pydantic",
     "httpx", "websockets", "dotenv",
@@ -119,7 +123,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # UPX compression can corrupt Python extension modules on Windows (notably
+    # _overlapped.pyd), producing "decompression resulted in return code -1"
+    # during onefile extraction. The size saving is not worth the startup risk.
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,           # GUI app — no console window on Windows/macOS

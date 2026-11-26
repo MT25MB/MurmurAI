@@ -243,6 +243,11 @@ def _ws_origin_allowed(websocket: WebSocket) -> bool:
 
 app = FastAPI(title="Murmur AI Local Voice Sidecar", lifespan=lifespan)
 
+# Set by main() so the Tauri shell can ask us to exit cleanly. A clean exit lets
+# PyInstaller remove its onefile extraction directory; a hard kill leaves a
+# ~744 MB _MEI* dir behind on every quit until the disk fills up.
+_uvicorn_server: Optional[object] = None
+
 # The Tauri webview runs on a different origin (tauri://localhost on macOS/Linux,
 # http://tauri.localhost on Windows) than this localhost API. Without CORS the
 # browser blocks every /setup/* fetch with "Failed to fetch". The server only
@@ -269,6 +274,15 @@ app.add_middleware(
 
 
 # ---- HTTP ----
+
+@app.post("/shutdown", include_in_schema=False)
+async def shutdown() -> JSONResponse:
+    """Ask the local server to stop so the shell can exit without a hard kill."""
+    server = globals().get("_uvicorn_server")
+    if server is not None:
+        server.should_exit = True
+    return JSONResponse({"status": "shutting_down"})
+
 
 @app.get("/health")
 async def health() -> JSONResponse:
@@ -1608,7 +1622,10 @@ async def _listen_amplitude(session: SessionState, send) -> None:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run(app, host=BACKEND_HOST, port=BACKEND_PORT, log_level="info")
+    global _uvicorn_server
+    config = uvicorn.Config(app, host=BACKEND_HOST, port=BACKEND_PORT, log_level="info")
+    _uvicorn_server = uvicorn.Server(config)
+    _uvicorn_server.run()
 
 
 if __name__ == "__main__":
