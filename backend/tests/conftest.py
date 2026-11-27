@@ -32,6 +32,24 @@ def _no_model_download(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _ready_environment(monkeypatch):
+    """Tests exercise the agent with components assumed present.
+
+    The readiness gate is covered explicitly in test_readiness_gate.py; other
+    tests must not be blocked by the absence of Ollama or model weights on CI.
+    """
+    try:
+        import setup
+
+        monkeypatch.setattr(setup, "readiness", lambda: {
+            "ready": True, "missing": [], "detail": "All local components are ready.",
+        })
+    except Exception:  # pragma: no cover - setup is optional in some tests
+        pass
+    yield
+
+
 @pytest.fixture
 def noop_confirm():
     """A confirm_callback that approves everything (for execution-path tests)."""
