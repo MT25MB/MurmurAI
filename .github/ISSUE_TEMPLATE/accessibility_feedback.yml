@@ -50,6 +50,6 @@ body:
     id: version
     attributes:
       label: Murmur AI version
-      placeholder: "1.2.60"
+      placeholder: "1.2.61"
     validations:
       required: false
