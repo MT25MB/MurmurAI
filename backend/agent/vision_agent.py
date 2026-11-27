@@ -590,28 +590,44 @@ class VisionAgent:
         return announcer
 
     @staticmethod
-    def _launch_app_from_subgoal(text: str) -> bool:
-        """Open an app deterministically when the subgoal is just 'open X'.
-
-        A VLM cannot launch an installed app reliably by clicking; the OS tool
-        resolves Start Menu shortcuts, App Paths and Store apps instead.
-        """
+    def _app_name_from_launch_subgoal(text: str) -> str:
         value = str(text or "").strip()
         if re.search(
             r"\b(and|then|project|file|document|new|save|delete|add|create|name)\b",
             value, re.IGNORECASE,
         ):
-            return False
+            return ""
         match = re.search(
             r"^\s*(?:please\s+)?(?:open|launch|start|run)\s+(?:up\s+)?(?:the\s+)?"
             r"(.+?)(?:\s+app(?:lication)?|\s+for\s+me)?\s*[.!]?\s*$",
             value, re.IGNORECASE,
         )
         if not match:
-            return False
+            return ""
         app = re.sub(r"^(?:my|the)\s+", "", match.group(1).strip(), flags=re.IGNORECASE)
         app = app.strip(" '\".,")
-        if len(app) < 2 or len(app.split()) > 5:
+        return app if len(app) >= 2 and len(app.split()) <= 5 else ""
+
+    def _app_already_open(self, text: str) -> bool:
+        """Avoid re-launching an app that is already the active window."""
+        app = self._app_name_from_launch_subgoal(text)
+        if not app or not self._app_kb:
+            return False
+        try:
+            title = str(getattr(self._detect_app(), "title", "") or "").lower()
+        except Exception:
+            return False
+        return app.lower() in title
+
+    @staticmethod
+    def _launch_app_from_subgoal(text: str) -> bool:
+        """Open an app deterministically when the subgoal is just 'open X'.
+
+        A VLM cannot launch an installed app reliably by clicking; the OS tool
+        resolves Start Menu shortcuts, App Paths and Store apps instead.
+        """
+        app = VisionAgent._app_name_from_launch_subgoal(text)
+        if not app:
             return False
         from tools.os_tools import open_application
 
@@ -704,6 +720,15 @@ class VisionAgent:
 
             active = self.plan.current()
             subgoal_idx = self.plan.active_index
+
+            # An already-open app needs no launch; that subgoal is satisfied.
+            if self._app_already_open(active.text):
+                spoken = f"{VisionAgent._app_name_from_launch_subgoal(active.text)} is already open."
+                self._speak(spoken)
+                tool_bus.emit(ServerMessage(type="transcript", text=spoken, role="system"))
+                self.plan.complete_current()
+                self.loop_detector.mark_progress(self.plan.active_index)
+                continue
 
             # Launch-only subgoals are handled by the OS resolver, not the VLM.
             if self._launch_app_from_subgoal(active.text):
@@ -1046,23 +1071,8 @@ class VisionAgent:
             "using 0-1000 coords inside this crop."
         )
         try:
-            response = self._client.post(
-                "/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url",
-                             "image_url": {"url": f"data:image/png;base64,{b64}"}},
-                        ],
-                    }],
-                    "stream": False,
-                },
-            )
-            response.raise_for_status()
-            content = (response.json().get("message") or {}).get("content") or ""
+            response = self._chat_with_image("", prompt, b64, format_json=True)
+            content = (response.get("message") or {}).get("content") or ""
             parsed = self._parse_vlm_json(content)
             coords = parsed[3]  # (thought, action, element_id, coordinates, ...)
             if not coords:
@@ -1105,6 +1115,33 @@ class VisionAgent:
             return "abort:no-guidance"
         return f"guidance:{answer.strip()}"
 
+    def _chat_with_image(
+        self, system: str, prompt: str, b64_png: str, format_json: bool = False
+    ) -> dict:
+        """Send a screen to Ollama using its native ``images`` field.
+
+        Ollama's /api/chat expects string message content plus a separate
+        ``images`` array. OpenAI-style ``image_url`` content parts return 400
+        ("cannot unmarshal array into ... content of type string"), which made
+        every vision step look like a dead model.
+        """
+        payload: dict = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt, "images": [b64_png]},
+            ],
+            "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+        }
+        # Ollama's vision models can return empty content when format=json is
+        # forced; the prompt already asks for JSON and `_parse_vlm_json` extracts
+        # it from plain text (including fenced replies).
+        _ = format_json
+        response = self._client.post("/api/chat", json=payload)
+        response.raise_for_status()
+        return response.json()
+
     def _reflect_on_subgoal(
         self,
         goal: str,
@@ -1123,36 +1160,17 @@ class VisionAgent:
         system = REFLECT_PROMPT
         if app_section:
             system += "\n" + app_section
-        user_content = [
-            {
-                "type": "text",
-                "text": (
-                    f"Overall goal: {goal}\n"
-                    f"Current subgoal: {subgoal}\n"
-                    f"Agent's last thought: {last_thought[:300]}\n"
-                    f"Screen resolution: {width}x{height}.\n"
-                    "Inspect the current screen and reply with ONLY the JSON object."
-                ),
-            },
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_png}"}},
-        ]
+        prompt = (
+            f"Overall goal: {goal}\n"
+            f"Current subgoal: {subgoal}\n"
+            f"Agent's last thought: {last_thought[:300]}\n"
+            f"Screen resolution: {width}x{height}.\n"
+            "Inspect the current screen and reply with ONLY the JSON object."
+        )
         try:
-            resp = self._client.post(
-                "/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "stream": False,
-                    "format": "json",
-                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
-                },
-            )
-            resp.raise_for_status()
-            content = resp.json().get("message", {}).get("content", "{}")
-            data = json.loads(content)
+            response = self._chat_with_image(system, prompt, b64_png, format_json=True)
+            content = response.get("message", {}).get("content", "{}")
+            data = self._extract_json(content)
             complete = bool(data.get("complete", False))
             evidence = str(data.get("evidence") or data.get("next") or "").strip()[:160]
             return complete, evidence
@@ -1187,42 +1205,44 @@ class VisionAgent:
         if recovery_hint:
             system += "\n" + recovery_hint
 
-        user_content = [
-            {
-                "type": "text",
-                "text": (
-                    f"Screen resolution: {width}x{height}.\n"
-                    f"Overall goal: {goal}\n"
-                    f"Recent actions (oldest to newest):\n{history_summary}\n"
-                    "Take the next single action for the CURRENT subgoal only. "
-                    "Reply with ONLY the JSON object."
-                ),
-            },
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_png}"}},
-        ]
+        prompt = (
+            f"Screen resolution: {width}x{height}.\n"
+            f"Overall goal: {goal}\n"
+            f"Recent actions (oldest to newest):\n{history_summary}\n"
+            "Take the next single action for the CURRENT subgoal only. "
+            "Reply with ONLY the JSON object."
+        )
 
         try:
-            resp = self._client.post(
-                "/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "stream": False,
-                    "format": "json",
-                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
-                },
-            )
-            resp.raise_for_status()
-            content = resp.json().get("message", {}).get("content", "{}")
+            response = self._chat_with_image(system, prompt, b64_png, format_json=True)
+            content = response.get("message", {}).get("content", "{}")
         except Exception:
             logger.exception("VLM request failed")
             # Never turn a failed model call into a successful FINISH.
             return "Vision model unavailable; cannot verify the next action.", "FAIL", None, None, None, None, False
 
         return self._parse_vlm_json(content)
+
+    @staticmethod
+    def _extract_json(content: str) -> dict:
+        """Parse a JSON object from a plain or fenced model reply."""
+        text = str(content or "").strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+            text = re.sub(r"\n?```$", "", text).strip()
+        try:
+            data = json.loads(text)
+            return data if isinstance(data, dict) else {}
+        except (ValueError, TypeError):
+            pass
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                return data if isinstance(data, dict) else {}
+            except (ValueError, TypeError):
+                pass
+        return {}
 
     @staticmethod
     def _parse_vlm_json(
@@ -1235,8 +1255,8 @@ class VisionAgent:
         drag_to: Optional[list[float]] = None
         text: Optional[str] = None
         subgoal_done = False
-        try:
-            data = json.loads(content)
+        data = VisionAgent._extract_json(content)
+        if data:
             thought = str(data.get("thought", ""))[:500]
             action = str(data.get("action", "FAIL")).upper()
             if action not in VALID_ACTIONS:
@@ -1257,9 +1277,8 @@ class VisionAgent:
             if text is not None:
                 text = str(text)
             subgoal_done = bool(data.get("subgoal_done", False))
-        except json.JSONDecodeError:
-            logger.warning("VLM returned non-JSON; refusing to claim completion. Content: %s", content[:200])
-            thought, action = "", "FAIL"
+        if not data:
+            logger.warning("VLM returned non-JSON; refusing to claim completion. Content: %s", str(content)[:200])
         return thought, action, element_id, coords, drag_to, text, subgoal_done
 
     def _execute(
@@ -1315,35 +1334,13 @@ class VisionAgent:
         hint = DESCRIBE_FOCUS_HINTS.get(focus, DESCRIBE_FOCUS_HINTS["overview"])
         system = DESCRIBE_SCREEN_PROMPT + "\n" + hint
         try:
-            resp = self._client.post(
-                "/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": (
-                                        f"Screen resolution {width}x{height}. "
-                                        "Describe this screen for the user now."
-                                    ),
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": f"data:image/png;base64,{b64_png}"},
-                                },
-                            ],
-                        },
-                    ],
-                    "stream": False,
-                },
+            prompt = (
+                f"Screen resolution {width}x{height}. "
+                "Describe this screen for the user now."
             )
-            resp.raise_for_status()
+            response = self._chat_with_image(system, prompt, b64_png)
             description = str(
-                resp.json().get("message", {}).get("content", "")
+                response.get("message", {}).get("content", "")
             ).strip()
         except Exception:  # pragma: no cover - network/model dependent
             logger.exception("Screen description request failed")

@@ -43,6 +43,53 @@ def _finish_response(thought: str = "I think it is done."):
     return thought, "FINISH", None, None, None, None, True
 
 
+def test_ollama_image_request_uses_native_images_field(monkeypatch, tmp_path):
+    agent = _agent(monkeypatch, tmp_path)
+    seen: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"message": {"content": "{}"}}
+
+    class FakeClient:
+        def post(self, path, json):
+            seen.update(json)
+            seen["path"] = path
+            return FakeResponse()
+
+    agent._client = FakeClient()
+    try:
+        agent._chat_with_image("System", "Prompt", "BASE64PNG", format_json=True)
+        assert seen["path"] == "/api/chat"
+        assert seen["messages"][1]["content"] == "Prompt"
+        assert seen["messages"][1]["images"] == ["BASE64PNG"]
+        assert "format" not in seen
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+
+def test_already_open_app_is_not_launched_again(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    agent = _agent(monkeypatch, tmp_path)
+    agent._app_kb = True
+    agent._detect_app = lambda: SimpleNamespace(title="Blender 4.0")
+    try:
+        assert agent._app_already_open("open up blender") is True
+        assert agent._app_already_open("create a new project") is False
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+
+def test_json_is_extracted_from_plain_or_fenced_vlm_reply():
+    assert VisionAgent._extract_json('```json\n{"action":"CLICK"}\n```') == {"action": "CLICK"}
+    assert VisionAgent._extract_json('Here: {"complete": true} done') == {"complete": True}
+    assert VisionAgent._extract_json("nothing") == {}
+
+
 def test_vlm_outage_is_fail_not_finish(monkeypatch, tmp_path):
     agent = _agent(monkeypatch, tmp_path)
 
