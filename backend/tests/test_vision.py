@@ -130,6 +130,67 @@ def test_progress_breaks_loop_streak():
     assert not ld.assess(1).stuck
 
 
+# ---- dynamic high-resolution patching ----
+
+def _capture_agent(monkeypatch, tmp_path, model, title):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("agent.vision_agent.LOGS_DIR", tmp_path)
+    image = Image.new("RGB", (1920, 1080), (20, 30, 40))
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+
+    class FakeController:
+        def __init__(self):
+            self.max_dims = []
+
+        def capture(self, max_dim=None):
+            self.max_dims.append(max_dim)
+            return buf.getvalue(), 1920, 1080
+
+        def to_base64(self, png):
+            return base64.b64encode(png).decode("ascii")
+
+    controller = FakeController()
+    agent = VisionAgent(
+        model=model, controller=controller,
+        use_som=False, use_app_knowledge=False,
+    )
+    agent._app_kb = True
+    agent._detect_app = lambda: SimpleNamespace(title=title)
+    monkeypatch.setattr(agent, "_speak", lambda _text: None)
+    return agent, controller
+
+
+def test_dynamic_resolution_capture_for_dense_creative_app(monkeypatch, tmp_path):
+    agent, controller = _capture_agent(monkeypatch, tmp_path, "qwen3.5:9b", "Blender 4.2")
+    try:
+        agent._capture_for_vlm()
+        assert controller.max_dims == [4096]
+        assert agent.last_capture_detail == "high-resolution"
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+
+def test_standard_capture_for_ordinary_desktop(monkeypatch, tmp_path):
+    agent, controller = _capture_agent(monkeypatch, tmp_path, "qwen3.5:9b", "Notepad")
+    try:
+        agent._capture_for_vlm()
+        assert controller.max_dims == [None]
+        assert agent.last_capture_detail == "standard"
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+
+def test_legacy_model_never_uses_dynamic_resolution(monkeypatch, tmp_path):
+    agent, controller = _capture_agent(monkeypatch, tmp_path, "qwen2.5vl:7b", "DaVinci Resolve")
+    try:
+        agent._capture_for_vlm()
+        assert controller.max_dims == [None]
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+
 # ---- emergency abort ----
 
 def test_abort_controller_and_listener():

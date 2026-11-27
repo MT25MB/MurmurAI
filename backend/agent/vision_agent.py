@@ -537,6 +537,8 @@ class VisionAgent:
         self.last_preview: Optional[PlanPreview] = None
         self._recovery_attempts = 0
         self._recovery_hint = ""
+        # Last capture detail, exposed for logging and tests.
+        self.last_capture_detail = "standard"
         # Evidence check after each claimed completion. Disable only for
         # deterministic tests with mocked VLM responses: MURMUR_VLM_REFLECT=0.
         self.reflect = os.getenv("MURMUR_VLM_REFLECT", "1").strip() not in {"0", "false", "False"}
@@ -607,6 +609,30 @@ class VisionAgent:
         app = re.sub(r"^(?:my|the)\s+", "", match.group(1).strip(), flags=re.IGNORECASE)
         app = app.strip(" '\".,")
         return app if len(app) >= 2 and len(app.split()) <= 5 else ""
+
+    def _capture_for_vlm(self) -> tuple[bytes, int, int]:
+        """Capture a screen at the detail level this VLM can use well.
+
+        Dynamic-resolution families (Qwen3-VL / Qwen3.5 / Qwen3.8) receive a
+        full-detail frame (up to 4096x4096) on dense creative interfaces where
+        small controls and timeline cells matter. Standard desktops keep the
+        configured downscale so inference stays fast.
+        """
+        max_dim: Optional[int] = None
+        try:
+            from system.profiler import MAX_DYNAMIC_SCREEN_DIM, supports_dynamic_resolution
+            from agent.app_knowledge import is_dense_creative_app
+
+            if supports_dynamic_resolution(self.model) and self._app_kb:
+                title = str(getattr(self._detect_app(), "title", "") or "")
+                if is_dense_creative_app(title):
+                    max_dim = MAX_DYNAMIC_SCREEN_DIM
+        except Exception:
+            logger.debug("Dynamic resolution check failed; using standard capture", exc_info=True)
+
+        png, width, height = self.controller.capture(max_dim=max_dim)
+        self.last_capture_detail = "high-resolution" if max_dim else "standard"
+        return png, width, height
 
     def _app_already_open(self, text: str) -> bool:
         """Avoid re-launching an app that is already the active window."""
@@ -770,7 +796,7 @@ class VisionAgent:
                     logger.exception("App context detection failed")
 
             # --- capture + SoM annotation ---
-            png_bytes, width, height = self.controller.capture()
+            png_bytes, width, height = self._capture_for_vlm()
             annotated_png = png_bytes
             element_map: dict[int, tuple[float, float]] = {}
             if self._som:
@@ -827,6 +853,7 @@ class VisionAgent:
                 "subgoal": active.text if active else "", "subgoal_done": subgoal_done,
                 "app_title": app_title, "app_label": app_label,
                 "resolution": [width, height],
+                "capture_detail": self.last_capture_detail,
                 "elements": {str(k): list(v) for k, v in element_map.items()},
             }
             (step_dir / "step.json").write_text(
@@ -836,7 +863,7 @@ class VisionAgent:
 
             # --- FINISH is only a claim; verify it against the current screen ---
             if action == "FINISH":
-                finish_png, _, _ = self.controller.capture()
+                finish_png, _, _ = self._capture_for_vlm()
                 finish_b64 = self.controller.to_base64(finish_png)
                 confirmed = self._subgoal_complete(
                     active.text if active else goal, goal, finish_b64,
@@ -936,7 +963,7 @@ class VisionAgent:
             # --- subgoal progress: only after a fresh visual self-check ---
             if subgoal_done:
                 if after_png is None:
-                    fresh_png, _, _ = self.controller.capture()
+                    fresh_png, _, _ = self._capture_for_vlm()
                     after_png = fresh_png
                 after_b64 = self.controller.to_base64(after_png)
                 if not self._subgoal_complete(
@@ -982,7 +1009,7 @@ class VisionAgent:
         after_png: Optional[bytes] = None
         try:
             time.sleep(STEP_SETTLE_S)
-            after_png, _, _ = self.controller.capture()
+            after_png, _, _ = self._capture_for_vlm()
             result = verify_action(action.lower(), before_png, after_png)
             record = {"action": action, **{k: (v.value if hasattr(v, "value") else v) for k, v in result.items()}}
             logger.info("Post-action verification: %s", record)

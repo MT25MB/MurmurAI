@@ -55,18 +55,31 @@ ENV_FAST_MODEL = "MURMUR_FAST_MODEL"
 # family needs a separate vision checkpoint and is kept as a fallback.
 UNIFIED_FAMILY = "qwen3.5"
 LEGACY_FAMILY = "qwen2.5vl"
-UNIFIED_FAMILIES = frozenset({UNIFIED_FAMILY})
+# Late-2026 unified checkpoints: one resident model handles voice + screen.
+UNIFIED_FAMILIES = frozenset({UNIFIED_FAMILY, "qwen3.8"})
 
 # Supported local vision checkpoints. Qwen2.5-VL emits 0-1000 normalized
 # boxes; newer families emit pixel coordinates (or 0-1 fractions).
 VISION_MODELS = frozenset({
+    "qwen3.8:27b",
     "qwen3.5:27b",
     "qwen3.5:9b",
     "qwen3.5:4b",
+    "qwen3.5:2b",
+    "qwen3-vl:8b",
+    "gemma4:26b",
     "gemma4:12b",
+    "gemma4:e4b",
+    "lfm3-vl:2b",
     "qwen2.5vl:7b",
     "qwen2.5vl:3b",
 })
+
+# Families whose VLMs accept dynamic resolution (up to 4096x4096). Dense
+# creative interfaces are captured at full detail for these models; ordinary
+# desktops stay downscaled for speed.
+DYNAMIC_RESOLUTION_FAMILIES = frozenset({"qwen3-vl", "qwen3.5", "qwen3.8"})
+MAX_DYNAMIC_SCREEN_DIM = 4096
 
 
 def model_family(model: str | None) -> str:
@@ -95,11 +108,17 @@ def shared_multimodal_model(chat_model: str | None, vision_model: str | None = N
 
 
 def tier_for_hardware(ram_gb: float, vram_gb: float) -> str:
-    """Map detected memory to workstation / high / light (legacy values kept)."""
+    """Map detected memory to workstation / high / light / ultra_light.
+
+    Legacy tier names are preserved. ``ultra_light`` covers small edge machines
+    (under 8 GB RAM and under 4 GB VRAM); unknown/zero RAM falls back to light.
+    """
     if (vram_gb or 0) >= 24:
         return "workstation"
     if (ram_gb or 0) >= 16 or (vram_gb or 0) >= 6:
         return "high"
+    if ram_gb and ram_gb < 8 and (vram_gb or 0) < 4:
+        return "ultra_light"
     return "light"
 
 
@@ -144,7 +163,37 @@ MODEL_CATALOG: dict[str, dict[str, Any]] = {
         "role": "unified", "tier": "upgrade", "label": "Unified chat + screen (27B)",
         "min_ram_gb": 0, "min_vram_gb": 24, "require_vram": True,
     },
+    # ---- late-2026 opt-in checkpoints (local Ollama tags only) ----
+    "lfm3-vl:2b": {
+        "role": "vision", "tier": "upgrade", "label": "Edge screen model (2B, fast VLM)",
+        "min_ram_gb": 8, "min_vram_gb": 0, "dynamic_resolution": False,
+    },
+    "gemma4:e4b": {
+        "role": "vision", "tier": "upgrade", "label": "Mid-range screen model (E4B)",
+        "min_ram_gb": 16, "min_vram_gb": 0, "dynamic_resolution": False,
+    },
+    "qwen3-vl:8b": {
+        "role": "vision", "tier": "upgrade", "label": "Dynamic-resolution screen model (8B)",
+        "min_ram_gb": 16, "min_vram_gb": 6, "dynamic_resolution": True,
+    },
+    "gemma4:12b": {
+        "role": "vision", "tier": "upgrade", "label": "High-end screen model (12B)",
+        "min_ram_gb": 32, "min_vram_gb": 16,
+    },
+    "gemma4:26b": {
+        "role": "vision", "tier": "upgrade", "label": "Workstation screen model (26B)",
+        "min_ram_gb": 64, "min_vram_gb": 24,
+    },
+    "qwen3.8:27b": {
+        "role": "unified", "tier": "upgrade", "label": "Unified agent model (27B, dynamic resolution)",
+        "min_ram_gb": 0, "min_vram_gb": 24, "require_vram": True, "dynamic_resolution": True,
+    },
 }
+
+# Tag dynamic resolution on the qwen3.5 family too (their catalog entries are
+# defined above without the flag).
+for _name in ("qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b", "qwen3.5:27b"):
+    MODEL_CATALOG[_name]["dynamic_resolution"] = True
 
 
 def model_requirement(model: str) -> str:
@@ -200,9 +249,51 @@ def upgrade_options(profile: HardwareProfile | None = None) -> list[dict[str, An
 def coordinate_mode(model: str | None) -> str:
     """Return the coordinate convention used by a vision model family."""
     name = (model or "").lower()
-    if name.startswith(("qwen3.5", "gemma4")):
+    if name.startswith(("qwen3-vl", "qwen3.5", "qwen3.8", "gemma4", "lfm3-vl")):
         return "pixels"
     return "normalized_1000"
+
+
+def supports_dynamic_resolution(model: str | None) -> bool:
+    """True when this checkpoint accepts high-resolution dynamic tiling."""
+    name = (model or "").strip()
+    if model_family(name) in DYNAMIC_RESOLUTION_FAMILIES:
+        return True
+    entry = MODEL_CATALOG.get(name)
+    return bool(entry and entry.get("dynamic_resolution"))
+
+
+def recommended_models_for_tier(tier: str) -> dict[str, list[str]]:
+    """Candidate local checkpoints for a hardware tier, best first.
+
+    Defaults stay on the shipped qwen2.5 pair; these are opt-in options the
+    user can install from Settings. Each entry is gated by hardware in
+    ``model_fits_hardware`` before it is offered.
+    """
+    if tier == "ultra_light":
+        return {
+            "chat": ["qwen3.5:2b", "qwen2.5:3b"],
+            "vision": ["lfm3-vl:2b", "qwen3.5:2b", "qwen2.5vl:3b"],
+            "fast": ["qwen3.5:0.8b"],
+        }
+    if tier == "high":  # mid-range: 6-8 GB VRAM or 16 GB unified RAM
+        return {
+            "chat": ["qwen3.5:9b", "qwen2.5:7b"],
+            "vision": ["gemma4:e4b", "qwen3-vl:8b", "qwen3.5:9b"],
+            "fast": ["qwen3.5:2b", "qwen3.5:0.8b"],
+        }
+    if tier == "workstation":  # high-end: 16-24 GB+ VRAM
+        return {
+            "chat": ["qwen3.8:27b", "qwen3.5:27b"],
+            "vision": ["gemma4:12b", "gemma4:26b", "qwen3.8:27b", "qwen3.5:27b"],
+            "fast": ["qwen3.5:2b"],
+        }
+    # light: keep the shipped defaults first, with edge upgrades available.
+    return {
+        "chat": ["qwen2.5:3b", "qwen3.5:4b"],
+        "vision": ["qwen2.5vl:3b", "lfm3-vl:2b", "qwen3.5:4b"],
+        "fast": ["qwen3.5:0.8b"],
+    }
 
 
 def normalize_vlm_coords(raw, width: int, height: int, model: str | None = None) -> tuple[int, int]:
@@ -396,12 +487,31 @@ _LEGACY_TIERS: dict[str, dict[str, Any]] = {
         "whisper_compute_type": "int8",
         "max_screen_dim": 1024,
     },
+    "ultra_light": {
+        "chat_model": "qwen2.5:3b",
+        "vision_model": "qwen2.5vl:3b",
+        "alternate_vision_model": "lfm3-vl:2b",
+        "whisper_model": "tiny.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "int8",
+        "max_screen_dim": 768,
+    },
 }
 
 # Unified qwen3.5 tiers: one checkpoint serves chat and vision, plus a tiny
 # text-only head for interrupt/intent routing. Workstation only needs the 27b
 # unified checkpoint; the fast head is optional there.
 _UNIFIED_TIERS: dict[str, dict[str, Any]] = {
+    "ultra_light": {
+        "chat_model": "qwen3.5:2b",
+        "vision_model": "qwen3.5:2b",
+        "fast_model": "qwen3.5:0.8b",
+        "alternate_vision_model": "lfm3-vl:2b",
+        "whisper_model": "tiny.en",
+        "alternate_whisper_model": "base.en",
+        "whisper_compute_type": "int8",
+        "max_screen_dim": 768,
+    },
     "light": {
         "chat_model": "qwen3.5:4b",
         "vision_model": "qwen3.5:4b",
@@ -434,22 +544,61 @@ _UNIFIED_TIERS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Opt-in late-2026 families. Each maps a tier to (chat, vision, fast, alternate).
+# Small tiers reuse the qwen3.5 edge checkpoints that realistically fit; the
+# named new checkpoints take over where the hardware can hold them.
+_NEW_FAMILY_MODELS: dict[str, dict[str, tuple[str, str, str, str]]] = {
+    "qwen3.8": {
+        "ultra_light": ("qwen3.5:2b", "qwen3.5:2b", "qwen3.5:0.8b", "lfm3-vl:2b"),
+        "light": ("qwen3.5:4b", "qwen3.5:4b", "qwen3.5:0.8b", "lfm3-vl:2b"),
+        "high": ("qwen3.5:9b", "qwen3.5:9b", "qwen3.5:2b", "gemma4:e4b"),
+        "workstation": ("qwen3.8:27b", "qwen3.8:27b", "qwen3.5:2b", "gemma4:12b"),
+    },
+    "gemma4": {
+        "ultra_light": ("qwen3.5:2b", "lfm3-vl:2b", "qwen3.5:0.8b", "qwen3.5:2b"),
+        "light": ("qwen3.5:4b", "lfm3-vl:2b", "qwen3.5:0.8b", "qwen3.5:4b"),
+        "high": ("qwen3.5:9b", "gemma4:e4b", "qwen3.5:2b", "qwen3-vl:8b"),
+        "workstation": ("qwen3.5:27b", "gemma4:12b", "qwen3.5:2b", "gemma4:26b"),
+    },
+    "lfm3-vl": {
+        "ultra_light": ("qwen3.5:2b", "lfm3-vl:2b", "qwen3.5:0.8b", "qwen3.5:2b"),
+        "light": ("qwen3.5:4b", "lfm3-vl:2b", "qwen3.5:0.8b", "qwen3.5:4b"),
+        "high": ("qwen3.5:9b", "lfm3-vl:2b", "qwen3.5:2b", "qwen3-vl:8b"),
+        "workstation": ("qwen3.5:27b", "lfm3-vl:2b", "qwen3.5:2b", "gemma4:e4b"),
+    },
+}
+
 
 def _tier_config(tier: str, family: str = LEGACY_FAMILY) -> dict[str, Any]:
     """Return base model settings for a tier and checkpoint family."""
-    unified = model_family(family) == UNIFIED_FAMILY
-    if unified:
+    unified = model_family(family) in UNIFIED_FAMILIES
+    if family in _NEW_FAMILY_MODELS:
+        # Latency/whisper settings follow the equivalent qwen3.5 tier.
+        latency_tier = tier if tier in _UNIFIED_TIERS else "high"
+        base = dict(_UNIFIED_TIERS[latency_tier])
+        chat, vision, fast, alternate = _NEW_FAMILY_MODELS[family].get(
+            tier, _NEW_FAMILY_MODELS[family]["high"]
+        )
+        base.update({
+            "chat_model": chat, "vision_model": vision, "fast_model": fast,
+            "alternate_vision_model": alternate,
+        })
+    elif unified:
         base = dict(_UNIFIED_TIERS.get(tier, _UNIFIED_TIERS["high"]))
     else:
         # Legacy qwen2.5vl fallback: separate text and vision checkpoints.
         base = dict(_LEGACY_TIERS.get(tier, _LEGACY_TIERS["high"]))
         base["fast_model"] = ""
     cfg: dict[str, Any] = {"tier": tier, **base}
-    cfg["model_family"] = UNIFIED_FAMILY if unified else LEGACY_FAMILY
-    cfg["unified_multimodal"] = unified
+    if family in UNIFIED_FAMILIES or family in _NEW_FAMILY_MODELS:
+        cfg["model_family"] = family
+    else:
+        cfg["model_family"] = UNIFIED_FAMILY if unified else LEGACY_FAMILY
     cfg["shared_model"] = shared_multimodal_model(
         cfg["chat_model"], cfg["vision_model"]
     ) if unified else None
+    # Only claim one resident checkpoint when chat and vision truly share it.
+    cfg["unified_multimodal"] = bool(cfg["shared_model"])
     # Only one warm call when chat and vision share a checkpoint.
     cfg["warm_models"] = (
         [cfg["chat_model"]] if cfg["shared_model"] else [cfg["chat_model"], cfg["vision_model"]]
