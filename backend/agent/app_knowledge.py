@@ -212,6 +212,27 @@ def build_prompt_section(title: str) -> str:
     return "\n".join(lines)
 
 
+# Dense creative interfaces benefit from dynamic-resolution captures: small
+# icons, timeline cells and node wires are otherwise lost to downscaling.
+DENSE_CREATIVE_MATCHES = (
+    "blender", "davinci", "resolve", "after effects", "premiere",
+    "final cut", "photoshop", "illustrator", "nuke", "houdini", "unity",
+    "unreal", "timeline", "node editor", "shader editor",
+)
+
+
+def is_dense_creative_app(title: str) -> bool:
+    """True when the foreground window is a dense creative/timeline UI."""
+    lowered = (title or "").lower()
+    if not lowered:
+        return False
+    profile = match_app(lowered)
+    label = (profile or {}).get("label", "").lower()
+    return any(token in lowered for token in DENSE_CREATIVE_MATCHES) or any(
+        token in label for token in ("blender", "davinci resolve")
+    )
+
+
 @dataclass
 class AppContext:
     title: str

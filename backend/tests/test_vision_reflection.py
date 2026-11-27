@@ -18,7 +18,7 @@ def _png() -> bytes:
 
 
 class _FakeController:
-    def capture(self):
+    def capture(self, max_dim=None):
         return _png(), 320, 180
 
     def to_base64(self, png: bytes) -> str:

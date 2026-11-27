@@ -46,9 +46,14 @@ MODEL_LABELS: dict[str, str] = {
     "qwen3.5:27b": "Unified text + vision model (workstation)",
     "qwen3.5:9b": "Unified text + vision model (pixel coordinates)",
     "qwen3.5:4b": "Unified text + vision model (light)",
-    "qwen3.5:2b": "Fast local interrupt/intent head",
+    "qwen3.5:2b": "Fast edge chat + screen model (2B)",
     "qwen3.5:0.8b": "Ultra-fast local interrupt/intent head",
-    "gemma4:12b": "Modern vision model (pixel coordinates)",
+    "qwen3.8:27b": "Unified agent model (27B, dynamic resolution)",
+    "qwen3-vl:8b": "Dynamic-resolution screen model (8B)",
+    "gemma4:e4b": "Mid-range screen model (E4B)",
+    "gemma4:12b": "High-end screen model (12B)",
+    "gemma4:26b": "Workstation screen model (26B)",
+    "lfm3-vl:2b": "Edge screen model (2B, fast VLM)",
 }
 
 # Local model cache owned by Murmur AI.
@@ -158,11 +163,11 @@ def pulled_models(models: Optional[list[str]] = None) -> dict[str, bool]:
 def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
     """Return the model tier recommended for this machine.
 
-    These are the *current* models Murmur ships with (7b on capable machines,
-    3b on light ones). Better qwen3.5 checkpoints are opt-in from Settings and
-    are only offered when the hardware can actually run them.
+    Shipped qwen2.5 models stay the default. Late-2026 checkpoints (qwen3.8,
+    gemma4, lfm3-vl, qwen3.5) are opt-in from Settings and each is gated by the
+    detected RAM/VRAM before it can be selected or pulled.
     """
-    from system.profiler import load_profile
+    from system.profiler import load_profile, recommended_models_for_tier
 
     profile = profile or load_profile()
     cfg = recommend_config(profile)
@@ -173,13 +178,15 @@ def recommended_setup(profile: Optional[Any] = None) -> dict[str, Any]:
             name,
             "Unified text + vision model" if cfg["unified_multimodal"] else "Local model",
         )
+    tier_options = recommended_models_for_tier(cfg["tier"])
     return {
         **cfg,
         "models": models,
         "model_labels": labels,
         "warm_models": list(cfg["warm_models"]),
         "unified_multimodal": cfg["unified_multimodal"],
-        "alternatives": [cfg["alternate_vision_model"]],
+        "alternatives": tier_options["vision"],
+        "tier_recommendations": tier_options,
         "upgrades": upgrade_models(profile),
     }
 

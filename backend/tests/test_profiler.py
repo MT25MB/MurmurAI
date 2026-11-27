@@ -61,6 +61,8 @@ def test_detect_backend(monkeypatch, system_name, machine, vram, expected_backen
     (8.0, 8.0, "high"),    # high VRAM
     (12.0, 0.0, "light"),  # mid RAM, no GPU
     (8.0, 0.0, "light"),   # light
+    (6.0, 0.0, "ultra_light"),  # edge machine, CPU only
+    (7.0, 3.0, "ultra_light"),  # under 4 GB VRAM and under 8 GB RAM
     (32.0, 24.0, "workstation"),  # big GPU wins even with modest RAM
 ])
 def test_detect_tier(monkeypatch, ram, vram, expected_tier):
@@ -152,6 +154,72 @@ def test_is_unified_multimodal_and_shared_model():
     # Explicit legacy vision override is respected, never silently replaced.
     assert profiler.shared_multimodal_model("qwen3.5:9b", "qwen2.5vl:7b") is None
     assert profiler.shared_multimodal_model("qwen2.5:7b", "qwen2.5vl:7b") is None
+
+
+# ---- late-2026 checkpoint support ----
+
+def test_new_checkpoints_are_registered_and_hardware_gated():
+    expected = {
+        "lfm3-vl:2b", "qwen3.5:2b", "qwen3-vl:8b", "gemma4:e4b",
+        "gemma4:12b", "gemma4:26b", "qwen3.8:27b",
+    }
+    assert expected <= set(profiler.MODEL_CATALOG)
+    assert expected <= set(profiler.VISION_MODELS)
+
+    tiny = HardwareProfile(total_ram_gb=6, vram_gb=0, tier="ultra_light", compute_backend="CPU")
+    mid = HardwareProfile(total_ram_gb=32, vram_gb=8, tier="high", compute_backend="CUDA")
+    big = HardwareProfile(total_ram_gb=128, vram_gb=24, tier="workstation", compute_backend="CUDA")
+
+    assert profiler.model_fits_hardware("lfm3-vl:2b", tiny)
+    assert not profiler.model_fits_hardware("qwen3.8:27b", tiny)
+    assert profiler.model_fits_hardware("gemma4:e4b", mid)
+    assert profiler.model_fits_hardware("qwen3-vl:8b", mid)
+    assert profiler.model_fits_hardware("qwen3.8:27b", big)
+    assert profiler.model_fits_hardware("gemma4:26b", big)
+
+
+def test_tier_recommendations_cover_three_hardware_classes():
+    ultra = profiler.recommended_models_for_tier("ultra_light")
+    assert ultra["vision"][0] == "lfm3-vl:2b"
+    assert ultra["fast"][0] == "qwen3.5:0.8b"
+
+    mid = profiler.recommended_models_for_tier("high")
+    assert mid["vision"][0] == "gemma4:e4b"
+    assert "qwen3-vl:8b" in mid["vision"]
+    assert "qwen3.5:9b" in mid["vision"]
+
+    high = profiler.recommended_models_for_tier("workstation")
+    assert high["vision"][0] == "gemma4:12b"
+    assert "gemma4:26b" in high["vision"]
+    assert "qwen3.8:27b" in high["vision"]
+
+
+def test_new_family_tier_configs(monkeypatch):
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "qwen3.8")
+    ws = profiler.recommend_config(HardwareProfile(tier="workstation"))
+    assert ws["chat_model"] == ws["vision_model"] == "qwen3.8:27b"
+    assert ws["unified_multimodal"] is True
+    assert ws["warm_models"] == ["qwen3.8:27b"]
+
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "gemma4")
+    gemma = profiler.recommend_config(HardwareProfile(tier="high"))
+    assert gemma["vision_model"] == "gemma4:e4b"
+    assert gemma["alternate_vision_model"] == "qwen3-vl:8b"
+    assert gemma["unified_multimodal"] is False
+
+    monkeypatch.setenv(profiler.ENV_MODEL_FAMILY, "lfm3-vl")
+    edge = profiler.recommend_config(HardwareProfile(tier="ultra_light"))
+    assert edge["vision_model"] == "lfm3-vl:2b"
+    assert edge["fast_model"] == "qwen3.5:0.8b"
+
+
+def test_dynamic_resolution_support_by_family():
+    for model in ("qwen3-vl:8b", "qwen3.5:9b", "qwen3.8:27b"):
+        assert profiler.supports_dynamic_resolution(model)
+        assert profiler.coordinate_mode(model) == "pixels"
+    for model in ("qwen2.5vl:7b", "gemma4:e4b", "lfm3-vl:2b"):
+        assert not profiler.supports_dynamic_resolution(model)
+    assert profiler.MAX_DYNAMIC_SCREEN_DIM == 4096
 
 
 def test_legacy_family_fallback_preserved(monkeypatch):
