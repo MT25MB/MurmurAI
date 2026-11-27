@@ -205,7 +205,7 @@ class LocalSpeaker:
         """Play a short audio cue for a state transition (non-blocking, multiplicative).
 
         No-op when earcons are disabled or an unknown cue is requested. Never
-        interrupts speech — chimes are short and played at low gain.
+        interrupts speech, chimes are short and played at low gain.
         """
         if not self.earcons_enabled or sd is None or self.screen_reader_friendly:
             # Screen readers already announce state changes; avoid double chatter.

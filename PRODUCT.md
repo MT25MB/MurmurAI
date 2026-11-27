@@ -35,7 +35,7 @@ Voice computer control that is 100% local and costs $0: every model runs on the 
 - Local inference only: Ollama (chat/vision), faster-whisper (STT), Kokoro or Piper (TTS), PyAutoGUI (computer control). No cloud API key or paid endpoint may be added.
 - Heavy dependencies are lazy-imported so `/health` and the WebSocket control plane always boot; a missing dependency produces a clear error.
 - Typed, versioned WebSocket protocol; unknown message types are rejected.
-- App launching is generic: Start Menu, App Paths, PATH, and Store/UWP AppUserModelIDs — never a hardcoded app list. Multi-step GUI goals use the planner/verifier flow.
+- App launching is generic: Start Menu, App Paths, PATH, and Store/UWP AppUserModelIDs, never a hardcoded app list. Multi-step GUI goals use the planner/verifier flow.
 - Backend binds to `127.0.0.1` only. Optional companion server is LAN-only and opt-in.
 - Current qwen2.5 chat/vision models are defaults; qwen3.5 upgrades are opt-in and hardware-gated in Settings.
 - Website release data comes from the GitHub Releases API; the primary download button opens `.../releases/latest` so the visitor picks the installer for their platform.
@@ -49,7 +49,7 @@ Voice computer control that is 100% local and costs $0: every model runs on the 
 
 ## Evidence on Hand
 
-- `AGENTS.md` — the repository's source of truth for architecture, safety rules, and verification gates.
+- `AGENTS.md`, the repository's source of truth for architecture, safety rules, and verification gates.
 - `README.md`, `BENCHMARKS.md`, `.github/ISSUE_TEMPLATE/`, `packaging/`, `scripts/verify-all.ps1` / `.sh`.
 - Local test suites: 747 backend pytest tests, 99 frontend Vitest tests, 14 accessibility tests.
 - Signed GitHub Releases with `latest.json`, `SHA256SUMS.txt`, and per-platform installers.

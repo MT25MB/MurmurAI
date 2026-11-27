@@ -81,12 +81,12 @@ components:
 
 **Creative North Star: "The Instrument Panel."** (Inferred from the incumbent `index.css` header, which already names the system "Instrument"; not a separate user choice.) The site reads as the readout of a calm, precise machine: flat obsidian surfaces, one-pixel hairlines, a single blue signal colour, and red reserved for the moment the agent acts. Nothing glows for attention; colour is information, not ornament.
 
-Density is moderate and editorial. Sections breathe, but inside a section the grouping is tight: a heading, a short factual paragraph, then one demonstration (a live HUD readout, an agent trace, a requirements table). Copy is plain and technical without being cold — the product's own words, never marketing superlatives.
+Density is moderate and editorial. Sections breathe, but inside a section the grouping is tight: a heading, a short factual paragraph, then one demonstration (a live HUD readout, an agent trace, a requirements table). Copy is plain and technical without being cold, the product's own words, never marketing superlatives.
 
 **Key Characteristics:**
 - Flat, tonal layering instead of elevation shadows.
 - One accent in use at a time: blue for navigation and primary action, red only for execution/alert state.
-- Monospace is reserved for actual code, telemetry, and measurements — never used as a "technical" costume.
+- Monospace is reserved for actual code, telemetry, and measurements, never used as a "technical" costume.
 - Motion is a single authored state machine (the HUD waveform), with reduced-motion honoured everywhere.
 
 ## Colors
@@ -98,7 +98,7 @@ A near-monochrome obsidian ramp with two signal accents, both measured for white
 - **Action Blue Fill** (`#156cdd`): filled primary buttons; white text measures 4.98:1.
 
 ### Secondary
-- **Execution Red** (`#f05653`): execution and alert state only — never a generic accent or decoration.
+- **Execution Red** (`#f05653`): execution and alert state only, never a generic accent or decoration.
 - **Execution Red Fill** (`#d01c29`): filled alert/execution surfaces; white text measures 5.41:1.
 
 ### Neutral
@@ -129,7 +129,7 @@ A near-monochrome obsidian ramp with two signal accents, both measured for white
 ### Named Rules
 **The Sentence-Case Rule.** Interface labels are sentence case. Uppercase and letter-spacing are reserved for short telemetry strings that are genuinely data, never for section eyebrows.
 
-**The No Gradient Type Rule.** Emphasis comes from weight, size, or the single signal colour — not gradient text or a coloured highlight on one word.
+**The No Gradient Type Rule.** Emphasis comes from weight, size, or the single signal colour, not gradient text or a coloured highlight on one word.
 
 ## Layout
 
@@ -146,7 +146,7 @@ Flat by default. Depth comes from tonal layering (canvas → surface → raised 
 
 ## Shapes
 
-Gentle, restrained cornering: `4px` for small chips and focus outlines, `8px` for buttons and controls, `14px` for panels. Borders are `1px solid` hairlines. The recurring silhouette is a flat rectangle with a crisp top divider and a small inset readout — a panel with a header, not a floating card.
+Gentle, restrained cornering: `4px` for small chips and focus outlines, `8px` for buttons and controls, `14px` for panels. Borders are `1px solid` hairlines. The recurring silhouette is a flat rectangle with a crisp top divider and a small inset readout, a panel with a header, not a floating card.
 
 ## Components
 

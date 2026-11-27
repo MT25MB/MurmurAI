@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ===========================================================================
-   Murmur AI — "Instrument" design system
+   Murmur AI, "Instrument" design system
    Exact OKLCH-derived shades, locked after measuring every rendered pair.
    Primitives are defined here; components only use the semantic tokens below.
    =========================================================================== */
@@ -15,12 +15,12 @@
   --color-muted: #a0a5ae;
   --color-ink: #f1f3f9;
 
-  /* Blue ramp (hue 258) — derived from the logo's #1D3251 navy */
+  /* Blue ramp (hue 258), derived from the logo's #1D3251 navy */
   --color-blue: #5598f9;
   --color-blue-fill: #156cdd;
   --color-blue-deep: #0c2c5a;
 
-  /* Red ramp (hue 25) — execution state / alerts only */
+  /* Red ramp (hue 25), execution state / alerts only */
   --color-red: #f05653;
   --color-red-fill: #d01c29;
   --color-red-deep: #4a0e13;

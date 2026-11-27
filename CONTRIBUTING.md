@@ -1,6 +1,6 @@
 # Contributing to Murmur AI
 
-Thanks for contributing. Murmur AI is a **100% local**, open-source voice agent —
+Thanks for contributing. Murmur AI is a **100% local**, open-source voice agent ,
 every contribution must keep it that way. Read [AGENTS.md](AGENTS.md) before
 making changes; it is the source of truth for architecture and non-negotiable rules.
 

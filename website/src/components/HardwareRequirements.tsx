@@ -3,7 +3,7 @@ const requirements = [
   { name: "CPU", minimum: "4 cores with AVX2", recommended: "8 cores" },
   { name: "RAM", minimum: "8 GB", recommended: "16 GB+" },
   { name: "Storage", minimum: "~8 GB free for models and weights", recommended: "20 GB SSD" },
-  { name: "GPU", minimum: "Not needed — CPU inference works", recommended: "NVIDIA or Apple Silicon for lower latency" },
+  { name: "GPU", minimum: "Not needed. CPU inference works.", recommended: "NVIDIA or Apple Silicon for lower latency" },
   { name: "Microphone", minimum: "Any input device", recommended: "Noise-cancelling" },
 ];
 

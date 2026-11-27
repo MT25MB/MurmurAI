@@ -70,7 +70,7 @@ def find_runs(log_dir: Path) -> list[Path]:
     steps = sorted(log_dir.glob("step_*"), key=lambda p: _step_number(p))
     if steps:
         return steps
-    # Nested runs (e.g. logs/2026-01-01/step_01) — take the newest parent.
+    # Nested runs (e.g. logs/2026-01-01/step_01), so take the newest parent.
     parents = {p.parent for p in log_dir.glob("**/step_*/step.json")}
     if parents:
         newest = max(parents, key=lambda p: max((s.stat().st_mtime for s in p.glob("step_*")), default=0))
@@ -113,9 +113,9 @@ def diagnose(data: dict[str, Any], step_dir: Path) -> list[str]:
     # Parsing errors fall back to FINISH with a "non-JSON" thought.
     thought = str(data.get("thought", ""))
     if "non-json" in thought.lower() or "vlm returned non-json" in thought.lower():
-        problems.append(C_RED("VLM JSON parse failure — action defaulted to FINISH."))
+        problems.append(C_RED("VLM JSON parse failure, so action defaulted to FINISH."))
     if action == "FINISH" and not data.get("subgoal_done") and not data.get("result"):
-        problems.append(C_YELLOW("FINISH without subgoal_done — model may have given up."))
+        problems.append(C_YELLOW("FINISH without subgoal_done, so the model may have given up."))
 
     # Click with neither a resolved element nor coordinates.
     if action in ("CLICK", "DOUBLE_CLICK") and element_id is None and not coords:
@@ -123,7 +123,7 @@ def diagnose(data: dict[str, Any], step_dir: Path) -> list[str]:
     # Element ID that no longer exists in the element map.
     if element_id is not None and str(element_id) not in {str(k) for k in elements}:
         problems.append(
-            C_YELLOW(f"element_id {element_id} is not in the saved element map — possible missed click.")
+            C_YELLOW(f"element_id {element_id} is not in the saved element map, so possible missed click.")
         )
     # Invalid coordinate ranges.
     for label, value in (("coordinates", coords), ("drag_to", drag_to)):

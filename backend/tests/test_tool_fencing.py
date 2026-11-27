@@ -51,7 +51,7 @@ def test_guard_leaves_conversation_alone():
 
 
 def test_guard_allows_claim_after_successful_tool():
-    reply = "Done — the app is open."
+    reply = "Done. The app is open."
     assert guard_unverified_claim(reply, ["open_application"]) == reply
 
 

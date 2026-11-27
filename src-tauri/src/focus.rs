@@ -4,7 +4,7 @@
 //! on `document.body` with no visible focus ring. The shell emits a short event
 //! on every native focus regain; the webview uses it to restore keyboard focus
 //! and re-announce status through its polite live region. No focus is ever
-//! stolen from another application — this only runs once we are already focused.
+//! stolen from another application, so this only runs once we are already focused.
 
 use tauri::{Emitter, Manager, WebviewWindow};
 

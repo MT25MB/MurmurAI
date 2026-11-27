@@ -171,7 +171,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Murmur AI ${{ github.ref_name }}"
           releaseBody: |
-            Murmur AI ${{ github.ref_name }} — 100% local voice-controlled desktop agent.
+            Murmur AI ${{ github.ref_name }}: 100% local voice-controlled desktop agent.
 
             Installers: Windows (.msi/.exe), macOS (.dmg, Apple Silicon), Linux (.AppImage/.deb).
             No cloud APIs, no subscription, no telemetry. See the README for details.

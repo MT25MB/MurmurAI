@@ -60,7 +60,7 @@ def handle_memory_tool(name: str, arguments: dict[str, Any]) -> str | None:
     if name == "remember_fact":
         entry = vault.store(str(arguments.get("text", "")))
         if entry is None:
-            return "I can't remember that — it looks like private information."
+            return "I can't remember that, it looks like private information."
         return "Remembered."
     if name == "list_memories":
         facts = vault.list()

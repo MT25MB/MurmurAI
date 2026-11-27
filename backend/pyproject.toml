@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "murmur-ai-backend"
 version = "1.2.63"
-description = "Murmur AI local voice sidecar — FastAPI + WebSocket control plane"
+description = "Murmur AI local voice sidecar: FastAPI + WebSocket control plane"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [

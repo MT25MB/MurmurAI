@@ -1,4 +1,4 @@
-"""Murmur AI backend sidecar — FastAPI + WebSocket control plane.
+"""Murmur AI backend sidecar: FastAPI + WebSocket control plane.
 
 Runs on 127.0.0.1:8765 and drives the voice agent loop:
   IDLE -> LISTENING -> THINKING -> SPEAKING -> IDLE
@@ -649,7 +649,7 @@ async def ws(websocket: WebSocket):
                     await send(
                         ServerMessage(
                             type="info",
-                            text="Approved — starting installation." if msg.approved else "Cancelled.",
+                            text="Approved, starting installation." if msg.approved else "Cancelled.",
                         )
                     )
                 else:

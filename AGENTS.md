@@ -1,4 +1,4 @@
-# Murmur AI — Architecture & Agent Rules
+# Murmur AI: Architecture & Agent Rules
 
 Murmur AI is a free, open-source, **100% local** voice-controlled desktop agent for
 Windows, macOS, and Linux. It starts with the user's computer, listens through the
@@ -60,7 +60,7 @@ This file is the source of truth for every coding agent and human contributor.
 ### Backend Sidecar
 - **Python 3.11+**, **FastAPI**, **uvicorn**, real-time over WebSocket at
   **`ws://127.0.0.1:8765/ws`**. Health check at `GET /health`.
-- Bind to **`127.0.0.1` only** — never `0.0.0.0`.
+- Bind to **`127.0.0.1` only**, never `0.0.0.0`.
 - Organized as `audio/`, `agent/`, `tools/`, with `main.py` as the entry point.
 
 ### Local-only inference (zero paid APIs)
@@ -427,7 +427,7 @@ user approves, and hands off to `vision_agent.py` when no CLI package is found.
 9. Heavy/optional dependencies (`faster-whisper`, `kokoro`, `piper`, `pyautogui`,
    `sounddevice`, `ollama`) are **lazy-imported** behind small interfaces so the
    control plane always starts. A missing optional dependency produces a clear,
-   actionable error — never a silent failure.
+   actionable error, never a silent failure.
 10. WebSocket messages use a typed, versioned JSON protocol defined in
     `backend/agent/state.py`. Unknown message types are rejected, not guessed.
 11. Keep the HUD responsive: no blocking work on the UI thread; stream state over the

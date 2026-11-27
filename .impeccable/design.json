@@ -83,7 +83,7 @@
   ],
   "narrative": {
     "northStar": "The Instrument Panel",
-    "overview": "The site reads as the readout of a calm, precise machine: flat obsidian surfaces, one-pixel hairlines, a single blue signal colour, and red reserved for the moment the agent acts. Nothing glows for attention; colour is information, not ornament. Density is moderate and editorial: sections breathe, but inside a section the grouping is tight. Copy is plain and technical without being cold — the product's own words, never marketing superlatives.",
+    "overview": "The site reads as the readout of a calm, precise machine: flat obsidian surfaces, one-pixel hairlines, a single blue signal colour, and red reserved for the moment the agent acts. Nothing glows for attention; colour is information, not ornament. Density is moderate and editorial: sections breathe, but inside a section the grouping is tight. Copy is plain and technical without being cold, the product's own words, never marketing superlatives.",
     "keyCharacteristics": [
       "Flat, tonal layering instead of elevation shadows.",
       "One accent in use at a time: blue for navigation and primary action, red only for execution/alert state.",
@@ -94,7 +94,7 @@
       { "name": "The One Voice Rule", "body": "Only one accent carries meaning in a viewport: blue for navigation/action, red for execution. Never use both as decoration in the same element.", "section": "colors" },
       { "name": "The Dead Colour Rule", "body": "Soft-focus coloured blobs and gradient washes are not part of this system. A coloured surface earns its place by encoding state.", "section": "colors" },
       { "name": "The Sentence-Case Rule", "body": "Interface labels are sentence case. Uppercase and letter-spacing are reserved for short telemetry strings that are genuinely data.", "section": "typography" },
-      { "name": "The No Gradient Type Rule", "body": "Emphasis comes from weight, size, or the single signal colour — not gradient text or a coloured highlight on one word.", "section": "typography" },
+      { "name": "The No Gradient Type Rule", "body": "Emphasis comes from weight, size, or the single signal colour, not gradient text or a coloured highlight on one word.", "section": "typography" },
       { "name": "The Flat-By-Default Rule", "body": "No decorative blur blobs, glass panels, or hover lift. A surface is flat at rest and changes only by border or background on state.", "section": "elevation" }
     ],
     "dos": [

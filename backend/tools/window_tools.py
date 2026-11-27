@@ -140,7 +140,7 @@ def _run(command: list[str], timeout: float = 6.0) -> str:
 
 def _app_from_title(title: str) -> str:
     """Best-effort app name from a window title."""
-    for separator in (" - ", " — ", " – "):
+    for separator in (" - ", " \u2014 ", " \u2013 "):
         if separator in title:
             return title.rsplit(separator, 1)[-1].strip() or title
     return title.strip()

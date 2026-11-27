@@ -271,7 +271,7 @@ fn spawn_backend(app: &tauri::AppHandle) {
                 sidecar
             }
             Err(err) => {
-                // Sidecar missing at runtime — surface a clear error.
+                // Sidecar missing at runtime, so surface a clear error.
                 eprintln!("[Murmur AI] bundled backend sidecar not found: {err}");
                 return;
             }
@@ -424,7 +424,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id("tray")
                 .icon(icon)
                 .menu(&menu)
-                .tooltip("Murmur AI — local voice agent")
+                .tooltip("Murmur AI: local voice agent")
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "toggle" => {

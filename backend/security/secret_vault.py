@@ -271,7 +271,7 @@ def delete_secret(name: str) -> bool:
 
 
 def secret_state(name: str) -> str:
-    """Return only 'configured' or 'missing' — never reads the value."""
+    """Return only 'configured' or 'missing', never reads the value."""
     try:
         key = _validate_name(name)
     except ValueError:
@@ -325,7 +325,7 @@ def reset() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Voice / brain tools — confirmations never include secret values
+# Voice / brain tools, confirmations never include secret values
 # ---------------------------------------------------------------------------
 
 SECRET_TOOLS = [

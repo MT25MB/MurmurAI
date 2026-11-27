@@ -95,7 +95,7 @@ class LoopDetector:
         self.last_progress_subgoal = -1
 
     def mark_progress(self, subgoal_index: int) -> None:
-        """Called when a subgoal is completed — breaks any loop streak."""
+        """Called when a subgoal is completed, breaks any loop streak."""
         self.last_progress_subgoal = subgoal_index
         self.actions.clear()
         self.screens.clear()

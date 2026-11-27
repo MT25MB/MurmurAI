@@ -234,7 +234,7 @@ shows". Describe only what is functional and actionable.
 Cover, in this order, but SKIP any section with nothing to report:
 1. WINDOW: which application is active and its window/document title.
 2. FOCUS: the currently focused control or selection (button, field, item).
-3. ALERTS: any dialog, error, or notification — quote its exact text.
+3. ALERTS: any dialog, error, or notification, quote its exact text.
 4. CONTENT: the essential text/content of the window, briefly.
 5. NEXT: one concrete next action the user can take, if obvious.
 
@@ -1322,7 +1322,7 @@ class VisionAgent:
     def describe(self, focus: str = "overview") -> str:
         """Capture the screen and return a blind-friendly spoken description.
 
-        Does not speak by itself — returns text so callers decide how to deliver
+        Does not speak by itself, returns text so callers decide how to deliver
         it (TTS, HUD, both). See `describe_screen()` for the speaking tool.
         """
         if mss is None:

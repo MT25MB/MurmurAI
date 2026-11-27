@@ -29,7 +29,7 @@ log = logging.getLogger("murmur_ai.test")
 
 
 def main() -> None:
-    log.info("Murmur AI voice loop test — speaking into your mic…")
+    log.info("Murmur AI voice loop test, speaking into your mic…")
     log.info("Say something. I'll echo it back. Ctrl+C to quit.\n")
 
     speaker = LocalSpeaker(engine="auto")

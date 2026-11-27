@@ -281,7 +281,7 @@ def _download_whisper(progress: ProgressCallback) -> None:
         _marker_path("whisper").write_text("ok", encoding="utf-8")
         progress("Whisper", 100, "Whisper weights ready.")
     except ImportError:
-        progress("Whisper", 0, "faster-whisper not installed — run: pip install faster-whisper")
+        progress("Whisper", 0, "faster-whisper not installed. Run: pip install faster-whisper")
     except Exception as exc:  # pragma: no cover - network dependent
         logger.exception("Whisper weight download failed")
         progress("Whisper", 0, f"Whisper download failed: {exc}")
@@ -304,7 +304,7 @@ def _download_kokoro(progress: ProgressCallback) -> None:
         _marker_path("kokoro").write_text("ok", encoding="utf-8")
         progress("Kokoro", 100, "Kokoro weights ready.")
     except ImportError:
-        progress("Kokoro", 0, "huggingface_hub not installed — run: pip install huggingface_hub")
+        progress("Kokoro", 0, "huggingface_hub not installed. Run: pip install huggingface_hub")
     except Exception as exc:  # pragma: no cover - network dependent
         logger.exception("Kokoro weight download failed")
         progress("Kokoro", 0, f"Kokoro download failed: {exc}")
@@ -318,7 +318,7 @@ async def ensure_local_weights(progress: Optional[ProgressCallback] = None) -> N
         return
 
     def log_progress(label: str, percent: Optional[int], status: str) -> None:
-        logger.info("[%s] %s%% — %s", label, percent if percent is not None else "?", status)
+        logger.info("[%s] %s%%: %s", label, percent if percent is not None else "?", status)
         if progress:
             progress(label, percent, status)
 

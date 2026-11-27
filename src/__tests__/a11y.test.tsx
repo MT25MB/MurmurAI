@@ -181,7 +181,7 @@ describe("WCAG 2.2 AA automated audit", () => {
     const cancelButton = screen.getByRole("button", { name: /cancel/i });
     expect(approve).toBeInTheDocument();
     expect(cancelButton).toBeInTheDocument();
-    // The accessible name contains the visible text — no conflicting label.
+    // The accessible name contains the visible text, so no conflicting label.
     expect(approve.getAttribute("aria-label")?.toLowerCase()).toContain("yes, do it");
     expect(cancelButton.getAttribute("aria-label")?.toLowerCase()).toContain("cancel");
     // Single-use: approving clears the held prompt so a replayed yes is inert.
