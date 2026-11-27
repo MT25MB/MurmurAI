@@ -15,6 +15,13 @@ import {
   type ModelOption,
   type Provider,
 } from "../lib/settings";
+import {
+  checkForUpdates,
+  installUpdate,
+  listenUpdateEvents,
+  type UpdateInfo,
+  type UpdateProgress,
+} from "../lib/updater";
 
 interface SettingsDrawerProps {
   open: boolean;
@@ -32,6 +39,10 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [providerForm, setProviderForm] = useState({
     name: "", base_url: "", model: "", cloud: false, api_key: "",
   });
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const saveSeqRef = useRef(0);
@@ -46,6 +57,20 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       .then((list) => { if (!cancelled) setProviders(list); })
       .catch(() => { if (!cancelled) setProviders([]); });
     return () => { cancelled = true; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let unsubscribe: () => void = () => {};
+    void listenUpdateEvents({
+      status: (message) => { if (!cancelled) setUpdateMessage(message); },
+      progress: (progress) => { if (!cancelled) setUpdateProgress(progress); },
+    }).then((stop) => {
+      if (cancelled) stop();
+      else unsubscribe = stop;
+    });
+    return () => { cancelled = true; unsubscribe(); };
   }, [open]);
 
   useEffect(() => {
@@ -184,6 +209,43 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       setStatus(`Could not switch to ${option.name}.`);
     } finally {
       setModelBusy("");
+    }
+  };
+
+  const checkUpdates = async () => {
+    setUpdateBusy(true);
+    setUpdateMessage("Checking for a newer version…");
+    setUpdateProgress(null);
+    try {
+      const info = await checkForUpdates();
+      setUpdateInfo(info);
+      setUpdateMessage(
+        info.available
+          ? `Version ${info.version} is available.`
+          : info.error
+            ? `Update check unavailable: ${info.error}`
+            : `You are up to date (${info.currentVersion || "current version"}).`,
+      );
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : "Update check failed.");
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const runUpdate = async () => {
+    setUpdateBusy(true);
+    setUpdateMessage("Downloading and installing the update. The app will restart…");
+    setUpdateProgress(null);
+    try {
+      const result = await installUpdate();
+      if (!result.ok) {
+        setUpdateMessage(result.error || "Install failed.");
+      }
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : "Install failed.");
+    } finally {
+      setUpdateBusy(false);
     }
   };
 
@@ -712,6 +774,58 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   Save provider
                 </button>
               </div>
+            </fieldset>
+
+            <fieldset className="space-y-3">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Updates
+              </legend>
+              <p className="text-[11px] leading-snug text-muted">
+                Checks the signed GitHub release manifest. Installing downloads the
+                matching installer, verifies it, replaces the app and restarts it.
+                Current version: {updateInfo?.currentVersion || "this build"}.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={updateBusy}
+                  onClick={() => void checkUpdates()}
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-40"
+                >
+                  Check for updates
+                </button>
+                <button
+                  type="button"
+                  disabled={updateBusy || !updateInfo?.available}
+                  onClick={() => void runUpdate()}
+                  className="rounded-md bg-blue-fill px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                >
+                  Download &amp; install
+                </button>
+              </div>
+              {updateProgress && updateProgress.total ? (
+                <div
+                  role="progressbar"
+                  aria-label="Update download progress"
+                  aria-valuemin={0}
+                  aria-valuemax={Math.max(1, Math.round(updateProgress.total))}
+                  aria-valuenow={Math.round(updateProgress.received)}
+                  className="h-2 w-full overflow-hidden rounded-full border border-border bg-surface"
+                >
+                  <div
+                    className="h-full bg-blue-fill"
+                    style={{ width: `${Math.min(100, Math.round((updateProgress.received / updateProgress.total) * 100))}%` }}
+                  />
+                </div>
+              ) : null}
+              <p role="status" aria-live="polite" className="text-[11px] leading-snug text-muted">
+                {updateMessage}
+              </p>
+              {updateInfo?.notes ? (
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface/60 p-2 text-[11px] text-ink/80">
+                  {updateInfo.notes}
+                </pre>
+              ) : null}
             </fieldset>
 
             <div className="flex flex-wrap gap-2">

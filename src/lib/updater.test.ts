@@ -10,7 +10,7 @@ const { invokeMock, listenMock } = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
 
-import { checkForUpdates, installUpdate, useAutoUpdater } from "./updater";
+import { checkForUpdates, installUpdate, listenUpdateEvents, useAutoUpdater } from "./updater";
 
 const available = {
   available: true,
@@ -48,6 +48,24 @@ describe("updater bridge", () => {
     invokeMock.mockRejectedValueOnce(new Error("verification failed"));
     const failed = await installUpdate();
     expect(failed.ok).toBe(false);
+  });
+
+  it("subscribes to install status and progress events", async () => {
+    const status = vi.fn();
+    const progress = vi.fn();
+    const stop = await listenUpdateEvents({ status, progress });
+
+    expect(listenMock).toHaveBeenCalledWith("murmur://update-status", expect.any(Function));
+    expect(listenMock).toHaveBeenCalledWith("murmur://update-progress", expect.any(Function));
+
+    const statusHandler = listenMock.mock.calls.find((call) => call[0] === "murmur://update-status")?.[1];
+    statusHandler?.({ payload: "Downloading…" });
+    expect(status).toHaveBeenCalledWith("Downloading…");
+
+    const progressHandler = listenMock.mock.calls.find((call) => call[0] === "murmur://update-progress")?.[1];
+    progressHandler?.({ payload: { received: 40, total: 100 } });
+    expect(progress).toHaveBeenCalledWith({ received: 40, total: 100 });
+    stop();
   });
 
   it("relays a discovered update to the backend exactly once", async () => {

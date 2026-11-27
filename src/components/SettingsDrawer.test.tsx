@@ -26,7 +26,13 @@ const defaults = {
 let current = { ...defaults };
 let posts: Array<Record<string, unknown>> = [];
 
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
+const { invokeMock, listenMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  listenMock: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
 
 // Keep App's bounded backend polling instantaneous in tests.
 vi.mock("../lib/backendReady", () => ({
@@ -140,6 +146,12 @@ describe("SettingsDrawer", () => {
   beforeEach(() => {
     current = { ...defaults };
     posts = [];
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue({
+      available: false, version: null, notes: null, currentVersion: "1.2.60", error: null,
+    });
+    listenMock.mockClear();
+    listenMock.mockResolvedValue(() => {});
     windowMock.setSize.mockClear();
     windowMock.setResizable.mockClear();
     windowMock.center.mockClear();
@@ -181,6 +193,25 @@ describe("SettingsDrawer", () => {
     expect(useLocal).toBeDisabled();
     await user.click(within(group).getByRole("button", { name: /^use$/i }));
     await waitFor(() => expect(posts).toContainEqual({ provider: "llama" }));
+  });
+
+  it("checks for and installs updates from Settings", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command: string) =>
+      command === "check_for_updates"
+        ? Promise.resolve({ available: true, version: "9.9.9", notes: "New release", currentVersion: "1.2.60", error: null })
+        : Promise.resolve(undefined),
+    );
+    render(<SettingsDrawer open onClose={() => {}} />);
+    const group = await screen.findByRole("group", { name: /updates/i });
+
+    await user.click(within(group).getByRole("button", { name: /check for updates/i }));
+    expect(await within(group).findByText(/version 9\.9\.9 is available/i)).toBeInTheDocument();
+
+    const install = within(group).getByRole("button", { name: /download & install/i });
+    expect(install).toBeEnabled();
+    await user.click(install);
+    expect(invokeMock).toHaveBeenCalledWith("install_update");
   });
 
   it("renders a full-ARIA dialog with every settings group", async () => {

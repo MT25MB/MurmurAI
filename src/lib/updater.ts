@@ -23,6 +23,32 @@ export interface InstallResult {
   error?: string;
 }
 
+export interface UpdateProgress {
+  received: number;
+  total: number | null;
+}
+
+/** Subscribe to Rust install progress. Returns an unsubscribe function. */
+export async function listenUpdateEvents(handlers: {
+  status?: (message: string) => void;
+  progress?: (progress: UpdateProgress) => void;
+}): Promise<() => void> {
+  try {
+    const { listen } = await import("@tauri-apps/api/event");
+    const stops = [
+      handlers.status
+        ? await listen<string>("murmur://update-status", (event) => handlers.status?.(event.payload))
+        : null,
+      handlers.progress
+        ? await listen<UpdateProgress>("murmur://update-progress", (event) => handlers.progress?.(event.payload))
+        : null,
+    ].filter(Boolean) as Array<() => void>;
+    return () => stops.forEach((stop) => stop());
+  } catch {
+    return () => {};
+  }
+}
+
 export async function checkForUpdates(): Promise<UpdateInfo> {
   try {
     const result = await invoke<UpdateInfo | null>("check_for_updates");

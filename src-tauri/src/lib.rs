@@ -76,6 +76,14 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> 
     }
 }
 
+/// Download progress for the Settings update button.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProgress {
+    pub received: u64,
+    pub total: Option<u64>,
+}
+
 /// Download and install the pending update, then restart the app.
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
@@ -89,12 +97,25 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|error| command_error_message("Update check", &error.to_string()))?
         .ok_or_else(|| "No update is available".to_string())?;
 
+    let progress_app = app.clone();
+    let mut received = 0u64;
     update
-        .download_and_install(|_, _| {}, || {})
+        .download_and_install(
+            |chunk, total| {
+                received = received.saturating_add(chunk as u64);
+                let _ = progress_app.emit(
+                    "murmur://update-progress",
+                    UpdateProgress { received, total },
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|error| command_error_message("Update install", &error.to_string()))?;
     let _ = app.emit("murmur://update-status", "Update installed. Restarting…");
-    // restart() diverges (the app process is replaced), so it is the tail.
+    // Stop the sidecar cleanly so PyInstaller removes its extraction dir before
+    // the installer replaces the app files. restart() diverges: it is the tail.
+    kill_backend();
     app.restart()
 }
 
