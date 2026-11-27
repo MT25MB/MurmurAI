@@ -61,6 +61,10 @@ describe("HudPill", () => {
     sockets.length = 0;
     for (const key of Object.keys(tauriListeners)) delete tauriListeners[key];
     invokeMock.mockClear();
+    // Autostart sync writes config.json through the sidecar; keep tests offline.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ autostart_enabled: true }), { status: 200 },
+    )));
     vi.stubGlobal("WebSocket", TestWS);
     windowMock.setSize.mockClear();
     windowMock.minimize.mockClear();
