@@ -174,7 +174,9 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def reset_settings() -> dict[str, Any]:
-    return save_settings(dict(DEFAULT_SETTINGS))
+    settings = save_settings(dict(DEFAULT_SETTINGS))
+    apply_settings(settings)  # live speech/voice/earcons must follow a reset
+    return settings
 
 
 # ---------------------------------------------------------------------------

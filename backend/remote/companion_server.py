@@ -100,13 +100,29 @@ def _spoken_digits(pin: str) -> str:
     return " ".join(pin)
 
 
-def transcribe_audio(pcm: bytes) -> str:
-    """Transcribe 16 kHz int16 PCM locally with faster-whisper (no cloud)."""
-    import numpy as np
+_TRANSCRIBE_MODEL = None
+_TRANSCRIBE_MODEL_NAME = ""
+_TRANSCRIBE_LOCK = threading.Lock()
+
+
+def _get_transcribe_model():
+    """Load the local whisper weights once, not once per utterance."""
+    global _TRANSCRIBE_MODEL, _TRANSCRIBE_MODEL_NAME
     from faster_whisper import WhisperModel
 
     model_name = os.getenv("WHISPER_MODEL", "tiny.en")
-    model = WhisperModel(model_name, compute_type="int8", device="cpu")
+    with _TRANSCRIBE_LOCK:
+        if _TRANSCRIBE_MODEL is None or _TRANSCRIBE_MODEL_NAME != model_name:
+            _TRANSCRIBE_MODEL = WhisperModel(model_name, compute_type="int8", device="cpu")
+            _TRANSCRIBE_MODEL_NAME = model_name
+        return _TRANSCRIBE_MODEL
+
+
+def transcribe_audio(pcm: bytes) -> str:
+    """Transcribe 16 kHz int16 PCM locally with faster-whisper (no cloud)."""
+    import numpy as np
+
+    model = _get_transcribe_model()
     audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
     segments, _info = model.transcribe(
         audio, language="en", beam_size=1, vad_filter=False

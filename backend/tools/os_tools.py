@@ -233,9 +233,9 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
             safety,
         )
     if name == "run_visual_task":
-        from agent.vision_agent import VisionAgent
+        from agent.vision_agent import run_agent_method
 
-        return VisionAgent().run_visual_task(arguments.get("goal", ""))
+        return run_agent_method("run_visual_task", arguments.get("goal", ""))
     if name == "install_application":
         from .installer_tool import install_application
 
@@ -298,9 +298,18 @@ def dispatch_tool(name: str, arguments: dict, safety: SafetyGate) -> str:
             )
         if name == "list_configured_secrets":
             return list_configured_secrets()
-        return delete_secret_reference(
-            arguments.get("name", ""), arguments.get("confirm", False)
-        )
+        # A model-supplied "confirm" flag is not a user approval. Route the
+        # destructive call through the same spoken/UI gate as every other tool.
+        wants_delete = bool(arguments.get("confirm", False))
+        approved = False
+        if wants_delete:
+            from .event_bus import tool_bus
+
+            approved = tool_bus.request_confirmation(
+                f"Delete stored secret {arguments.get('name', '')}?",
+                "delete_secret",
+            )
+        return delete_secret_reference(arguments.get("name", ""), approved)
     if name == "list_mcp_tools":
         from .mcp_manager import list_plugins
 

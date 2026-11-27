@@ -43,6 +43,8 @@ for t in x86_64-pc-windows-msvc.exe x86_64-apple-darwin aarch64-apple-darwin x86
   [ -f "src-tauri/binaries/murmur-backend-$t" ] || printf 'PLACEHOLDER\n' > "src-tauri/binaries/murmur-backend-$t"
 done
 (cd src-tauri && cargo check --quiet) || fail "cargo check"
+# Rust unit tests run in CI on a fresh runner; a local debug build would need
+# several GB and can fill the disk on contributor machines.
 
 echo "==> [9/9] Pre-release smoke test"
 bash scripts/smoke-test.sh || fail "smoke test"

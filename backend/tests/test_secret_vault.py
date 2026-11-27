@@ -262,6 +262,9 @@ def test_dispatch_routes_secret_tools(monkeypatch):
     monkeypatch.setattr(sv, "set_secret_reference", lambda n, v: seen.append(("set", n, v)) or "set")
     monkeypatch.setattr(sv, "list_configured_secrets", lambda: seen.append(("list",)) or "list")
     monkeypatch.setattr(sv, "delete_secret_reference", lambda n, c: seen.append(("del", n, c)) or "del")
+    from tools.event_bus import tool_bus
+
+    monkeypatch.setattr(tool_bus, "request_confirmation", lambda *_a, **_k: True)
 
     assert os_tools.dispatch_tool("set_secret_reference", {"name": "n", "value": "v"}, None) == "set"
     assert os_tools.dispatch_tool("list_configured_secrets", {}, None) == "list"

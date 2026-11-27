@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from typing import Callable, Optional
 
 import numpy as np
@@ -176,13 +177,17 @@ class VoiceListener:
             ) as stream:
                 self._stream = stream
                 while self._running:
-                    self._process_frames()
+                    had_frames = self._process_frames()
+                    if not had_frames:
+                        # The sounddevice callback fills the buffer asynchronously;
+                        # without a pause this loop pegs a CPU core doing nothing.
+                        time.sleep(0.01)
         except Exception:  # pragma: no cover - hardware dependent
             logger.exception("VoiceListener loop crashed")
             self._running = False
 
-    def _process_frames(self) -> None:
-        """Consume complete 30 ms frames from the buffer and run VAD."""
+    def _process_frames(self) -> bool:
+        """Consume complete frames; return True when at least one was handled."""
         if self.echo_guard and echo_is_active(self.echo_tail_s, self.loopback_guard):
             # Drop anything captured while Murmur (or loud media) was playing.
             # Resetting the utterance prevents TTS bleed becoming a false command.
@@ -190,7 +195,8 @@ class VoiceListener:
             self._utterance_buffer.clear()
             self._speaking = False
             self._silence_frames = 0
-            return
+            return False
+        had_frames = len(self._buffer) >= FRAME_SAMPLES * 2
         while len(self._buffer) >= FRAME_SAMPLES * 2:
             frame = bytes(self._buffer[: FRAME_SAMPLES * 2])
             del self._buffer[: FRAME_SAMPLES * 2]
@@ -218,6 +224,7 @@ class VoiceListener:
                     or (now - self._utterance_start) >= MAX_UTTERANCE_S
                 ):
                     self._finalize_utterance()
+        return had_frames
 
     def _vad_is_speech(self, frame: bytes) -> bool:
         try:

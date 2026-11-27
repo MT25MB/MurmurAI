@@ -74,6 +74,7 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
   const panelRef = useRef<HTMLElement>(null);
   const approveRef = useRef<HTMLButtonElement>(null);
   const typeInputRef = useRef<HTMLInputElement>(null);
+  const stoppedTimerRef = useRef<number | null>(null);
 
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
@@ -150,7 +151,8 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
       setWorking(false);
       setGuidance(null);
       setConfirmation(null);
-      setTimeout(() => setStopped(""), 6000);
+      if (stoppedTimerRef.current !== null) window.clearTimeout(stoppedTimerRef.current);
+      stoppedTimerRef.current = window.setTimeout(() => setStopped(""), 6000);
     }
     if (lastMessage.type === "update_available") {
       setUpdate({
@@ -229,6 +231,9 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      // Never steal OS/browser shortcuts such as Cmd+Q or Ctrl+T. Escape and
+      // Enter confirmation handling below still work unmodified.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (confirmation) {
         // Let focused buttons handle their own Enter so Tab-to-Cancel then
         // Enter cannot be hijacked into approving a destructive action.
@@ -279,6 +284,10 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
     };
   }, [send]);
 
+  useEffect(() => () => {
+    if (stoppedTimerRef.current !== null) window.clearTimeout(stoppedTimerRef.current);
+  }, []);
+
   // Accessible tray actions and shell notices all land on the same WS router.
   useEffect(() => {
     let unlisteners: Array<() => void> = [];
@@ -296,6 +305,7 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
         ];
         for (const [event, handler] of handlers) {
           const stop = await listen(event, () => { if (!disposed) handler(); });
+          if (disposed) { stop(); return; }
           unlisteners.push(stop);
         }
         const stopAutostart = await listen<boolean>("murmur://autostart-changed", (event) => {
@@ -306,6 +316,7 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
             }))
             .catch(() => undefined);
         });
+        if (disposed) { stopAutostart(); return; }
         unlisteners.push(stopAutostart);
       } catch {
         // Browser dev: tray events are unavailable; the in-HUD controls still work.

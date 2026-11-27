@@ -86,5 +86,7 @@ class MemoryVault:
     def clear(self) -> int:
         count = len(self._facts)
         self._facts = []
+        # A cleared vault must not resurrect a forgotten fact via "undo that".
+        self._last_forgotten = None
         self._save()
         return count

@@ -316,11 +316,10 @@ def _vision_handoff(app_name: str) -> str:
         "Opening a browser to install it from the official website."
     )
     try:
-        from agent.vision_agent import VisionAgent
+        from agent.vision_agent import run_agent_method
 
-        agent = VisionAgent()
         goal = f"Download and install {app_name} from its official website"
-        result = agent.run_visual_task(goal)
+        result = run_agent_method("run_visual_task", goal)
         return f"Visual install handoff finished: {result}"
     except Exception as exc:  # pragma: no cover - environment dependent
         logger.exception("Vision handoff failed")

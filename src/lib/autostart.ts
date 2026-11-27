@@ -15,6 +15,8 @@ export async function setAutostartEnabled(enabled: boolean): Promise<boolean> {
     const result = await invoke<boolean | unknown>("set_autostart", { enabled });
     return typeof result === "boolean" ? result : enabled;
   } catch {
-    return enabled;
+    // Report the real OS state, never the requested state: a failed command
+    // must not make config.json claim a registration that does not exist.
+    return fetchAutostartEnabled();
   }
 }

@@ -210,6 +210,10 @@ async def lifespan(app: FastAPI):
         app_state.plugin_task.cancel()
     if app_state.listening_task:
         app_state.listening_task.cancel()
+    if app_state.wake_task:
+        # Sleep-mode shutdown otherwise leaves the wake-word InputStream open.
+        app_state.wake_task.cancel()
+        app_state.wake_task = None
     if app_state.speaking_task:
         app_state.speaking_task.cancel()
     if app_state.listener:
@@ -225,20 +229,30 @@ async def lifespan(app: FastAPI):
     logger.info("Murmur AI backend shut down")
 
 
-# Browsers can open ws://127.0.0.1 from any website; CORS does not apply to
-# WebSocket handshakes. Only the local Tauri webview and localhost dev origins
-# may drive the agent. Clients without an Origin header (native CLI/tests) pass.
-_WS_ORIGIN_ALLOW = re.compile(
-    r"^(tauri://localhost|https?://tauri\.localhost|"
-    r"https?://(localhost|127\.0\.0\.1)(:\d+)?)$",
-    re.IGNORECASE,
-)
+# Browsers can open ws://127.0.0.1 from any webpage; CORS does not apply to
+# WebSocket handshakes. Only the Tauri shell and the two development ports may
+# drive the agent. A wildcard local port would let any local dev server (or a
+# page served from one) issue tool commands and self-approve confirmations.
+_SHELL_ORIGINS = frozenset({
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+    "http://localhost:8765",
+    "http://127.0.0.1:8765",
+})
+
+
+def _origin_allowed(origin: str) -> bool:
+    return origin.strip().rstrip("/").lower() in _SHELL_ORIGINS
 
 
 def _ws_origin_allowed(websocket: WebSocket) -> bool:
     headers = getattr(websocket, "headers", {})
     origin = headers.get("origin") if headers else None
-    return not origin or bool(_WS_ORIGIN_ALLOW.match(origin.strip()))
+    # Native clients (curl, tests, CLI) send no Origin header.
+    return not origin or _origin_allowed(origin)
 
 
 app = FastAPI(title="Murmur AI Local Voice Sidecar", lifespan=lifespan)
@@ -263,14 +277,24 @@ app.add_middleware(
         "http://localhost:8765",
         "http://127.0.0.1:8765",
     ],
-    allow_origin_regex=(
-        r"^(tauri://localhost|https?://tauri\.localhost|"
-        r"https?://(localhost|127\.0\.0\.1)(:\d+)?)$"
-    ),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _reject_foreign_mutations(request: Request, call_next):
+    """Block cross-origin state changes from arbitrary local web pages.
+
+    A browser sends Origin even on simple POSTs. The Tauri shell and native
+    clients use one of the allowlisted origins or send no Origin at all.
+    """
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        if origin and not _origin_allowed(origin):
+            return JSONResponse({"error": "Origin not allowed"}, status_code=403)
+    return await call_next(request)
 
 
 # ---- HTTP ----
@@ -424,23 +448,30 @@ async def model_options_endpoint() -> JSONResponse:
     })
 
 
+def _model_install_error(model: str) -> str | None:
+    """Shared gate for both HTTP and WebSocket model downloads."""
+    from system.profiler import MODEL_CATALOG, model_fits_hardware
+
+    if model not in MODEL_CATALOG:
+        return "Unknown model."
+    if not model_fits_hardware(model):
+        return f"This device cannot run {model}."
+    return None
+
+
 @app.post("/models/install")
 async def install_model_endpoint(request: Request) -> JSONResponse:
     """Pull an opt-in model locally. Only known, hardware-compatible tags."""
     import setup as setup_module
-    from system.profiler import MODEL_CATALOG, model_fits_hardware
 
     try:
         body = await request.json()
     except Exception:
         body = {}
     model = str((body or {}).get("model", "")).strip()
-    if model not in MODEL_CATALOG:
-        return JSONResponse({"ok": False, "error": "Unknown model."}, status_code=400)
-    if not model_fits_hardware(model):
-        return JSONResponse(
-            {"ok": False, "error": f"This device cannot run {model}."}, status_code=400
-        )
+    error = _model_install_error(model)
+    if error:
+        return JSONResponse({"ok": False, "error": error}, status_code=400)
     result = await setup_module.pull_model(model, lambda *_args: None)
     return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
@@ -489,6 +520,11 @@ async def setup_pull_model(websocket: WebSocket):
                 await websocket.send_text(payload)
             except Exception:  # pragma: no cover - client disconnected
                 progress_queue.task_done()
+                # Drain what is already queued so the caller's join() cannot
+                # hang forever after the HUD disconnects mid-download.
+                while not progress_queue.empty():
+                    progress_queue.get_nowait()
+                    progress_queue.task_done()
                 return
             progress_queue.task_done()
 
@@ -535,7 +571,13 @@ async def setup_pull_model(websocket: WebSocket):
                 )
                 continue
 
-            model_name = str(data.get("model", ""))
+            model_name = str(data.get("model", "")).strip()
+            error = _model_install_error(model_name)
+            if error:
+                await websocket.send_text(
+                    ServerMessage(type="error", detail=error).to_json()
+                )
+                break
             result = await setup_module.pull_model(model_name, on_progress)
             # Every queued frame is sent before the terminal message.
             await progress_queue.join()
@@ -776,10 +818,10 @@ async def ws(websocket: WebSocket):
 
 async def _handle_describe_screen(focus: str, send) -> None:
     """Tray/UI 'Describe Screen' uses the same local VLM path as voice."""
-    from agent.vision_agent import VisionAgent
+    from agent.vision_agent import run_agent_method
 
     try:
-        text = await asyncio.to_thread(VisionAgent().describe, focus)
+        text = await asyncio.to_thread(run_agent_method, "describe", focus)
     except Exception:
         logger.exception("Tray describe-screen failed")
         text = "I couldn't read the screen just now. Please try again."
@@ -847,10 +889,10 @@ async def _try_checkpoint_phrase(session, send, text: str) -> bool:
     remaining = resume_subgoals(checkpoint)
     await _speak_and_return(session, send, f"Resuming: {', '.join(remaining)}.")
     try:
-        from agent.vision_agent import VisionAgent
+        from agent.vision_agent import run_agent_method
 
         await asyncio.to_thread(
-            VisionAgent().run_visual_task, "; then ".join(remaining)
+            run_agent_method, "run_visual_task", "; then ".join(remaining)
         )
     except Exception:  # pragma: no cover - platform dependent
         logger.exception("Checkpoint resume failed")
@@ -904,9 +946,9 @@ async def _build_and_store_preview(session: SessionState, send, goal: str) -> No
     """Build a read-only preview for a goal and hold it for one decision."""
     try:
         if pick_engine(goal) == "vision":
-            from agent.vision_agent import VisionAgent
+            from agent.vision_agent import run_agent_method
 
-            preview = await asyncio.to_thread(VisionAgent().build_preview, goal)
+            preview = await asyncio.to_thread(run_agent_method, "build_preview", goal)
         else:
             preview = await asyncio.to_thread(app_state.brain.build_preview, goal)
     except Exception:  # pragma: no cover - model/model absent
@@ -944,10 +986,11 @@ async def _route_plan_preview(
             preview = pending
             try:
                 if preview.engine == "vision":
-                    from agent.vision_agent import VisionAgent
+                    from agent.vision_agent import run_agent_method
 
                     result = await asyncio.to_thread(
-                        VisionAgent().run_visual_task,
+                        run_agent_method,
+                        "run_visual_task",
                         preview.goal,
                         plan=preview.plan,
                         skip_indices=sorted(preview.skipped),
@@ -1130,9 +1173,9 @@ async def handle_text_input(
         await _working_on_it(session, send)
         await _set_state(send, session, "THINKING")
         try:
-            from agent.vision_agent import VisionAgent
+            from agent.vision_agent import run_agent_method
 
-            reply = await asyncio.to_thread(VisionAgent().run_visual_task, text)
+            reply = await asyncio.to_thread(run_agent_method, "run_visual_task", text)
         except Exception as exc:
             logger.exception("Multi-step visual task failed")
             reason = " ".join(str(exc).split())[:160] or type(exc).__name__
@@ -1312,8 +1355,13 @@ async def enter_sleep(session: SessionState, send) -> None:
         app_state.wake_task = asyncio.create_task(_wake_monitor(session, send))
 
 
-async def wake_up(session: SessionState, send) -> None:
-    """Leave standby, resume active listening, chime and speak 'I'm listening'."""
+async def wake_up(session: SessionState, send, cancel_wake: bool = True) -> None:
+    """Leave standby, resume active listening, chime and speak 'I'm listening'.
+
+    ``cancel_wake=False`` is used by the wake monitor itself: cancelling the
+    task that is currently running would abort the new listening loop at its
+    first await.
+    """
     _apply_listening_mode("active")
     _chime("wake")
     _announce("I'm listening")
@@ -1322,7 +1370,7 @@ async def wake_up(session: SessionState, send) -> None:
     # showing the stale "Going to sleep" turn and looks like it never woke.
     await emit_transcript(session, send, "I'm listening.", "system")
     # Cancel the standby monitor; active listening resumes via start_listening.
-    if app_state.wake_task is not None:
+    if cancel_wake and app_state.wake_task is not None:
         app_state.wake_task.cancel()
         app_state.wake_task = None
 
@@ -1339,7 +1387,8 @@ async def _wake_monitor(session: SessionState, send) -> None:
                 indata, _ = await asyncio.to_thread(stream.read, int(SAMPLE_RATE * 0.5))
                 pcm = indata.tobytes()
                 if detector is not None and detector.detect(pcm):
-                    await wake_up(session, send)
+                    await wake_up(session, send, cancel_wake=False)
+                    app_state.wake_task = None
                     # Resume the active conversation loop.
                     await start_listening(session, send)
                     return
@@ -1727,7 +1776,10 @@ async def _on_utterance_async(
 
     session.add_turn("assistant", reply)
     await _speak_and_return(session, send, reply)
-    await _set_state(send, session, "LISTENING")
+    # A sleep/abort phrase handled during this turn already changed the mode
+    # and stopped the mic; do not overwrite it with a stale LISTENING frame.
+    if app_state.listening_mode == "active" and not abort_controller.is_aborted():
+        await _set_state(send, session, "LISTENING")
 
 
 async def _listen_amplitude(session: SessionState, send) -> None:

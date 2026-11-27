@@ -75,12 +75,30 @@ def load_last() -> Checkpoint | None:
         data = json.loads(files[-1].read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):  # pragma: no cover - corrupt file
         return None
+    def _as_int(value: object, default: int = 0) -> int:
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError, OverflowError):
+            return default
+
+    def _as_float(value: object, default: float = 0.0) -> float:
+        try:
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError, OverflowError):
+            return default
+
+    subgoals = data.get("subgoals", [])
+    if not isinstance(subgoals, list):
+        subgoals = []
+    completed = data.get("completed", [])
+    if not isinstance(completed, list):
+        completed = []
     return Checkpoint(
         goal=str(data.get("goal", "")),
-        subgoals=list(data.get("subgoals", [])),
-        completed=list(data.get("completed", [])),
-        active_index=int(data.get("active_index", 0)),
-        updated_at=float(data.get("updated_at", 0)),
+        subgoals=[str(step) for step in subgoals],
+        completed=[str(step) for step in completed],
+        active_index=_as_int(data.get("active_index")),
+        updated_at=_as_float(data.get("updated_at")),
     )
 
 

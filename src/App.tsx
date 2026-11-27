@@ -4,7 +4,7 @@ import OnboardingModal from "./components/OnboardingModal";
 import SettingsDrawer from "./components/SettingsDrawer";
 import { fetchSetupStatus, type SetupStatus } from "./lib/setup";
 import { waitForBackend } from "./lib/backendReady";
-import { fetchAutostartEnabled, setAutostartEnabled } from "./lib/autostart";
+import { fetchAutostartEnabled } from "./lib/autostart";
 import { fetchSettings, saveSettings } from "./lib/settings";
 import { useFocusRecovery } from "./lib/focusRecovery";
 
@@ -98,9 +98,10 @@ export default function App() {
         const [settings, actual] = await Promise.all([
           fetchSettings(), fetchAutostartEnabled(),
         ]);
+        // The OS registration is the source of truth: if it was changed from
+        // System Settings, adopt that value instead of undoing the user's choice.
         if (settings.autostart_enabled !== actual) {
-          const applied = await setAutostartEnabled(settings.autostart_enabled);
-          await saveSettings({ autostart_enabled: applied });
+          await saveSettings({ autostart_enabled: actual });
         }
       } catch {
         // Browser dev or backend briefly unavailable; retry on next launch.

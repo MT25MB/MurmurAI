@@ -43,6 +43,10 @@ jobs:
         working-directory: backend
         run: python -c "import compileall, sys; sys.exit(0 if compileall.compile_dir('.', quiet=1) else 1)"
 
+      - name: Generated command reference is current
+        working-directory: backend
+        run: PYTHONPATH=. python ../scripts/generate_docs.py --check
+
       - name: Smoke-test replay helper
         working-directory: backend
         run: python replay_log.py --help
@@ -70,6 +74,9 @@ jobs:
 
       - name: Frontend unit tests (Vitest)
         run: npm test
+
+      - name: WCAG / ARIA regression suite
+        run: npm run test:a11y
 
       - name: Build app
         run: npm run build
@@ -121,3 +128,7 @@ jobs:
       - name: Cargo check
         working-directory: src-tauri
         run: cargo check
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test

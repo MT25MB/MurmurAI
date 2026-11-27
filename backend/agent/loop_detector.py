@@ -83,23 +83,19 @@ class LoopDetector:
     ):
         self.repeat_threshold = repeat_threshold
         self.screen_threshold = screen_threshold
-        self.actions: deque[str] = deque(maxlen=HISTORY)
-        self.screens: deque[int] = deque(maxlen=HISTORY)
-        self.subgoals: deque[int] = deque(maxlen=HISTORY)
+        # One deque keeps action, hash and subgoal aligned. Separate deques let
+        # failed hashes silently shift screens onto the wrong subgoal.
+        self.steps: deque[tuple[str, Optional[int], int]] = deque(maxlen=HISTORY)
         self.last_progress_subgoal = -1
 
     def reset(self) -> None:
-        self.actions.clear()
-        self.screens.clear()
-        self.subgoals.clear()
+        self.steps.clear()
         self.last_progress_subgoal = -1
 
     def mark_progress(self, subgoal_index: int) -> None:
         """Called when a subgoal is completed, breaks any loop streak."""
         self.last_progress_subgoal = subgoal_index
-        self.actions.clear()
-        self.screens.clear()
-        self.subgoals.clear()
+        self.steps.clear()
 
     def record(
         self,
@@ -107,15 +103,13 @@ class LoopDetector:
         scr_hash: Optional[int],
         subgoal_index: int,
     ) -> None:
-        self.actions.append(fp)
-        if scr_hash is not None:
-            self.screens.append(scr_hash)
-        self.subgoals.append(subgoal_index)
+        self.steps.append((fp, scr_hash, subgoal_index))
 
     def assess(self, current_subgoal: int) -> LoopStatus:
         """Decide whether the agent is stuck on the current subgoal."""
         # Only look at steps since the last subgoal progress.
-        recent_actions = [a for a, s in zip(self.actions, self.subgoals) if s == current_subgoal]
+        recent = [step for step in self.steps if step[2] == current_subgoal]
+        recent_actions = [action for action, _hash, _subgoal in recent]
         if len(recent_actions) >= self.repeat_threshold:
             tail = recent_actions[-self.repeat_threshold:]
             if len(set(tail)) == 1:
@@ -126,7 +120,7 @@ class LoopDetector:
                 )
 
         # Static screen: last N hashes on this subgoal all near-identical.
-        recent_screens = [h for h, s in zip(self.screens, self.subgoals) if s == current_subgoal]
+        recent_screens = [h for _action, h, _subgoal in recent if h is not None]
         if len(recent_screens) >= self.repeat_threshold:
             tail = recent_screens[-self.repeat_threshold:]
             if all(hamming(tail[0], h) <= self.screen_threshold for h in tail[1:]):

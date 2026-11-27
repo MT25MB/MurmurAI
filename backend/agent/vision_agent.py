@@ -24,6 +24,7 @@ import base64
 import io
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -57,6 +58,44 @@ from agent.loop_detector import LoopDetector, action_fingerprint, screen_hash
 from agent.offscreen_search import ScrollSearch
 
 logger = logging.getLogger("murmur_ai.agent.vision_agent")
+
+
+def _model_bool(value: object) -> bool:
+    """Parse a model-supplied boolean strictly.
+
+    A plain-text VLM reply can contain ``"false"`` as a string; ``bool("false")``
+    is True, which would let the model claim a step succeeded without evidence.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value == 1
+    return str(value or "").strip().lower() in {"true", "1", "yes"}
+
+
+def _model_coords(value: object) -> Optional[list[float]]:
+    """Return normalized [x, y] or None for any malformed model output."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    try:
+        coords = [float(value[0]), float(value[1])]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return coords if all(math.isfinite(n) and abs(n) < 1_000_000 for n in coords) else None
+
+
+def run_agent_method(method: str, *args, **kwargs):
+    """Construct a short-lived agent, run one method, always release it.
+
+    Every agent registers an abort listener and an httpx client; leaking either
+    on every voice turn accumulates memory and announces stale "stopped" cues.
+    """
+    agent = VisionAgent()
+    try:
+        return getattr(agent, method)(*args, **kwargs)
+    finally:
+        agent.close()
+
 
 DEFAULT_VISION_MODEL = normalize_model(os.getenv("OLLAMA_VISION_MODEL", "qwen3.5:9b"))
 
@@ -764,6 +803,11 @@ class VisionAgent:
                 return f"Task finished after {step - 1} step(s)."
 
             active = self.plan.current()
+            if active is None:
+                # An empty plan (e.g. a preview with everything skipped) has
+                # no current step and must not be dereferenced.
+                self._speak("Nothing to do.")
+                return "Nothing to do."
             subgoal_idx = self.plan.active_index
 
             # An already-open app needs no launch; that subgoal is satisfied.
@@ -942,7 +986,18 @@ class VisionAgent:
             # --- execute with failsafe handling ---
             after_png: Optional[bytes] = None
             try:
-                self._execute(action, coords, drag_to, text)
+                executed = self._execute(action, coords, drag_to, text)
+                if not executed:
+                    # An unresolved element or unsupported action must never be
+                    # logged (or spoken) as a completed GUI step.
+                    record.result = "no-op"
+                    self._recovery_hint = (
+                        f"The last action ({action}) could not be performed: "
+                        "missing target or unsupported action. Try an alternative path."
+                    )
+                    self.history.append(record)
+                    time.sleep(STEP_SETTLE_S)
+                    continue
                 record.result = "executed"
                 # Verify the action actually changed the UI. A static screen
                 # after a click/shortcut feeds an alternative-path hint next step.
@@ -1217,7 +1272,7 @@ class VisionAgent:
             response = self._chat_with_image(system, prompt, b64_png, format_json=True)
             content = response.get("message", {}).get("content", "{}")
             data = self._extract_json(content)
-            complete = bool(data.get("complete", False))
+            complete = _model_bool(data.get("complete", False))
             evidence = str(data.get("evidence") or data.get("next") or "").strip()[:160]
             return complete, evidence
         except Exception:
@@ -1314,16 +1369,12 @@ class VisionAgent:
                     element_id = int(raw_id)
                 except (ValueError, TypeError):
                     element_id = None
-            raw_coords = data.get("coordinates")
-            if raw_coords and len(raw_coords) == 2:
-                coords = [float(raw_coords[0]), float(raw_coords[1])]
-            raw_drag = data.get("drag_to")
-            if raw_drag and len(raw_drag) == 2:
-                drag_to = [float(raw_drag[0]), float(raw_drag[1])]
+            coords = _model_coords(data.get("coordinates"))
+            drag_to = _model_coords(data.get("drag_to"))
             text = data.get("text")
             if text is not None:
                 text = str(text)
-            subgoal_done = bool(data.get("subgoal_done", False))
+            subgoal_done = _model_bool(data.get("subgoal_done", False))
         if not data:
             logger.warning("VLM returned non-JSON; refusing to claim completion. Content: %s", str(content)[:200])
         return thought, action, element_id, coords, drag_to, text, subgoal_done
@@ -1334,7 +1385,8 @@ class VisionAgent:
         coords: Optional[list[float]],
         drag_to: Optional[list[float]],
         text: Optional[str],
-    ) -> None:
+    ) -> bool:
+        """Run one input action. Returns False when nothing was actually done."""
         if action == "CLICK" and coords:
             self.controller.click(coords[0], coords[1])
         elif action == "DOUBLE_CLICK" and coords:
@@ -1342,7 +1394,7 @@ class VisionAgent:
         elif action == "DRAG":
             if not coords or not drag_to:
                 logger.warning("DRAG requires both coordinates and drag_to")
-                return
+                return False
             self.controller.move_and_drag(coords[0], coords[1], drag_to[0], drag_to[1])
         elif action in {"SCROLL_DOWN", "SCROLL_UP", "SCROLL_HORIZONTAL"}:
             direction = action.replace("SCROLL_", "").lower()
@@ -1355,12 +1407,17 @@ class VisionAgent:
             time.sleep(STEP_SETTLE_S)
         else:
             logger.warning("Unsupported or incomplete action: %s", action)
+            return False
+        return True
 
     # ---- accessibility: blind-user screen description ----
 
     def close(self) -> None:
         """Release listeners/clients owned by this short-lived agent."""
-        self.abort.remove_listener(self._announce_stop)
+        try:
+            self.abort.remove_listener(self._announce_stop)
+        except Exception:  # pragma: no cover - partially initialized agent
+            pass
         try:
             self._client.close()
         except Exception:  # pragma: no cover - defensive

@@ -21,6 +21,18 @@ from typing import Any, Optional
 
 logger = logging.getLogger("murmur_ai.tools.window_tools")
 
+
+def _as_applescript_string(value: object) -> str:
+    """Escape untrusted names before embedding them in an AppleScript literal.
+
+    Window titles come from other apps (including web pages) and may contain
+    quotes and backslashes. Without escaping they can close the string literal
+    and inject a ``do shell script`` command.
+    """
+    text = str(value or "")
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
 VALID_ACTIONS = ("focus", "maximize", "minimize", "close", "move_to_primary_monitor")
 MAX_SPOKEN_WINDOWS = 12
 
@@ -193,7 +205,8 @@ def _macos_platform() -> list[WindowInfo]:
     for index, title in enumerate(titles):
         bounds = _run([
             "osascript", "-e",
-            f'tell application "System Events" to tell process "{title}" to get '
+            f'tell application "System Events" to tell process '
+            f'"{_as_applescript_string(title)}" to get '
             '{position, size} of window 1',
         ])
         # AppleScript returns e.g. "0, 25, 1440, 900"
@@ -330,22 +343,23 @@ def _act_windows(window: WindowInfo, action: str) -> bool:  # pragma: no cover -
 
 
 def _act_macos(window: WindowInfo, action: str) -> bool:  # pragma: no cover - platform specific
+    app = _as_applescript_string(window.app)
     scripts = {
-        "focus": f'tell application "{window.app}" to activate',
+        "focus": f'tell application "{app}" to activate',
         "maximize": (
-            f'tell application "System Events" to tell process "{window.app}" to '
+            f'tell application "System Events" to tell process "{app}" to '
             'set value of attribute "AXFullScreen" of window 1 to true'
         ),
         "minimize": (
-            f'tell application "System Events" to tell process "{window.app}" to '
+            f'tell application "System Events" to tell process "{app}" to '
             'set value of attribute "AXMinimized" of window 1 to true'
         ),
-        "close": f'tell application "{window.app}" to close window 1',
+        "close": f'tell application "{app}" to close window 1',
     }
     if action == "move_to_primary_monitor":
         mon = primary_monitor()
         script = (
-            f'tell application "System Events" to tell process "{window.app}" to '
+            f'tell application "System Events" to tell process "{app}" to '
             f'set position of window 1 to {{{mon["left"]}, {mon["top"]}}}'
         )
     else:

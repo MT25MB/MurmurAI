@@ -80,6 +80,38 @@ def sanitize_config(data: dict[str, Any]) -> dict[str, Any]:
     return {str(k): sanitize_value(str(k), v) for k, v in (data or {}).items()}
 
 
+# Log lines that quote what the user said or what Murmur spoke. A bundle
+# advertised as privacy-safe must never carry these verbatim.
+_SPEECH_LOG_PREFIXES = (
+    "Transcribed: ",
+    "[announce] ",
+    "No speaker configured; screen description text only: ",
+    "Subgoal complete: ",
+)
+_SPEECH_LOG_INLINE = (
+    re.compile(r"(heard: ).*$", re.I),
+    re.compile(r"(Guidance [^\s]+ resolved: ).*$", re.I),
+    re.compile(r"(subgoal\(s\): ).*$", re.I),
+)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
+
+
+def sanitize_log_line(line: str) -> str:
+    """Redact speech content and identifiers from one log line."""
+    text = str(line)
+    for prefix in _SPEECH_LOG_PREFIXES:
+        marker = text.find(prefix)
+        if marker >= 0:
+            text = text[: marker + len(prefix)] + REDACTED
+            break
+    for pattern in _SPEECH_LOG_INLINE:
+        text = pattern.sub(lambda m: m.group(1) + REDACTED, text)
+    text = _EMAIL_RE.sub(REDACTED, text)
+    # Remaining home/Windows paths in free-form log text.
+    text = re.sub(r"(?<![A-Za-z0-9])(?:~/|/home/[^/\s]+/|/Users/[^/\s]+/|C:\\[^\\\s]+\\)[^\s]*", REDACTED_PATH, text)
+    return text.rstrip("\r\n")
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
@@ -148,7 +180,7 @@ def build_manifest() -> dict[str, Any]:
     settings = load_settings()
     return {
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "app_version": "1.2.71",
+        "app_version": "1.2.72",
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "redaction": (
@@ -187,8 +219,11 @@ def export_diagnostics(output_dir: Optional[Path | str] = None, speak: bool = Tr
         bundle.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
         for path in logs:
             try:
-                arcname = f"logs/{path.name}"
-                bundle.write(path, arcname)
+                raw = path.read_text(encoding="utf-8", errors="replace")
+                cleaned = "".join(
+                    sanitize_log_line(line) + "\n" for line in raw.splitlines()
+                )
+                bundle.writestr(f"logs/{path.name}", cleaned)
             except OSError:
                 continue
         bundle.writestr(

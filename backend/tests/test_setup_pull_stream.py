@@ -42,7 +42,10 @@ async def _staged_pull(model, progress):
     return {"ok": True, "model": model}
 
 
-async def _run_pull(monkeypatch, pull, model="fake:model"):
+async def _run_pull(monkeypatch, pull, model="qwen3.5:4b"):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(profiler, "model_fits_hardware", lambda *_a, **_k: True)
     monkeypatch.setattr(main.setup_module, "pull_model", pull)
     ws = FakeWebSocket()
     ws.inbox.put_nowait(json.dumps({"model": model}))
@@ -58,6 +61,22 @@ async def _run_pull(monkeypatch, pull, model="fake:model"):
     except asyncio.CancelledError:
         pass
     return ws.sent
+
+
+@pytest.mark.asyncio
+async def test_unknown_model_cannot_start_an_unbounded_download(monkeypatch):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(profiler, "model_fits_hardware", lambda *_a, **_k: True)
+    called = []
+
+    async def must_not_run(model, progress):
+        called.append(model)
+        return {"ok": True, "model": model}
+
+    sent = await _run_pull(monkeypatch, must_not_run, model="qwen3.5:999b")
+    assert called == []
+    assert any(m.get("type") == "error" for m in sent)
 
 
 @pytest.mark.asyncio

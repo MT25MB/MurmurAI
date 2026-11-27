@@ -105,7 +105,10 @@ class SpeechQueue:
             for queue in self._queues.values():
                 dropped += len(queue.items)
                 queue.items.clear()
-            self._idle.set()
+            # An item already in the audio sink is still playing; reporting
+            # idle here would make barge-in cancel the wrong speech.
+            if self._current is None:
+                self._idle.set()
         return dropped
 
     def _next(self) -> Optional[SpeechRequest]:

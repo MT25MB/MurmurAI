@@ -110,6 +110,28 @@ def test_collect_logs_skips_large_files(tmp_path):
 
 # ---- bundle creation ----
 
+def test_export_redacts_spoken_text_inside_logs(monkeypatch, tmp_path):
+    """A diagnostics bundle must never carry verbatim microphone transcripts."""
+    log_dir = db.HOME_LOG_DIR
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "session.log").write_text(
+        "INFO Transcribed: 'my password is hunter2' (confidence high)\n"
+        "INFO Verbal confirmation True for req-1 (heard: 'yes hunter2')\n"
+        "INFO [announce] your invoice is due\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(db, "build_manifest", lambda: {})
+
+    path = db.export_diagnostics(tmp_path / "out", speak=False)
+    with zipfile.ZipFile(path) as bundle:
+        text = bundle.read("logs/session.log").decode("utf-8")
+
+    assert "hunter2" not in text
+    assert "my password" not in text
+    assert "your invoice" not in text
+    assert text.count(db.REDACTED) >= 3
+
+
 def test_export_creates_zip_with_sanitized_manifest(monkeypatch, tmp_path):
     log_dir = db.HOME_LOG_DIR
     log_dir.mkdir(parents=True)

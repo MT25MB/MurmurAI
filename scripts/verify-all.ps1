@@ -53,6 +53,8 @@ Push-Location src-tauri
 $code = $LASTEXITCODE
 Pop-Location
 if ($code -ne 0) { Fail "cargo check" }
+# Rust unit tests run in CI on a fresh runner; a local debug build would need
+# several GB and can fill the disk on contributor machines.
 
 Write-Host "==> [9/9] Pre-release smoke test"
 & powershell -File scripts\smoke-test.ps1

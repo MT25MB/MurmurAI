@@ -33,9 +33,17 @@ DESTRUCTIVE_FILE_OPS = {"delete", "remove", "write", "overwrite"}
 
 # Regex catching common rm/flags variants.
 DESTRUCTIVE_SHELL_RE = re.compile(
-    r"\b(rm|del|erase|rd|rmdir|remove-item|format|mkfs|fdisk|dd|shred|"
+    r"\b(rm|del|erase|rd|rmdir|remove-item|move-item|copy-item|set-content|"
+    r"add-content|out-file|format|mkfs|fdisk|dd|shred|robocopy|"
     r"shutdown|reboot|halt|kill|taskkill|sudo|runas|chmod|chown|icacls|"
-    r"rmtree|remove_tree|unlink)\b",
+    r"rmtree|remove_tree|unlink|truncate)\b",
+    re.IGNORECASE,
+)
+
+# `copy /Y` and scripted file writes overwrite without a delete verb.
+_DESTRUCTIVE_WRITE_RE = re.compile(
+    r"(?:\bcopy\s+/Y\b|\bSet-Content\b|\bWriteAllText\b|\bWriteAllBytes\b|"
+    r"\bgit\s+(?:clean|reset\s+--hard)\b|[Oo]pen\s*\([^)]*['\"]w['\"])",
     re.IGNORECASE,
 )
 
@@ -84,7 +92,10 @@ class SafetyGate:
                 break
             if tokens[index].lower() in DESTRUCTIVE_COMMANDS:
                 return True
-        return bool(DESTRUCTIVE_SHELL_RE.search(command or ""))
+        return bool(
+            DESTRUCTIVE_SHELL_RE.search(command or "")
+            or _DESTRUCTIVE_WRITE_RE.search(command or "")
+        )
 
     def decide_shell(self, command: str) -> SafetyDecision:
         if not self.shell_requires_confirmation(command):

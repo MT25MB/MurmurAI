@@ -225,6 +225,36 @@ def test_approval_from_websocket(monkeypatch):
     assert done == [True]
 
 
+# ---- resource use under repeated commands ----
+
+def test_transcribe_reuses_one_local_model(monkeypatch):
+    """Repeated audio turns must not reload weights on every request."""
+    import sys
+    import types
+
+    constructed = []
+
+    class FakeSegment:
+        text = " hello "
+
+    class FakeModel:
+        def __init__(self, *_args, **_kwargs):
+            constructed.append(self)
+
+        def transcribe(self, *_args, **_kwargs):
+            return [FakeSegment()], None
+
+    fake_module = types.ModuleType("faster_whisper")
+    fake_module.WhisperModel = FakeModel
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+
+    pcm = b"\x00\x00" * 100
+    companion.transcribe_audio(pcm)
+    companion.transcribe_audio(pcm)
+
+    assert len(constructed) == 1
+
+
 # ---- opt-in voice control ----
 
 def test_companion_disabled_by_default(monkeypatch):

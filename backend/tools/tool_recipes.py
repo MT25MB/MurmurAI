@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import urllib.request
 from urllib.parse import quote, urlparse
 
 logger = logging.getLogger("murmur_ai.tools.tool_recipes")
@@ -115,6 +116,23 @@ def validate_recipe(raw: dict[str, Any]) -> Recipe | None:
     )
 
 
+class _ValidatingRedirect(urllib.request.HTTPRedirectHandler):
+    """Re-check the recipe allowlist on every redirect hop.
+
+    A trusted allowed domain must not be able to redirect a lookup into
+    loopback or link-local metadata services.
+    """
+
+    def __init__(self, domains: tuple[str, ...]) -> None:
+        self.domains = domains
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urlparse(str(newurl))
+        if parsed.scheme != "https" or (parsed.hostname or "").lower() not in self.domains:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def load_recipes(path: Path | None = None) -> dict[str, Recipe]:
     path = Path(path) if path else DEFAULT_PATH
     if not path.exists():
@@ -156,9 +174,10 @@ def execute_recipe(
         for name, value in values.items():
             url = url.replace("{" + name + "}", quote(str(value)))
         if fetcher is None:
-            from urllib.request import urlopen
-
-            raw = urlopen(url, timeout=4.0).read(MAX_RESPONSE)
+            opener = urllib.request.build_opener(
+                _ValidatingRedirect(tuple(recipe.domains))
+            )
+            raw = opener.open(url, timeout=4.0).read(MAX_RESPONSE)
         else:
             raw = fetcher(url, 4.0)
         try:
