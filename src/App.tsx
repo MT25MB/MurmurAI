@@ -123,7 +123,7 @@ export default function App() {
   } else {
     content = (
       <main className="flex h-full w-full items-center justify-center p-3">
-        <HudPill />
+        <HudPill onOpenSettings={() => setSettingsOpen(true)} />
       </main>
     );
   }

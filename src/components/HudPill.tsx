@@ -9,6 +9,10 @@ import logoUrl from "../assets/logo-blue.png";
 
 type Phase = "IDLE" | "LISTENING" | "THINKING" | "SPEAKING" | "CONFIRMATION_REQUIRED" | "SLEEPING";
 
+interface HudPillProps {
+  onOpenSettings?: () => void;
+}
+
 /** State -> (label, token color). Blue = active sense, red = action/alert. */
 const stateStyle: Record<Phase, { label: string; color: string; fill: string }> = {
   IDLE: { label: "Listening", color: "var(--color-blue)", fill: "bg-blue-fill" },
@@ -19,7 +23,7 @@ const stateStyle: Record<Phase, { label: string; color: string; fill: string }> 
   SLEEPING: { label: "Sleeping", color: "var(--color-muted)", fill: "bg-surface-2" },
 };
 
-export default function HudPill() {
+export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
   const { lastMessage, send, status: socketStatus } = useMurmurSocket();
 
   // One-shot OS permission check from the native shell; the backend surfaces it
@@ -413,6 +417,17 @@ export default function HudPill() {
           </svg>
         </button>
         <div className="flex shrink-0 items-center gap-1 border-l border-border pl-1.5">
+          <button
+            type="button"
+            className="app-region-no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink"
+            onClick={onOpenSettings}
+            aria-label="Open settings (Ctrl+,)"
+            title="Settings (Ctrl+, or Cmd+,)"
+          >
+            <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+              <path d="M9.1 2h1.8l.3 2.1c.5.2 1 .4 1.4.7l1.9-1 1.3 1.3-1 1.9c.3.4.5.9.7 1.4L18 9.1v1.8l-2.1.3c-.2.5-.4 1-.7 1.4l1 1.9-1.3 1.3-1.9-1c-.4.3-.9.5-1.4.7L11.9 18H10.1l-.3-2.1a6 6 0 0 1-1.4-.7l-1.9 1-1.3-1.3 1-1.9a6 6 0 0 1-.7-1.4L3.4 11.9V10.1l2.1-.3c.2-.5.4-1 .7-1.4l-1-1.9 1.3-1.3 1.9 1c.4-.3.9-.5 1.4-.7L9.1 2Zm1.8 4.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+            </svg>
+          </button>
           <button
             type="button"
             className="app-region-no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink"

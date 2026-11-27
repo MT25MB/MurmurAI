@@ -69,6 +69,15 @@ describe("HudPill", () => {
     expect(screen.getByRole("button", { name: /mute microphone/i })).toBeInTheDocument();
   });
 
+  it("offers a visible button that opens Settings", async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+    render(<HudPill onOpenSettings={onOpenSettings} />);
+
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
   it("sends mute to the sidecar and shows the muted state", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
