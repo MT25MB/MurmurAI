@@ -93,6 +93,7 @@ const settings: Settings = {
   voice_profile: "default",
   chat_model: "",
   vision_model: "",
+  provider: "",
   clear_data_on_uninstall: false,
 };
 

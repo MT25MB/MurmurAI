@@ -348,7 +348,10 @@ async def post_settings_endpoint(request: Request) -> JSONResponse:
         changes = await request.json()
     except Exception:
         changes = {}
-    return JSONResponse(settings_tools.update_settings(changes if isinstance(changes, dict) else {}))
+    try:
+        return JSONResponse(settings_tools.update_settings(changes if isinstance(changes, dict) else {}))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @app.post("/settings/reset")
@@ -356,6 +359,49 @@ async def reset_settings_endpoint() -> JSONResponse:
     from system import settings_tools
 
     return JSONResponse(settings_tools.reset_settings())
+
+
+@app.get("/providers")
+async def list_providers_endpoint() -> JSONResponse:
+    """Registered model providers, with no API keys ever included."""
+    from agent.local_providers import list_providers
+
+    return JSONResponse({"providers": list_providers()})
+
+
+@app.post("/providers")
+async def register_provider_endpoint(request: Request) -> JSONResponse:
+    """Register a local loopback provider or an explicitly opted-in cloud API."""
+    from agent.local_providers import register_provider
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    try:
+        provider = register_provider(
+            name=str(body.get("name", "")),
+            base_url=str(body.get("base_url", "")),
+            model=str(body.get("model", "")),
+            cloud=bool(body.get("cloud", False)),
+            api_key=str(body.get("api_key", "") or ""),
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse(provider)
+
+
+@app.post("/providers/remove")
+async def remove_provider_endpoint(request: Request) -> JSONResponse:
+    from agent.local_providers import remove_provider
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    name = str((body or {}).get("name", "")) if isinstance(body, dict) else ""
+    return JSONResponse({"ok": remove_provider(name)})
 
 
 @app.get("/model-options")

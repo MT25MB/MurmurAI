@@ -7,9 +7,13 @@ import {
   fetchModelOptions,
   installModel,
   useModel,
+  fetchProviders,
+  registerProvider,
+  removeProvider,
   type Settings,
   type ModelOptions,
   type ModelOption,
+  type Provider,
 } from "../lib/settings";
 
 interface SettingsDrawerProps {
@@ -24,6 +28,10 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [diagnostics, setDiagnostics] = useState("");
   const [modelInfo, setModelInfo] = useState<ModelOptions | null>(null);
   const [modelBusy, setModelBusy] = useState("");
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerForm, setProviderForm] = useState({
+    name: "", base_url: "", model: "", cloud: false, api_key: "",
+  });
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const saveSeqRef = useRef(0);
@@ -34,6 +42,9 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     fetchModelOptions()
       .then((info) => { if (!cancelled) setModelInfo(info); })
       .catch(() => { if (!cancelled) setModelInfo(null); });
+    fetchProviders()
+      .then((list) => { if (!cancelled) setProviders(list); })
+      .catch(() => { if (!cancelled) setProviders([]); });
     return () => { cancelled = true; };
   }, [open]);
 
@@ -120,8 +131,8 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       // may replace the optimistic UI state.
       if (seq === saveSeqRef.current) setSettings(saved);
       setStatus("Settings saved.");
-    } catch {
-      setStatus("Could not save settings.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save settings.");
     }
   };
 
@@ -174,6 +185,57 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     } finally {
       setModelBusy("");
     }
+  };
+
+  const saveProvider = async () => {
+    setStatus(`Saving provider ${providerForm.name || "…"}…`);
+    try {
+      const result = await registerProvider(providerForm);
+      if (!result.ok) {
+        setStatus(result.error || "Could not save provider.");
+        return;
+      }
+      setProviders(await fetchProviders());
+      await change({ provider: providerForm.name });
+      setProviderForm({ name: "", base_url: "", model: "", cloud: false, api_key: "" });
+      setStatus(
+        providerForm.cloud
+          ? "Cloud provider saved. Your prompts and files will be sent to it when selected."
+          : "Local provider saved.",
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save provider.");
+    }
+  };
+
+  const dropProvider = async (name: string) => {
+    await removeProvider(name);
+    setProviders(await fetchProviders());
+    if (settings?.provider === name) await change({ provider: "" });
+    setStatus(`Removed provider ${name}.`);
+  };
+
+  const modelChoices = (roles: string[], current: string) => {
+    const choices = (modelInfo?.options ?? [])
+      .filter((option) => roles.includes(option.role))
+      .map((option) => ({
+        name: option.name,
+        label: `${option.label} (${option.name})`,
+        available: option.available,
+        reason: option.reason,
+      }));
+    if (current && !choices.some((choice) => choice.name === current)) {
+      choices.unshift({
+        name: current,
+        label: `${current} (not available on this device)`,
+        available: false,
+        reason: "Not in the hardware-supported model list.",
+      });
+    }
+    return [
+      { name: "", label: "Auto (hardware default)", available: true, reason: "" },
+      ...choices,
+    ];
   };
 
   return (
@@ -446,31 +508,46 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
               <legend className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Models
               </legend>
+              {modelInfo ? (
+                <p className="text-[11px] leading-snug text-muted">
+                  This device: {modelInfo.hardware.total_ram_gb} GB RAM,
+                  {" "}{modelInfo.hardware.vram_gb} GB VRAM ({modelInfo.hardware.compute_backend}).
+                  Only models that fit can be selected.
+                </p>
+              ) : null}
               <div>
                 <label htmlFor="settings-chat-model" className="block text-xs font-medium">
                   Chat model
                 </label>
-                <input
+                <select
                   id="settings-chat-model"
-                  type="text"
                   value={settings.chat_model}
-                  placeholder="Leave blank for auto"
                   onChange={(e) => change({ chat_model: e.target.value })}
                   className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-ink"
-                />
+                >
+                  {modelChoices(["chat", "unified", "fast"], settings.chat_model).map((choice) => (
+                    <option key={choice.name} value={choice.name} disabled={!choice.available} title={choice.reason}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label htmlFor="settings-vision-model" className="block text-xs font-medium">
                   Vision model
                 </label>
-                <input
+                <select
                   id="settings-vision-model"
-                  type="text"
                   value={settings.vision_model}
-                  placeholder="Leave blank for auto"
                   onChange={(e) => change({ vision_model: e.target.value })}
                   className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-ink"
-                />
+                >
+                  {modelChoices(["vision", "unified"], settings.vision_model).map((choice) => (
+                    <option key={choice.name} value={choice.name} disabled={!choice.available} title={choice.reason}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <fieldset className="space-y-2 rounded-md border border-border p-2">
@@ -524,6 +601,117 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   </ul>
                 )}
               </fieldset>
+            </fieldset>
+
+            <fieldset className="space-y-3">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Model providers
+              </legend>
+              <p className="text-[11px] leading-snug text-muted">
+                Ollama on this machine is the default. Add a local OpenAI-compatible
+                server (llama.cpp, LM Studio, vLLM) or, if you choose, an external
+                API with your own key. Cloud providers send your prompts and files
+                off this PC; nothing is sent unless you select that provider.
+              </p>
+              <button
+                type="button"
+                disabled={!settings?.provider}
+                onClick={() => void change({ provider: "" })}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-40"
+              >
+                Use local Ollama
+              </button>
+              {providers.length > 0 ? (
+                <ul className="space-y-2">
+                  {providers.map((provider) => (
+                    <li key={provider.name} className="rounded-md border border-border bg-surface/60 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-ink">
+                          {provider.name}
+                          <span className="mono-label ml-2">{provider.cloud ? "cloud" : "local"} · {provider.model}</span>
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={settings?.provider === provider.name}
+                            onClick={() => void change({ provider: provider.name })}
+                            className="rounded-md border border-border bg-surface px-2 py-1 text-xs font-bold text-ink disabled:opacity-40"
+                          >
+                            Use
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void dropProvider(provider.name)}
+                            className="rounded-md border border-border bg-surface px-2 py-1 text-xs font-bold text-ink"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-1 break-all text-[11px] text-muted">{provider.base_url}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p role="status" className="text-[11px] text-muted">No extra providers saved.</p>
+              )}
+              <div className="grid gap-2 rounded-md border border-border bg-surface/40 p-2">
+                <label className="text-[11px] font-medium text-ink">
+                  Name
+                  <input
+                    aria-label="Provider name"
+                    value={providerForm.name}
+                    onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink"
+                  />
+                </label>
+                <label className="text-[11px] font-medium text-ink">
+                  Base URL
+                  <input
+                    aria-label="Provider base URL"
+                    value={providerForm.base_url}
+                    placeholder="http://127.0.0.1:8080/v1"
+                    onChange={(e) => setProviderForm({ ...providerForm, base_url: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink"
+                  />
+                </label>
+                <label className="text-[11px] font-medium text-ink">
+                  Model
+                  <input
+                    aria-label="Provider model"
+                    value={providerForm.model}
+                    onChange={(e) => setProviderForm({ ...providerForm, model: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-[11px] font-medium text-ink">
+                  <input
+                    type="checkbox"
+                    checked={providerForm.cloud}
+                    onChange={(e) => setProviderForm({ ...providerForm, cloud: e.target.checked })}
+                  />
+                  This is an external cloud API (https, sends data off this PC)
+                </label>
+                {providerForm.cloud ? (
+                  <label className="text-[11px] font-medium text-ink">
+                    API key (stored in the local keyring, never in settings)
+                    <input
+                      type="password"
+                      aria-label="Provider API key"
+                      value={providerForm.api_key}
+                      onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
+                      className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink"
+                    />
+                  </label>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void saveProvider()}
+                  className="rounded-md bg-blue-fill px-3 py-1.5 text-xs font-bold text-white"
+                >
+                  Save provider
+                </button>
+              </div>
             </fieldset>
 
             <div className="flex flex-wrap gap-2">

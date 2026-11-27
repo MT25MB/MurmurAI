@@ -36,6 +36,23 @@ def no_runtime(monkeypatch):
     monkeypatch.setattr(st, "apply_settings", lambda settings=None: None)
 
 
+def test_model_settings_are_hardware_gated(no_runtime, monkeypatch, tmp_path):
+    import system.profiler as profiler
+
+    monkeypatch.setattr(profiler, "PROFILE_PATH", tmp_path / "hardware_profile.json")
+    profiler.save_profile(profiler.HardwareProfile(
+        total_ram_gb=8, vram_gb=0, tier="light", compute_backend="CPU"
+    ))
+
+    with pytest.raises(ValueError, match="cannot run"):
+        st.update_settings({"chat_model": "qwen3.5:9b"})
+    with pytest.raises(ValueError, match="Unknown model"):
+        st.update_settings({"vision_model": "not-a-model"})
+
+    saved = st.update_settings({"chat_model": "qwen2.5:3b"})
+    assert saved["chat_model"] == "qwen2.5:3b"
+
+
 # ---- persistence ----
 
 def test_defaults_and_persistence():

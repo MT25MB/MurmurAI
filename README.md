@@ -27,7 +27,7 @@ That matters most when the screen is hard to read. Screen readers lean on labels
 
 It starts when your computer boots. Local speech recognition turns your voice into text. A local model decides what to do. Local speech synthesis answers out loud. Say "what's on my screen?" and get a spoken description. Say "install Blender" and watch it happen.
 
-Nothing is sent to a server. There's no subscription, no account, no API key, and no telemetry.
+By default nothing is sent to a server: Ollama runs locally, there's no subscription or account, and no telemetry. If you want, Settings can register a local OpenAI-compatible server, or an external API with your own key — a cloud provider is opt-in and only used while selected.
 
 ---
 
@@ -199,8 +199,9 @@ First launch also saves Whisper and Kokoro weights under `~/.murmur-ai/models/`.
 
 ## Privacy by design
 
-* No cloud inference, no paid APIs, no analytics, no crash reporting.
-* Audio, transcripts, and screenshots stay in memory or on your disk.
+* No analytics, no crash reporting, no automatic cloud inference.
+* Local inference by default; external APIs are opt-in in Settings with your own key.
+* Audio, transcripts, and screenshots stay in memory or on your disk unless you select a cloud provider.
 * Destructive actions wait for your OK, spoken or clicked.
 * Clear local state whenever you want.
 

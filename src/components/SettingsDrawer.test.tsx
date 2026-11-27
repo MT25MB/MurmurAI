@@ -119,6 +119,14 @@ function mockFetch() {
       } as typeof current;
       return Promise.resolve(new Response(JSON.stringify({ ok: true, summary: `${model} selected.` }), { status: 200 }));
     }
+    if (url.endsWith("/providers") && method === "GET") {
+      return Promise.resolve(new Response(JSON.stringify({
+        providers: [{ name: "llama", base_url: "http://127.0.0.1:8080/v1", model: "local", cloud: false, api_key_ref: "", key_configured: false }],
+      }), { status: 200 }));
+    }
+    if (url.endsWith("/providers/remove") && method === "POST") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    }
     if (url.endsWith("/diagnostics")) {
       return Promise.resolve(
         new Response(JSON.stringify({ checks: {}, issues: [], summary: "Everything looks healthy." }), { status: 200 }),
@@ -150,6 +158,29 @@ describe("SettingsDrawer", () => {
     await user.click(within(group).getByRole("button", { name: /use qwen3\.5:9b/i }));
     await waitFor(() => expect(current.vision_model).toBe("qwen3.5:9b"));
     expect(current.chat_model).toBe("qwen3.5:9b");
+  });
+
+  it("uses gated selects instead of free-text model fields", async () => {
+    render(<SettingsDrawer open onClose={() => {}} />);
+    const group = await screen.findByRole("group", { name: /models/i });
+
+    expect(within(group).getByLabelText("Chat model").tagName).toBe("SELECT");
+    expect(within(group).getByLabelText("Vision model").tagName).toBe("SELECT");
+    expect(within(group).getAllByRole("option", { name: /qwen3\.5:27b/ }).every((o) => (o as HTMLOptionElement).disabled)).toBe(true);
+    expect(within(group).getAllByRole("option", { name: /qwen3\.5:9b/ }).some((o) => !(o as HTMLOptionElement).disabled)).toBe(true);
+  });
+
+  it("lists registered providers with an explicit local default", async () => {
+    const user = userEvent.setup();
+    render(<SettingsDrawer open onClose={() => {}} />);
+    const group = await screen.findByRole("group", { name: /model providers/i });
+
+    expect(within(group).getByText("llama")).toBeInTheDocument();
+    expect(within(group).getByText(/local · local/)).toBeInTheDocument();
+    const useLocal = within(group).getByRole("button", { name: /use local ollama/i });
+    expect(useLocal).toBeDisabled();
+    await user.click(within(group).getByRole("button", { name: /^use$/i }));
+    await waitFor(() => expect(posts).toContainEqual({ provider: "llama" }));
   });
 
   it("renders a full-ARIA dialog with every settings group", async () => {

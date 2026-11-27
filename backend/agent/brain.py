@@ -352,14 +352,35 @@ class Brain:
         )
         self._auto_context = override is None
 
-        # Optional extra provider: strictly loopback OpenAI-compatible servers.
-        # Ollama stays the default when no endpoint is named.
+        # Optional provider selected in Settings, with the environment variable
+        # as a fallback. Ollama stays the default when nothing is selected.
         self.local_endpoint = None
-        named = os.getenv("MURMUR_LOCAL_ENDPOINT", "").strip()
+        self.provider_name = ""
+        try:
+            from system.settings_tools import load_settings
+            self.provider_name = str(load_settings().get("provider") or "").strip()
+        except Exception:  # pragma: no cover - settings may not be importable yet
+            logger.debug("Could not read provider setting", exc_info=True)
+        named = self.provider_name or os.getenv("MURMUR_LOCAL_ENDPOINT", "").strip()
         if named:
             self.local_endpoint = load_endpoints().get(named)
             if self.local_endpoint is None:
-                logger.warning("Configured local endpoint '%s' is missing or invalid", named)
+                logger.warning("Configured provider '%s' is missing or invalid", named)
+
+    def set_provider(self, name: str) -> str:
+        """Switch the live chat provider; blank returns to local Ollama."""
+        chosen = str(name or "").strip()
+        self.provider_name = chosen
+        if not chosen:
+            self.local_endpoint = None
+            return "Using local Ollama."
+        endpoint = load_endpoints().get(chosen)
+        if endpoint is None:
+            self.local_endpoint = None
+            return f"Provider '{chosen}' is not registered; using local Ollama."
+        self.local_endpoint = endpoint
+        kind = "cloud" if endpoint.cloud else "local"
+        return f"Using {kind} provider '{chosen}' ({endpoint.model})."
 
     # ---- Ollama chat ----
 

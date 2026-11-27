@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 
-from agent.local_providers import LocalEndpoint, is_local_url, load_endpoints
+from agent.local_providers import (
+    LocalEndpoint, is_allowed_url, is_local_url, list_providers, load_endpoints,
+    register_provider, remove_provider,
+)
 
 
 def test_only_loopback_urls_are_local():
@@ -102,3 +105,58 @@ def test_openai_payload_stays_on_loopback():
     assert seen["payload"]["model"] == "local"
     assert seen["payload"]["tools"][0]["function"]["name"] == "open_application"
     assert converted["message"]["content"] == "ok"
+
+
+def test_cloud_provider_requires_https_and_explicit_opt_in(tmp_path):
+    path = tmp_path / "local_endpoints.json"
+    assert not is_allowed_url("https://api.example.com/v1")
+    assert not is_allowed_url("http://api.example.com/v1", cloud=True)
+    assert is_allowed_url("https://api.example.com/v1", cloud=True)
+
+    try:
+        register_provider("remote", "http://api.example.com/v1", "gpt", cloud=True, path=path)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("plain http cloud URL must be rejected")
+
+    saved = register_provider(
+        "remote", "https://api.example.com/v1", "gpt", cloud=True,
+        api_key="secret-key", path=path,
+    )
+    assert saved["cloud"] is True
+    assert saved["api_key_ref"] == "provider:remote"
+    assert "secret" not in json.dumps(list_providers(path))
+    assert load_endpoints(path)["remote"].cloud is True
+    assert remove_provider("remote", path) is True
+    assert load_endpoints(path) == {}
+
+
+def test_cloud_key_is_sent_only_to_selected_provider(monkeypatch, tmp_path):
+    import security.secret_vault as vault
+
+    monkeypatch.setattr(vault, "get_secret", lambda name: "sk-test")
+    endpoint = LocalEndpoint(
+        name="remote", base_url="https://api.example.com/v1", model="gpt",
+        cloud=True, api_key_ref="provider:remote",
+    )
+    seen: dict = {}
+
+    class FakeClient:
+        def post(self, url, json):
+            seen["url"] = url
+
+            class FakeResponse:
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return {"choices": [{"message": {"content": "ok"}}]}
+
+            return FakeResponse()
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: (seen.update(kwargs) or FakeClient()))
+    endpoint.chat([{"role": "user", "content": "hi"}])
+
+    assert seen["headers"]["Authorization"] == "Bearer sk-test"
+    assert seen["url"].startswith("https://api.example.com/v1/")

@@ -38,6 +38,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_profile": "default",          # default | clear | fast | quiet
     "chat_model": "",
     "vision_model": "",
+    # Optional OpenAI-compatible provider name (local by default, cloud opt-in).
+    "provider": "",
     # LAN-only phone companion is strictly opt-in and off by default.
     "remote_companion_enabled": False,
     "clear_data_on_uninstall": False,  # keep memories/chats/keys unless opted in
@@ -101,6 +103,21 @@ def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return dict(settings)
 
 
+def validate_model_choice(model: str) -> str:
+    """Only known models that fit this machine may be selected."""
+    from agent.model_names import normalize_model
+    from system.profiler import MODEL_CATALOG, model_fits_hardware, model_requirement
+
+    value = normalize_model(str(model or "").strip())
+    if not value:
+        return ""
+    if value not in MODEL_CATALOG:
+        raise ValueError(f"Unknown model '{value}'. Choose one from the available list.")
+    if not model_fits_hardware(value):
+        raise ValueError(f"This device cannot run {value}. Need {model_requirement(value).lower()}.")
+    return value
+
+
 def update_settings(changes: dict[str, Any]) -> dict[str, Any]:
     settings = load_settings()
     changes = dict(changes or {})
@@ -113,8 +130,11 @@ def update_settings(changes: dict[str, Any]) -> dict[str, Any]:
                 k: v for k, v in changes.items() if k != "voice_profile"
             }}
     for key, value in changes.items():
-        if key in settings and value is not None:
-            settings[key] = value
+        if key not in settings or value is None:
+            continue
+        if key in ("chat_model", "vision_model"):
+            value = validate_model_choice(str(value))
+        settings[key] = value
     settings = _coerce(settings)
     saved = save_settings(settings)
     apply_settings(saved)
@@ -210,6 +230,8 @@ def apply_settings(settings: Optional[dict[str, Any]] = None) -> None:
             state.brain.model = settings["chat_model"]
         if settings.get("vision_model"):
             state.brain.vision_model = settings["vision_model"]
+        if hasattr(state.brain, "set_provider"):
+            state.brain.set_provider(str(settings.get("provider") or ""))
     except Exception:
         logger.debug("Runtime settings apply failed", exc_info=True)
 

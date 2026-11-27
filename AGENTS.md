@@ -70,7 +70,8 @@ This file is the source of truth for every coding agent and human contributor.
 - **Computer control:** PyAutoGUI.
 - Every one of these is an **optional runtime dependency** with a lazy import so the
   backend's `/health` and WebSocket control plane boot even when heavy models or
-  system packages are not installed. Never add a cloud API key or paid endpoint.
+  system packages are not installed. Ollama stays the default; no cloud call is
+  ever made unless the user explicitly registers and selects a provider.
 
 ### Hardware profiling & latency (first class)
 - `system/profiler.py` detects RAM, VRAM (nvidia-smi), CPU cores, and compute
@@ -210,8 +211,13 @@ This file is the source of truth for every coding agent and human contributor.
   decision audit at `~/.murmur-ai/logs/tool_audit.jsonl`; idle servers stop after
   10 minutes. Declarative look-up recipes (`~/.murmur-ai/tool_recipes.json`) are
   HTTPS-GET-only, domain-allowlisted and start disabled until reviewed.
-- Optional extra providers are strictly loopback OpenAI-compatible endpoints
-  named by `MURMUR_LOCAL_ENDPOINT`; Ollama remains the default. No cloud keys.
+- Optional providers are OpenAI-compatible endpoints registered in Settings
+  (`~/.murmur-ai/local_endpoints.json`). Loopback servers are accepted by default;
+  a remote https URL is accepted only with `cloud: true` (explicit user opt-in).
+  API keys live in the local secret vault, never in settings, and are sent only to
+  the selected provider. Ollama remains the default; `MURMUR_LOCAL_ENDPOINT` is a
+  fallback for scripted setups. Model choices shown in Settings are gated by
+  detected RAM/VRAM and cannot be set by free text.
 - Uninstall data policy: keeping data is the default. `clear_data_on_uninstall`
   is opt-in via settings or voice, and `scripts/uninstall_cleanup.py` removes
   only an explicit allowlist of local data (never model weights). It is a dry
@@ -407,11 +413,14 @@ user approves, and hands off to `vision_agent.py` when no CLI package is found.
 4. Keep a human-readable audit log of every tool invocation and its decision.
 
 ### Local-first / privacy
-5. No telemetry, analytics, crash reporting, or network calls to third parties.
-6. The only network listeners are `127.0.0.1:8765` (backend) and local Ollama. The
-   only outbound calls are to `127.0.0.1` services.
-7. Audio, transcripts, and conversations stay in memory or on disk locally, and the
-   user can clear them at any time.
+5. No telemetry, analytics, or crash reporting. There are no automatic third-party
+   calls: a provider registered in Settings is contacted only while it is selected.
+6. The only network listeners are `127.0.0.1:8765` (backend) and local Ollama.
+   Outbound calls go to `127.0.0.1` services, except to a user-selected provider:
+   loopback by default, or an explicitly opted-in cloud provider whose key comes
+   from the local vault and whose data-sharing warning the user accepted.
+7. Audio, transcripts, and conversations stay in memory or on disk locally unless
+   the user selects a cloud provider; the user can clear local data at any time.
 
 ### Engineering
 8. TypeScript is `strict`; Python targets 3.11+ with type hints where practical.

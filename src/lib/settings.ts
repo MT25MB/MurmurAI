@@ -18,6 +18,7 @@ export interface Settings {
   voice_profile: "default" | "natural" | "clear" | "fast" | "quiet";
   chat_model: string;
   vision_model: string;
+  provider: string;
   clear_data_on_uninstall: boolean;
 }
 
@@ -66,6 +67,46 @@ export async function useModel(model: string, role: "chat" | "vision" | "both" |
   return res.json();
 }
 
+export interface Provider {
+  name: string;
+  base_url: string;
+  model: string;
+  cloud: boolean;
+  api_key_ref: string;
+  key_configured: boolean;
+}
+
+export async function fetchProviders(): Promise<Provider[]> {
+  const res = await fetch(`${API_BASE}/providers`);
+  if (!res.ok) throw new Error(`Provider list failed: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data?.providers) ? (data.providers as Provider[]) : [];
+}
+
+export async function registerProvider(input: {
+  name: string;
+  base_url: string;
+  model: string;
+  cloud: boolean;
+  api_key?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/providers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  return res.ok ? { ok: true } : { ok: false, error: String(data.error || "Could not save provider") };
+}
+
+export async function removeProvider(name: string): Promise<void> {
+  await fetch(`${API_BASE}/providers/remove`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
 export interface Diagnostics {
   checks: Record<string, unknown>;
   issues: string[];
@@ -84,7 +125,10 @@ export async function saveSettings(changes: Partial<Settings>): Promise<Settings
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(changes),
   });
-  if (!res.ok) throw new Error(`Settings save failed: ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(String(detail.error || `Settings save failed: ${res.status}`));
+  }
   return res.json();
 }
 
