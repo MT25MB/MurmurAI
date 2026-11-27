@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
+import agent.task_plan as task_plan
 from agent.task_plan import (
-    TaskPlan, Subgoal, build_plan, format_history, _fallback_split,
+    TaskPlan, Subgoal, build_plan, format_history, _fallback_split, _is_multistep,
 )
 from agent.loop_detector import LoopDetector, action_fingerprint, hamming, screen_hash
 from agent.abort import abort_controller, is_abort_phrase
@@ -29,6 +31,36 @@ def test_user_style_multistep_goal_decomposes():
     assert any("fish" in part.lower() for part in parts)
     assert any("cube" in part.lower() for part in parts)
     assert any("sphere" in part.lower() for part in parts)
+
+
+def test_collapsed_multistep_goal_falls_back_to_split(monkeypatch):
+    """A local model that returns one step cannot swallow the later actions."""
+    goal = "open blender, make a new general project, delete the default cube, and add a sphere"
+    assert _is_multistep(goal)
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"message": {"content": json.dumps({"subgoals": [goal]})}}
+
+    class _Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, *_args, **_kwargs):
+            return _Resp()
+
+    monkeypatch.setattr(task_plan.httpx, "Client", lambda **_kwargs: _Client())
+    plan = build_plan(goal)
+    assert len(plan.subgoals) >= 4
+    assert plan.subgoals[0].text.lower().startswith("open blender")
+    assert any("cube" in s.text.lower() for s in plan.subgoals)
+    assert any("sphere" in s.text.lower() for s in plan.subgoals)
 
 
 def test_launch_subgoal_is_resolved_by_os_tool(monkeypatch):

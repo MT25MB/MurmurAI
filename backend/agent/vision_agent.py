@@ -89,6 +89,7 @@ STEP_SETTLE_S = 1.5  # let heavy apps render after each action
 VALID_ACTIONS = {
     "CLICK", "DOUBLE_CLICK", "DRAG", "SCROLL_DOWN", "SCROLL_UP",
     "SCROLL_HORIZONTAL", "SCROLL_SEARCH", "ZOOM_CLICK", "TYPE", "KEY", "WAIT", "FINISH",
+    "FAIL",
 }
 
 # Global capture target shared by every ScreenController. None means "follow
@@ -170,6 +171,28 @@ Rules:
 - Set subgoal_done true only when the CURRENT subgoal is visibly complete.
 - If you have repeated yourself or are unsure, prefer a keyboard shortcut or a
   menu/search action over another click. Never describe actions you cannot see."""
+
+
+# Self-check asked on a fresh screenshot after an action. The action prompt's
+# own "subgoal_done" flag is an intention; this pass requires visible evidence
+# before the plan advances or the task is declared complete.
+REFLECT_PROMPT = """You are verifying one step of a desktop automation task.
+You are given the CURRENT screenshot after the last action, the subgoal, and
+what the agent estimated it did. Decide whether the subgoal is now visibly
+complete. Do NOT guess from intention alone: name the visible evidence.
+
+Reply with ONLY a JSON object:
+{
+  "complete": true | false,
+  "evidence": "short description of what you actually see",
+  "next": "if incomplete, the single next action that would finish it"
+}
+
+Rules:
+- "complete" is true only when the requested state is visibly present.
+- An application merely being open does not satisfy later subgoals.
+- If a dialog or splash screen is showing, the subgoal is not complete.
+- Keep evidence and next under 120 characters each."""
 
 
 # JSON-schema tool definition exposed to the local LLM.
@@ -514,6 +537,9 @@ class VisionAgent:
         self.last_preview: Optional[PlanPreview] = None
         self._recovery_attempts = 0
         self._recovery_hint = ""
+        # Evidence check after each claimed completion. Disable only for
+        # deterministic tests with mocked VLM responses: MURMUR_VLM_REFLECT=0.
+        self.reflect = os.getenv("MURMUR_VLM_REFLECT", "1").strip() not in {"0", "false", "False"}
         self._announce_stop = self._make_stop_announcer()
         self.abort.add_listener(self._announce_stop)
 
@@ -640,7 +666,9 @@ class VisionAgent:
             self._speak(preview.spoken())
             return preview.spoken()
 
-        steps = max_steps or self.max_steps
+        # Resolved after planning: multi-step goals need more than the default
+        # budget so the agent does not stop halfway through an app workflow.
+        steps = max_steps or 0
         self.history = []
         self.abort.reset()  # a fresh task clears any previous abort signal
         self.loop_detector.reset()
@@ -650,6 +678,8 @@ class VisionAgent:
         # 1) Plan: break a multi-step goal into ordered subgoals, or reuse the
         #    approved preview so execution matches what the user heard.
         self.plan = plan or build_plan(goal)
+        if not max_steps:
+            steps = max(self.max_steps, len(self.plan.subgoals) * 4)
         for index in skip_indices or []:
             if 1 <= index <= len(self.plan.subgoals):
                 self.plan.subgoals[index - 1].done = True
@@ -760,12 +790,33 @@ class VisionAgent:
             )
             record.screenshot_path = str(step_dir / "screen_som.png")
 
-            # --- FINISH from the model ends the whole task ---
+            # --- FINISH is only a claim; verify it against the current screen ---
             if action == "FINISH":
-                record.result = "FINISH"
+                finish_png, _, _ = self.controller.capture()
+                finish_b64 = self.controller.to_base64(finish_png)
+                confirmed = self._subgoal_complete(
+                    active.text if active else goal, goal, finish_b64,
+                    width, height, app_section, thought,
+                )
+                record.result = "FINISH (reflected: " + ("complete)" if confirmed else "incomplete)")
                 self.history.append(record)
-                self._speak("Task complete.")
-                return f"Task finished after {step} step(s): {thought}"
+                if not confirmed:
+                    time.sleep(STEP_SETTLE_S)
+                    continue
+                if active:
+                    self.plan.complete_current()
+                    self.loop_detector.mark_progress(self.plan.active_index)
+                    self._speak(f"Done: {active.text}")
+                if self.plan.all_done:
+                    self._speak("All steps are done.")
+                    return f"Task finished after {step} step(s)."
+                continue
+
+            # A failed model call must never be reported as a finished task.
+            if action == "FAIL":
+                record.result = "FAIL"
+                self.history.append(record)
+                return f"Task stopped after {step} step(s): {thought or 'vision model unavailable'}"
 
             # --- bounded off-screen search and zoom re-grounding ---
             if action == "SCROLL_SEARCH":
@@ -818,13 +869,14 @@ class VisionAgent:
                 continue
 
             # --- execute with failsafe handling ---
+            after_png: Optional[bytes] = None
             try:
                 self._execute(action, coords, drag_to, text)
                 record.result = "executed"
                 # Verify the action actually changed the UI. A static screen
                 # after a click/shortcut feeds an alternative-path hint next step.
                 if action not in {"WAIT", "FINISH", "FAIL", "DONE"}:
-                    self._verify_post_action(png_bytes, action)
+                    after_png = self._verify_post_action(png_bytes, action)
             except Exception as exc:
                 # PyAutoGUI FailSafeException (mouse in a corner) aborts everything.
                 if "failsafe" in type(exc).__name__.lower() or "fail-safe" in str(exc).lower():
@@ -837,8 +889,20 @@ class VisionAgent:
                 self.history.append(record)
                 return f"Action {action} failed on step {step}: {exc}"
 
-            # --- subgoal progress ---
+            # --- subgoal progress: only after a fresh visual self-check ---
             if subgoal_done:
+                if after_png is None:
+                    fresh_png, _, _ = self.controller.capture()
+                    after_png = fresh_png
+                after_b64 = self.controller.to_base64(after_png)
+                if not self._subgoal_complete(
+                    active.text if active else goal, goal, after_b64,
+                    width, height, app_section, thought,
+                ):
+                    record.result += "; subgoal not reflected as complete"
+                    self.history.append(record)
+                    time.sleep(STEP_SETTLE_S)
+                    continue
                 self.plan.complete_current()
                 self.loop_detector.mark_progress(self.plan.active_index)
                 self._recovery_attempts = 0
@@ -863,10 +927,15 @@ class VisionAgent:
 
         return f"Reached max steps ({steps}) without FINISH. See {LOGS_DIR} for replay."
 
-    def _verify_post_action(self, before_png: bytes, action: str) -> None:
-        """Compare the screen after an action; nudge the next step if unchanged."""
+    def _verify_post_action(self, before_png: bytes, action: str) -> Optional[bytes]:
+        """Compare the screen after an action; return the fresh screenshot.
+
+        The returned frame is reused for evidence-based subgoal verification so
+        the model re-checks the result instead of trusting its own intention.
+        """
         from agent.screen_diff import verify_action
 
+        after_png: Optional[bytes] = None
         try:
             time.sleep(STEP_SETTLE_S)
             after_png, _, _ = self.controller.capture()
@@ -881,6 +950,41 @@ class VisionAgent:
                 )
         except Exception:  # pragma: no cover - verification must not break the loop
             logger.debug("Post-action verification failed", exc_info=True)
+        return after_png
+
+    def _subgoal_complete(
+        self,
+        active_text: str,
+        goal: str,
+        after_b64: str,
+        width: int,
+        height: int,
+        app_section: str,
+        thought: str,
+    ) -> bool:
+        """Require visible evidence before advancing the plan.
+
+        With reflection disabled (deterministic tests) this keeps the previous
+        trust-the-VLM behaviour. Otherwise a failed or negative check is a
+        "no": the loop feeds the evidence back as a recovery hint and retries.
+        """
+        if not self.reflect:
+            return True
+        complete, evidence = self._reflect_on_subgoal(
+            goal, active_text, after_b64, width, height, app_section, thought
+        )
+        if complete:
+            self._recovery_hint = ""
+            self._recovery_attempts = 0
+            return True
+        detail = evidence or "no visible evidence yet"
+        self._recovery_attempts += 1
+        self._recovery_hint = (
+            f"RECOVERY: the current subgoal is not visibly done ({detail}). "
+            "Inspect the screen and take the next single action. Do not claim completion "
+            "until the requested state is visible."
+        )
+        return False
 
     def _search_offscreen(
         self,
@@ -1001,6 +1105,61 @@ class VisionAgent:
             return "abort:no-guidance"
         return f"guidance:{answer.strip()}"
 
+    def _reflect_on_subgoal(
+        self,
+        goal: str,
+        subgoal: str,
+        b64_png: str,
+        width: int,
+        height: int,
+        app_section: str,
+        last_thought: str,
+    ) -> tuple[bool, str]:
+        """Ask the VLM to verify the subgoal on a fresh post-action screenshot.
+
+        Returns ``(complete, evidence)``. Any failure is treated as "not
+        complete" so the agent never claims success without evidence.
+        """
+        system = REFLECT_PROMPT
+        if app_section:
+            system += "\n" + app_section
+        user_content = [
+            {
+                "type": "text",
+                "text": (
+                    f"Overall goal: {goal}\n"
+                    f"Current subgoal: {subgoal}\n"
+                    f"Agent's last thought: {last_thought[:300]}\n"
+                    f"Screen resolution: {width}x{height}.\n"
+                    "Inspect the current screen and reply with ONLY the JSON object."
+                ),
+            },
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_png}"}},
+        ]
+        try:
+            resp = self._client.post(
+                "/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "stream": False,
+                    "format": "json",
+                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json().get("message", {}).get("content", "{}")
+            data = json.loads(content)
+            complete = bool(data.get("complete", False))
+            evidence = str(data.get("evidence") or data.get("next") or "").strip()[:160]
+            return complete, evidence
+        except Exception:
+            logger.exception("VLM reflection failed; refusing to mark subgoal complete")
+            return False, "verification unavailable"
+
     def _ask_vlm(
         self,
         goal: str,
@@ -1060,7 +1219,8 @@ class VisionAgent:
             content = resp.json().get("message", {}).get("content", "{}")
         except Exception:
             logger.exception("VLM request failed")
-            return "VLM unavailable; stopping.", "FINISH", None, None, None, None, False
+            # Never turn a failed model call into a successful FINISH.
+            return "Vision model unavailable; cannot verify the next action.", "FAIL", None, None, None, None, False
 
         return self._parse_vlm_json(content)
 
@@ -1069,7 +1229,7 @@ class VisionAgent:
         content: str,
     ) -> tuple[str, str, Optional[int], Optional[list[float]], Optional[list[float]], Optional[str], bool]:
         thought = ""
-        action = "FINISH"
+        action = "FAIL"
         element_id: Optional[int] = None
         coords: Optional[list[float]] = None
         drag_to: Optional[list[float]] = None
@@ -1078,9 +1238,9 @@ class VisionAgent:
         try:
             data = json.loads(content)
             thought = str(data.get("thought", ""))[:500]
-            action = str(data.get("action", "FINISH")).upper()
+            action = str(data.get("action", "FAIL")).upper()
             if action not in VALID_ACTIONS:
-                action = "FINISH"
+                action = "FAIL"
             raw_id = data.get("element_id")
             if raw_id is not None:
                 try:
@@ -1098,7 +1258,8 @@ class VisionAgent:
                 text = str(text)
             subgoal_done = bool(data.get("subgoal_done", False))
         except json.JSONDecodeError:
-            logger.warning("VLM returned non-JSON; treating as FINISH. Content: %s", content[:200])
+            logger.warning("VLM returned non-JSON; refusing to claim completion. Content: %s", content[:200])
+            thought, action = "", "FAIL"
         return thought, action, element_id, coords, drag_to, text, subgoal_done
 
     def _execute(

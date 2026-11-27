@@ -997,9 +997,13 @@ async def handle_text_input(
             from agent.vision_agent import VisionAgent
 
             reply = await asyncio.to_thread(VisionAgent().run_visual_task, text)
-        except Exception:
+        except Exception as exc:
             logger.exception("Multi-step visual task failed")
-            reply = "I had trouble running that multi-step task."
+            reason = " ".join(str(exc).split())[:160] or type(exc).__name__
+            reply = (
+                f"I couldn't finish that multi-step task: {reason}. "
+                "Say 'stop' to cancel, or try again."
+            )
         session.add_turn("assistant", reply)
         await _speak_and_return(session, send, reply)
         return

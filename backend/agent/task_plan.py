@@ -29,10 +29,20 @@ PLAN_PROMPT = """You are a planning assistant for a desktop automation agent.
 Split the user's goal into a short ordered list of concrete subgoals.
 
 Rules:
-- Each subgoal is one clearly observable action or state change.
-- Use at most 8 subgoals. Prefer fewer.
+- Each subgoal is ONE observable action or state change, phrased as a result.
+- A goal with several actions must produce several subgoals. Never collapse
+  "open X, do A and do B" into one step or into "open X and do everything".
+- When the user says "open X" and then names more actions, the first subgoal
+  must be exactly "open X".
+- Describe the visible end state, e.g. "Add a UV sphere so it is visible in the
+  scene", not a vague intention like "work on the project".
+- Use at most 8 subgoals. Prefer fewer, but never fewer than the action count.
 - If the goal is a single simple action, return exactly one subgoal.
 - Do NOT explain. Return ONLY a JSON object: {"subgoals": ["...", "..."]}
+
+Example:
+Goal: "open blender, make a new general project, delete the default cube, and add a sphere"
+Subgoals: ["open blender", "Create a new General project in Blender", "Delete the default cube so the scene is empty", "Add a UV sphere so it is visible in the scene"]
 
 User goal: {goal}"""
 
@@ -114,6 +124,20 @@ def _fallback_split(goal: str) -> list[str]:
     return cleaned[:8]
 
 
+_ACTION_WORDS = (
+    "open", "launch", "start", "create", "make", "delete", "remove", "add",
+    "insert", "save", "select", "click", "type", "build", "rename", "import",
+)
+
+
+def _is_multistep(goal: str) -> bool:
+    """True when the goal names more than one distinct action to perform."""
+    lowered = (goal or "").lower()
+    verbs = {word for word in _ACTION_WORDS if re.search(rf"\b{word}\b", lowered)}
+    joined = bool(re.search(r"\b(and|then)\b|,", lowered))
+    return len(verbs) >= 2 or (joined and len(verbs) >= 1)
+
+
 def build_plan(goal: str, timeout: float = 20.0) -> TaskPlan:
     """Decompose a goal into ordered subgoals using the local LLM (with fallback)."""
     plan = TaskPlan(goal=goal)
@@ -137,7 +161,12 @@ def build_plan(goal: str, timeout: float = 20.0) -> TaskPlan:
         logger.exception("LLM planning failed; using deterministic split")
         subgoals = []
 
-    if not subgoals:
+    # A local model sometimes answers "one step" for a clearly multi-action
+    # goal. Trust the deterministic split in that case so the agent does not
+    # declare success after only launching the app.
+    if not subgoals or (len(subgoals) < 2 and _is_multistep(goal)):
+        if subgoals:
+            logger.warning("LLM collapsed a multi-action goal into one step; using split")
         subgoals = _fallback_split(goal)
 
     plan.subgoals = [Subgoal(index=i, text=t) for i, t in enumerate(subgoals)]
