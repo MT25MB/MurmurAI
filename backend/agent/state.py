@@ -24,7 +24,7 @@ class ClientMessage(BaseModel):
         "ping", "state", "text_input", "audio_chunk", "confirm",
         "guidance_response", "abort_automation", "set_listening_mode",
         "update_available", "update_confirm", "update_status", "permission_status", "be_quiet",
-        "set_muted",
+        "set_muted", "describe_screen", "run_diagnostics", "cue",
     ]
     text: str | None = None
     muted: bool | None = None
@@ -35,6 +35,8 @@ class ClientMessage(BaseModel):
     version: str | None = None  # update notification
     notes: str | None = None    # release summary
     detail: str | None = None   # update error/offline detail
+    focus: str | None = None    # describe_screen focus variant
+    enabled: bool | None = None  # autostart / toggle state
     permissions: dict | None = None  # OS permission diagnostics from the shell
 
 
@@ -60,6 +62,7 @@ class ServerMessage(BaseModel):
         "transcript",
         "activity",
         "cursor",
+        "autostart",
     ]
     ts: float | None = None
     status: str | None = None
@@ -74,6 +77,7 @@ class ServerMessage(BaseModel):
     model: str | None = None
     detail: str | None = None
     role: str | None = None      # transcript speaker (user | assistant | system)
+    enabled: bool | None = None  # autostart state mirrored from the shell
     version: str | None = None   # update notification
     notes: str | None = None     # spoken release summary
     x: int | None = None         # cursor overlay: physical screen pixel

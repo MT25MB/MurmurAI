@@ -7,8 +7,12 @@ import HudPill from "./HudPill";
 // HUD unit tests offline so they only observe WebSocket messages.
 const invokeMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+const tauriListeners: Record<string, (event: { payload: unknown }) => void> = {};
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+  listen: vi.fn((event: string, handler: (event: { payload: unknown }) => void) => {
+    tauriListeners[event] = handler;
+    return Promise.resolve(() => { delete tauriListeners[event]; });
+  }),
 }));
 
 const windowMock = vi.hoisted(() => ({
@@ -55,6 +59,8 @@ function push(msg: Record<string, unknown>) {
 describe("HudPill", () => {
   beforeEach(() => {
     sockets.length = 0;
+    for (const key of Object.keys(tauriListeners)) delete tauriListeners[key];
+    invokeMock.mockClear();
     vi.stubGlobal("WebSocket", TestWS);
     windowMock.setSize.mockClear();
     windowMock.minimize.mockClear();
@@ -67,6 +73,29 @@ describe("HudPill", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("button", { name: /mute microphone/i })).toBeInTheDocument();
+  });
+
+  it("routes tray actions and shell cues through the WS router", async () => {
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+    await waitFor(() => expect(tauriListeners["backend:describe-screen"]).toBeDefined());
+
+    act(() => tauriListeners["backend:describe-screen"]({ payload: undefined }));
+    act(() => tauriListeners["backend:run-diagnostics"]({ payload: undefined }));
+    act(() => tauriListeners["murmur://already-running"]({ payload: undefined }));
+
+    const sent = sockets[0].sent.map((raw: string) => JSON.parse(raw));
+    expect(sent).toContainEqual({ type: "describe_screen", focus: "overview" });
+    expect(sent).toContainEqual({ type: "run_diagnostics" });
+    expect(sent).toContainEqual({ type: "cue", text: "Murmur AI is already running" });
+  });
+
+  it("applies a voice-driven autostart change in the shell", async () => {
+    render(<HudPill />);
+    await waitFor(() => expect(sockets.length).toBe(1));
+
+    push({ type: "autostart", enabled: true });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_autostart", { enabled: true }));
   });
 
   it("offers a visible button that opens Settings", async () => {

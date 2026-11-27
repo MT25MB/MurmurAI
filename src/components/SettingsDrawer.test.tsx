@@ -20,6 +20,8 @@ const defaults = {
   voice_profile: "default",
   chat_model: "",
   vision_model: "",
+  provider: "",
+  autostart_enabled: false,
   clear_data_on_uninstall: false,
 };
 
@@ -147,9 +149,13 @@ describe("SettingsDrawer", () => {
     current = { ...defaults };
     posts = [];
     invokeMock.mockReset();
-    invokeMock.mockResolvedValue({
-      available: false, version: null, notes: null, currentVersion: "1.2.60", error: null,
-    });
+    invokeMock.mockImplementation((command: string) =>
+      command === "set_autostart"
+        ? Promise.resolve(true)
+        : Promise.resolve({
+            available: false, version: null, notes: null, currentVersion: "1.2.68", error: null,
+          }),
+    );
     listenMock.mockClear();
     listenMock.mockResolvedValue(() => {});
     windowMock.setSize.mockClear();
@@ -212,6 +218,17 @@ describe("SettingsDrawer", () => {
     expect(install).toBeEnabled();
     await user.click(install);
     expect(invokeMock).toHaveBeenCalledWith("install_update");
+  });
+
+  it("exposes an opt-in launch-at-login toggle", async () => {
+    const user = userEvent.setup();
+    render(<SettingsDrawer open onClose={() => {}} />);
+    const toggle = await screen.findByLabelText(/start murmur when i log in/i);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+    await waitFor(() => expect(posts).toContainEqual({ autostart_enabled: true }));
+    expect(invokeMock).toHaveBeenCalledWith("set_autostart", { enabled: true });
   });
 
   it("renders a full-ARIA dialog with every settings group", async () => {

@@ -714,6 +714,26 @@ async def ws(websocket: WebSocket):
                         app_state.speaker.interrupt()
                 await send(ServerMessage(type="info", text="I'll be quiet."))
 
+            elif msg.type == "cue":
+                # Short shell cue (single-instance notice, autostart change).
+                # Never routed through the brain.
+                text = " ".join(str(msg.text or "").split())
+                if text:
+                    if app_state.speaker is not None:
+                        try:
+                            from audio.speech_queue import SpeechPriority
+
+                            app_state.speaker.speak_priority(text, SpeechPriority.INTERRUPT)
+                        except Exception:
+                            logger.debug("Cue speak failed", exc_info=True)
+                    await emit_transcript(session, send, text, "system")
+
+            elif msg.type == "describe_screen":
+                await _handle_describe_screen(msg.focus or "overview", send)
+
+            elif msg.type == "run_diagnostics":
+                await _handle_diagnostics(send)
+
             elif msg.type == "abort_automation":
                 # UI abort button: halt the running vision loop immediately.
                 abort_controller.abort(msg.text or "user pressed stop in the HUD")
@@ -753,6 +773,46 @@ async def ws(websocket: WebSocket):
 
 
 # ---- handlers ----
+
+async def _handle_describe_screen(focus: str, send) -> None:
+    """Tray/UI 'Describe Screen' uses the same local VLM path as voice."""
+    from agent.vision_agent import VisionAgent
+
+    try:
+        text = await asyncio.to_thread(VisionAgent().describe, focus)
+    except Exception:
+        logger.exception("Tray describe-screen failed")
+        text = "I couldn't read the screen just now. Please try again."
+    await emit_transcript(None, send, text, "assistant")
+    if app_state.speaker is not None:
+        try:
+            from audio.speech_queue import SpeechPriority
+
+            app_state.speaker.speak_priority(text, SpeechPriority.INTERRUPT)
+        except Exception:
+            logger.debug("Tray description speak failed", exc_info=True)
+
+
+async def _handle_diagnostics(send) -> None:
+    """Tray 'Run Diagnostics' runs the same local report as Settings."""
+    from system.settings_tools import run_diagnostics
+
+    try:
+        report = await asyncio.to_thread(run_diagnostics)
+        summary = str(report.get("summary") or "Diagnostics finished.")
+    except Exception:
+        logger.exception("Tray diagnostics failed")
+        summary = "Diagnostics could not run right now."
+    await send(ServerMessage(type="info", text=summary))
+    await emit_transcript(None, send, summary, "system")
+    if app_state.speaker is not None:
+        try:
+            from audio.speech_queue import SpeechPriority
+
+            app_state.speaker.speak_priority(summary, SpeechPriority.INTERRUPT)
+        except Exception:
+            logger.debug("Tray diagnostics speak failed", exc_info=True)
+
 
 async def _handle_permission_status(permissions: Optional[dict], send) -> None:
     """Store shell permission diagnostics and speak plain-language recovery."""

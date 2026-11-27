@@ -15,6 +15,7 @@ import {
   type ModelOption,
   type Provider,
 } from "../lib/settings";
+import { setAutostartEnabled } from "../lib/autostart";
 import {
   checkForUpdates,
   installUpdate,
@@ -476,6 +477,21 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
               <legend className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Listening and privacy
               </legend>
+              <label htmlFor="settings-autostart" className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  id="settings-autostart"
+                  type="checkbox"
+                  checked={settings.autostart_enabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    void setAutostartEnabled(enabled).then((actual) => change({ autostart_enabled: actual }));
+                  }}
+                />
+                Start Murmur when I log in
+              </label>
+              <p className="text-[11px] leading-snug text-muted">
+                Off by default. Voice: "Start Murmur when I log in" or "Disable startup launch".
+              </p>
               <div>
                 <label htmlFor="settings-listening" className="block text-xs font-medium">
                   Listening mode

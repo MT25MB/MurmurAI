@@ -264,6 +264,24 @@ def test_diagnostics_voice_phrase(monkeypatch):
     assert reply and reply.startswith("Diagnostics.")
 
 
+def test_autostart_voice_toggle_is_opt_in_and_emits(monkeypatch):
+    from tools.event_bus import tool_bus
+
+    emitted = []
+    monkeypatch.setattr(tool_bus, "emit", lambda message: emitted.append(message))
+
+    reply = st.handle_voice_command("Start Murmur when I log in")
+    assert reply and "log in" in reply.lower()
+    assert st.load_settings()["autostart_enabled"] is True
+    assert any(getattr(m, "type", None) == "autostart" and m.enabled for m in emitted)
+
+    emitted.clear()
+    reply = st.handle_voice_command("Disable startup launch")
+    assert reply and "will not start" in reply.lower()
+    assert st.load_settings()["autostart_enabled"] is False
+    assert any(getattr(m, "type", None) == "autostart" and not m.enabled for m in emitted)
+
+
 def test_fix_and_restart_helpers(monkeypatch):
     monkeypatch.setattr(app_setup, "request_accessibility_prompt", lambda: {"items": []})
     assert "opened" in st.fix_permissions().lower()

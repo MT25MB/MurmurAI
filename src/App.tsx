@@ -4,6 +4,8 @@ import OnboardingModal from "./components/OnboardingModal";
 import SettingsDrawer from "./components/SettingsDrawer";
 import { fetchSetupStatus, type SetupStatus } from "./lib/setup";
 import { waitForBackend } from "./lib/backendReady";
+import { fetchAutostartEnabled, setAutostartEnabled } from "./lib/autostart";
+import { fetchSettings, saveSettings } from "./lib/settings";
 import { useFocusRecovery } from "./lib/focusRecovery";
 
 export default function App() {
@@ -11,6 +13,7 @@ export default function App() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [connectAttempt, setConnectAttempt] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [alreadyRunning, setAlreadyRunning] = useState(false);
   const { containerRef, announcement } = useFocusRecovery();
 
   useEffect(() => {
@@ -86,6 +89,47 @@ export default function App() {
     };
   }, [ready]);
 
+  // Reconcile the saved voice/settings preference with the OS registration once
+  // the backend is ready. The OS remains the source of truth.
+  useEffect(() => {
+    if (!ready) return;
+    void (async () => {
+      try {
+        const [settings, actual] = await Promise.all([
+          fetchSettings(), fetchAutostartEnabled(),
+        ]);
+        if (settings.autostart_enabled !== actual) {
+          const applied = await setAutostartEnabled(settings.autostart_enabled);
+          await saveSettings({ autostart_enabled: applied });
+        }
+      } catch {
+        // Browser dev or backend briefly unavailable; retry on next launch.
+      }
+    })();
+  }, [ready]);
+
+  // A second launch never starts a competing sidecar; Rust focuses this window
+  // and emits this event. The HUD speaks the cue; here we also show it visibly
+  // so onboarding/connecting screens are not silent.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("murmur://already-running", () => {
+          if (!disposed) {
+            setAlreadyRunning(true);
+            window.setTimeout(() => { if (!disposed) setAlreadyRunning(false); }, 4000);
+          }
+        });
+      } catch {
+        // Browser dev: no Tauri events.
+      }
+    })();
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
   // Ctrl+, / Cmd+, opens settings from anywhere in the HUD.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -142,6 +186,9 @@ export default function App() {
 
   return (
     <div ref={containerRef} tabIndex={-1} className="h-full w-full">
+      {alreadyRunning && (
+        <p role="status" aria-live="polite" className="sr-only">Murmur AI is already running.</p>
+      )}
       {content}
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <div role="status" aria-live="polite" className="sr-only">

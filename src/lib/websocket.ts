@@ -22,7 +22,10 @@ export type ClientMessage =
   | { type: "update_confirm"; request_id: string; approved: boolean }
   | { type: "update_status"; detail?: string }
   | { type: "permission_status"; permissions?: unknown }
-  | { type: "be_quiet" };
+  | { type: "be_quiet" }
+  | { type: "cue"; text: string }
+  | { type: "describe_screen"; focus?: string }
+  | { type: "run_diagnostics" };
 
 /** Messages the backend may send to the HUD. */
 export type ServerMessage =
@@ -52,7 +55,8 @@ export type ServerMessage =
   | { type: "update_check_request"; text: string }
   | { type: "transcript"; text: string; role?: "user" | "assistant" | "system" }
   | { type: "activity"; text: string }
-  | { type: "cursor"; x: number; y: number; kind?: string };
+  | { type: "cursor"; x: number; y: number; kind?: string }
+  | { type: "autostart"; enabled: boolean };
 
 export interface MurmurSocket {
   status: ConnectionStatus;

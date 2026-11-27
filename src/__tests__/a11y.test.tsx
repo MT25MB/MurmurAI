@@ -94,6 +94,7 @@ const settings: Settings = {
   chat_model: "",
   vision_model: "",
   provider: "",
+  autostart_enabled: false,
   clear_data_on_uninstall: false,
 };
 

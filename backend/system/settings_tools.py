@@ -40,6 +40,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "vision_model": "",
     # Optional OpenAI-compatible provider name (local by default, cloud opt-in).
     "provider": "",
+    # Launch at login is strictly opt-in and off by default. The OS registration
+    # is owned by tauri-plugin-autostart; this value mirrors it for voice UI.
+    "autostart_enabled": False,
     # LAN-only phone companion is strictly opt-in and off by default.
     "remote_companion_enabled": False,
     "clear_data_on_uninstall": False,  # keep memories/chats/keys unless opted in
@@ -154,7 +157,7 @@ def _coerce(settings: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "earcons", "screen_reader_friendly", "media_ducking", "echo_guard",
         "loopback_guard", "spatial_audio_cues", "remote_companion_enabled",
-        "clear_data_on_uninstall",
+        "autostart_enabled", "clear_data_on_uninstall",
     ):
         settings[key] = bool(settings.get(key, DEFAULT_SETTINGS[key]))
     try:
@@ -304,6 +307,25 @@ def handle_voice_command(text: str) -> Optional[str]:
             pass
         # Deliberately not spoken: the user asked for silence.
         return "Okay, I'll be quiet. Say 'hello' when you need me again."
+
+    # Launch at login is opt-in. Persist the mirror value and ask the shell (via
+    # the HUD) to apply the OS registration; nothing changes until that is done.
+    if re.search(
+        r"\b(start|enable|turn on|launch)\b.*\b(murmur|it)?\s*(when i log in|at login|at startup|on boot)"
+        r"|\bdisable startup launch\b|\bstop (murmur|it) (from )?(launching|starting) (at login|at startup|on boot)"
+        r"|\b(turn off|disable)\b.*\b(launch at login|start at login|autostart)\b",
+        value,
+    ):
+        enable = not re.search(r"\b(disable|turn off|stop|remove)\b", value)
+        update_settings({"autostart_enabled": enable})
+        from tools.event_bus import tool_bus
+        from agent.state import ServerMessage
+
+        tool_bus.emit(ServerMessage(type="autostart", enabled=enable))
+        return _voice_reply(
+            "Murmur AI will start when you log in."
+            if enable else "Startup launch is off. Murmur AI will not start automatically."
+        )
 
     # Uninstall data policy: explicit opt-in only; keeping data is the default.
     if re.search(r"\b(clear|delete|erase|remove)\b.*\buninstall(?:ed|ling)?\b", value):

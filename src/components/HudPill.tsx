@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMurmurSocket } from "../lib/websocket";
 import { useSleepWakeHotkey } from "../lib/useSleepWakeHotkey";
 import { useAutoUpdater } from "../lib/updater";
+import { fetchSettings, saveSettings } from "../lib/settings";
+import { setAutostartEnabled } from "../lib/autostart";
 import { closeHud, minimizeHud, setHudSize } from "../lib/windowControls";
 import TranscriptStream, { useTranscriptTurns } from "./TranscriptStream";
 import { Waveform } from "./Waveform";
@@ -276,6 +278,53 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
       unlisten?.();
     };
   }, [send]);
+
+  // Accessible tray actions and shell notices all land on the same WS router.
+  useEffect(() => {
+    let unlisteners: Array<() => void> = [];
+    let disposed = false;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const handlers: Array<[string, () => void]> = [
+          ["backend:toggle-listening", () => changeMode(mode === "active" ? "sleep" : "active")],
+          ["backend:describe-screen", () => send({ type: "describe_screen", focus: "overview" })],
+          ["backend:run-diagnostics", () => send({ type: "run_diagnostics" })],
+          ["murmur://already-running", () => send({
+            type: "cue", text: "Murmur AI is already running",
+          })],
+        ];
+        for (const [event, handler] of handlers) {
+          const stop = await listen(event, () => { if (!disposed) handler(); });
+          unlisteners.push(stop);
+        }
+        const stopAutostart = await listen<boolean>("murmur://autostart-changed", (event) => {
+          if (disposed) return;
+          void fetchSettings()
+            .then((settings) => saveSettings({
+              ...settings, autostart_enabled: event.payload,
+            }))
+            .catch(() => undefined);
+        });
+        unlisteners.push(stopAutostart);
+      } catch {
+        // Browser dev: tray events are unavailable; the in-HUD controls still work.
+      }
+    })();
+    return () => {
+      disposed = true;
+      unlisteners.forEach((stop) => stop());
+    };
+  }, [send, changeMode, mode]);
+
+  // The backend mirrors launch-at-login changes made by voice into config.json
+  // and asks the shell to apply the OS registration here.
+  useEffect(() => {
+    if (lastMessage?.type !== "autostart") return;
+    void setAutostartEnabled(lastMessage.enabled).then((actual) => {
+      void saveSettings({ autostart_enabled: actual });
+    });
+  }, [lastMessage]);
 
   const submitTyped = useCallback(() => {
     const text = typeInput.trim();

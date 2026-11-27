@@ -19,6 +19,7 @@ export interface Settings {
   chat_model: string;
   vision_model: string;
   provider: string;
+  autostart_enabled: boolean;
   clear_data_on_uninstall: boolean;
 }
 

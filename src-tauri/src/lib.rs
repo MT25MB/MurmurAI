@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager, Position, WebviewWindow};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_updater::UpdaterExt;
 use serde::Serialize;
 
@@ -117,6 +118,30 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     // the installer replaces the app files. restart() diverges: it is the tail.
     kill_backend();
     app.restart()
+}
+
+/// Read the OS launch-at-login state (source of truth is the OS, not config.json).
+#[tauri::command]
+async fn autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|error| command_error_message("Autostart check", &error.to_string()))
+}
+
+/// Enable or disable launch-at-login. Idempotent on Windows.
+#[tauri::command]
+async fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+    let manager = app.autolaunch();
+    let result = if enabled {
+        manager.enable()
+    } else {
+        manager.disable()
+    };
+    result.map_err(|error| command_error_message("Autostart change", &error.to_string()))?;
+    let _ = app.emit("murmur://autostart-changed", enabled);
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|error| command_error_message("Autostart check", &error.to_string()))
 }
 
 /// Global handle to the Python backend child process so we can kill it on exit.
@@ -368,6 +393,16 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        // A second launch focuses the existing HUD and asks it to speak a cue,
+        // instead of spawning a competing Python sidecar on port 8765.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+                focus::announce_focus(app, "Murmur AI is already running");
+            }
+            let _ = app.emit("murmur://already-running", ());
+        }))
         .setup(|app| {
             // Position the main window at bottom-center of the primary screen.
             if let Some(window) = app.get_webview_window("main") {
@@ -399,18 +434,24 @@ pub fn run() {
                 spawn_backend(&backend_handle);
             });
 
-            let toggle = MenuItem::with_id(app, "toggle", "Show / Hide HUD", true, None::<&str>)?;
-            let start = MenuItem::with_id(app, "start", "Start Listening", true, None::<&str>)?;
-            let pause = MenuItem::with_id(app, "pause", "Pause Listening", true, None::<&str>)?;
-            let model = MenuItem::with_id(app, "model", "Select Ollama Model", true, None::<&str>)?;
+            // Accessible tray actions map to the same WS command router as voice.
+            let toggle_hud = MenuItem::with_id(app, "toggle", "Show / Hide HUD", true, None::<&str>)?;
+            let toggle_listening = MenuItem::with_id(
+                app, "toggle-listening", "Toggle Listening / Sleep", true, None::<&str>
+            )?;
+            let describe = MenuItem::with_id(app, "describe", "Describe Screen", true, None::<&str>)?;
+            let diagnostics = MenuItem::with_id(app, "diagnostics", "Run Diagnostics", true, None::<&str>)?;
             let settings =
                 MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let autostart =
-                MenuItem::with_id(app, "autostart", "Launch at Startup", true, None::<&str>)?;
+                MenuItem::with_id(app, "autostart", "Launch at Login (toggle)", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Murmur AI", true, None::<&str>)?;
             let menu = Menu::with_items(
                 app,
-                &[&toggle, &start, &pause, &model, &settings, &autostart, &quit],
+                &[
+                    &toggle_hud, &toggle_listening, &describe, &diagnostics,
+                    &settings, &autostart, &quit,
+                ],
             )?;
 
             let icon = match app.default_window_icon() {
@@ -432,20 +473,31 @@ pub fn run() {
                             toggle_window(&window);
                         }
                     }
-                    "start" => {
-                        let _ = app.emit("backend:start-listening", ());
+                    "toggle-listening" => {
+                        let _ = app.emit("backend:toggle-listening", ());
                     }
-                    "pause" => {
-                        let _ = app.emit("backend:pause-listening", ());
+                    "describe" => {
+                        let _ = app.emit("backend:describe-screen", ());
                     }
-                    "model" => {
-                        let _ = app.emit("backend:select-model", ());
+                    "diagnostics" => {
+                        let _ = app.emit("backend:run-diagnostics", ());
                     }
                     "settings" => {
                         let _ = app.emit("backend:open-settings", ());
                     }
                     "autostart" => {
-                        let _ = app.emit("backend:toggle-autostart", ());
+                        // Toggle the OS state directly; the frontend mirrors the
+                        // new value into ~/.murmur-ai/config.json.
+                        match app.autolaunch().is_enabled() {
+                            Ok(true) => {
+                                let _ = app.autolaunch().disable();
+                                let _ = app.emit("murmur://autostart-changed", false);
+                            }
+                            _ => {
+                                let _ = app.autolaunch().enable();
+                                let _ = app.emit("murmur://autostart-changed", true);
+                            }
+                        }
                     }
                     "quit" => {
                         kill_backend();
@@ -539,6 +591,8 @@ pub fn run() {
             install_update,
             permissions::check_os_permissions,
             focus::restore_focus,
+            autostart_enabled,
+            set_autostart,
             quit_app
         ])
         .run(tauri::generate_context!())
