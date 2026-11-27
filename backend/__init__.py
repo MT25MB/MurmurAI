@@ -5,6 +5,6 @@ the website. Bump this together with package.json, tauri.conf.json, Cargo.toml
 and the lockfiles when cutting a release.
 """
 
-__version__ = "1.2.65"
+__version__ = "1.2.66"
 
 __all__ = ["__version__"]
