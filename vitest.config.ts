@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // Website has its own node_modules; dedupe React so hooks share one instance.
+  resolve: { dedupe: ["react", "react-dom"] },
   test: {
     environment: "jsdom",
     globals: true,

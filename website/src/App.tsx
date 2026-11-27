@@ -5,6 +5,7 @@ import Capabilities from "./components/Capabilities";
 import QuickStart from "./components/QuickStart";
 import Footer from "./components/Footer";
 import HardwareRequirements from "./components/HardwareRequirements";
+import CommandExplorer from "./components/CommandExplorer";
 
 export default function App() {
   return (
@@ -53,6 +54,9 @@ export default function App() {
 
         {/* ── CAPABILITIES ─────────────────────────────────────── */}
         <Capabilities />
+
+        {/* ── COMMAND EXPLORER ─────────────────────────────────── */}
+        <CommandExplorer />
 
         {/* ── QUICK START / DOCS ───────────────────────────────── */}
         <QuickStart />
