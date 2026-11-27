@@ -101,7 +101,7 @@ def test_vlm_outage_is_fail_not_finish(monkeypatch, tmp_path):
     try:
         parsed = agent._ask_vlm("goal", "b64", 320, 180, "", {}, None, "")
         assert parsed[1] == "FAIL"
-        assert "unavailable" in parsed[0].lower()
+        assert "vision request failed" in parsed[0].lower()
     finally:
         agent.abort.remove_listener(agent._announce_stop)
 

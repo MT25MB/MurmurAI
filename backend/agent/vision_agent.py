@@ -640,6 +640,20 @@ class VisionAgent:
         tool_bus.emit(ServerMessage(type="transcript", text=spoken, role="system"))
         return True
 
+    def _vision_model_available(self) -> tuple[bool, str]:
+        """Check the exact vision model this agent will call before any action."""
+        try:
+            from setup import ollama_status, pulled_models
+
+            status = ollama_status()
+            if not status.get("running"):
+                return False, "Ollama is not running, so the vision model cannot be used."
+            if not pulled_models([self.model]).get(self.model):
+                return False, f"Vision model {self.model} is not installed in Ollama."
+        except Exception as exc:  # pragma: no cover - environment dependent
+            return False, f"Vision check failed: {' '.join(str(exc).split())[:140]}"
+        return True, ""
+
     def build_preview(self, goal: str) -> PlanPreview:
         """Read-only preview of the visual subgoals; no capture or clicking."""
         plan = build_plan(goal)
@@ -681,6 +695,11 @@ class VisionAgent:
             self.last_preview = preview
             self._speak(preview.spoken())
             return preview.spoken()
+
+        available, reason = self._vision_model_available()
+        if not available:
+            self._speak(reason)
+            return reason
 
         # Resolved after planning: multi-step goals need more than the default
         # budget so the agent does not stop halfway through an app workflow.
@@ -1216,10 +1235,11 @@ class VisionAgent:
         try:
             response = self._chat_with_image(system, prompt, b64_png, format_json=True)
             content = response.get("message", {}).get("content", "{}")
-        except Exception:
+        except Exception as exc:
             logger.exception("VLM request failed")
+            detail = " ".join(str(exc).split())[:160] or type(exc).__name__
             # Never turn a failed model call into a successful FINISH.
-            return "Vision model unavailable; cannot verify the next action.", "FAIL", None, None, None, None, False
+            return f"Vision request failed: {detail}", "FAIL", None, None, None, None, False
 
         return self._parse_vlm_json(content)
 

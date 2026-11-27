@@ -39,6 +39,18 @@ export default function App() {
     };
   }, []);
 
+  // If a required model or weight disappears after startup, go back to setup
+  // instead of leaving a HUD that accepts commands it cannot carry out.
+  useEffect(() => {
+    if (!ready) return;
+    const id = window.setInterval(() => {
+      void fetchSetupStatus()
+        .then((status) => { if (!status.complete) setReady(false); })
+        .catch(() => undefined);
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [ready]);
+
   // The HUD is a tiny pill when setup is complete, but onboarding/error screens
   // need room for their controls (including the Retry button). Resize the native
   // window so those controls are never clipped or unreachable.

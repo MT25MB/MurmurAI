@@ -606,6 +606,25 @@ def get_setup_status() -> dict[str, Any]:
     }
 
 
+def readiness() -> dict[str, Any]:
+    """Plain-language gate result: what is missing before the agent may act."""
+    status = get_setup_status()
+    missing: list[str] = []
+    if not status["ollama"].get("running"):
+        missing.append("Ollama is not running")
+    for model, ok in status["models"].items():
+        if not ok:
+            missing.append(f"model {model} is not installed")
+    for weight, ok in status["weights"].items():
+        if not ok:
+            missing.append(f"local {weight} weights are missing")
+    return {
+        "ready": not missing,
+        "missing": missing,
+        "detail": ", ".join(missing) if missing else "All local components are ready.",
+    }
+
+
 def mark_setup_complete() -> dict[str, Any]:
     """Persist that onboarding was finished (user can still re-open it later)."""
     COMPLETE_MARKER.parent.mkdir(parents=True, exist_ok=True)

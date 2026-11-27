@@ -305,6 +305,12 @@ async def setup_status() -> JSONResponse:
     return JSONResponse(setup_module.get_setup_status())
 
 
+@app.get("/readiness")
+async def readiness_endpoint() -> JSONResponse:
+    """Block GUI/agent work until every required local component is present."""
+    return JSONResponse(setup_module.readiness())
+
+
 @app.get("/setup/permissions")
 async def setup_permissions() -> JSONResponse:
     return JSONResponse(setup_module.permission_status())
@@ -988,10 +994,34 @@ def _is_multi_step_gui_goal(text: str) -> bool:
     ) >= 2
 
 
+_SETUP_ALLOWED_RE = re.compile(
+    r"\b(setup|diagnostic|settings?|models?|update|dictat|be quiet|stop|help|"
+    r"plugin|permission|repair|retry)\b",
+    re.IGNORECASE,
+)
+
+
+async def _require_ready(session: SessionState, send, text: str) -> bool:
+    """Refuse agent work until Ollama, the models and local weights exist."""
+    state = setup_module.readiness()
+    if state["ready"] or _SETUP_ALLOWED_RE.search(text or ""):
+        return True
+    detail = state["detail"]
+    message = (
+        f"I can't act yet. Setup is incomplete: {detail}. "
+        "Open Settings or say 'run diagnostics' to fix it."
+    )
+    await emit_transcript(session, send, message, "system")
+    await send(ServerMessage(type="error", detail=message))
+    return False
+
+
 async def handle_text_input(
     session: SessionState, send, text: str
 ) -> None:
     """Full voice turn: transcribe already done; think, act, speak."""
+    if not await _require_ready(session, send, text):
+        return
     handled, text = await _route_dictation(session, send, text)
     if handled:
         return
