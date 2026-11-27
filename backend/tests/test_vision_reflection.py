@@ -36,6 +36,8 @@ def _agent(monkeypatch, tmp_path) -> VisionAgent:
     )
     monkeypatch.setattr(agent, "_launch_app_from_subgoal", lambda _text: False)
     monkeypatch.setattr(agent, "_speak", lambda _text: None)
+    # Vision availability is covered by its own test; these loop tests mock the VLM.
+    monkeypatch.setattr(agent, "_vision_model_available", lambda: (True, ""))
     return agent
 
 

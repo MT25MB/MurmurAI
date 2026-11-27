@@ -42,6 +42,12 @@ def e2e_environment(monkeypatch):
     monkeypatch.setenv("MURMUR_AI_AUTO_DOWNLOAD_WEIGHTS", "0")
     monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     monkeypatch.setenv("MURMUR_AI_EARCONS", "0")
+    # The production readiness gate is covered in backend/tests. E2E fixtures
+    # run without Ollama or weights, so assume a ready local environment here.
+    import setup
+    monkeypatch.setattr(setup, "readiness", lambda: {
+        "ready": True, "missing": [], "detail": "All local components are ready.",
+    })
 
 
 @pytest.fixture
