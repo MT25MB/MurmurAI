@@ -195,10 +195,11 @@ def _drain(ws, count, timeout=5.0):
 
 
 @pytest.mark.parametrize("phrase_id,expected_count,expected_states", [
-    # Typed commands are a silent chat: transcript + THINKING -> IDLE, no SPEAKING.
-    (1, 6, {"THINKING", "IDLE"}),
-    (2, 2, {"SLEEPING"}),
-    (3, 3, {"IDLE"}),
+    # Typed commands are a silent chat: user prompt + transcript + THINKING -> IDLE,
+    # no SPEAKING. The extra count is the user's own transcript turn.
+    (1, 7, {"THINKING", "IDLE"}),
+    (2, 3, {"SLEEPING"}),
+    (3, 4, {"IDLE"}),
 ])
 def test_voice_to_action_roundtrip(monkeypatch, fixture_wavs, phrase_id, expected_count, expected_states):
     played = []
@@ -220,6 +221,10 @@ def test_voice_to_action_roundtrip(monkeypatch, fixture_wavs, phrase_id, expecte
     assert expected_states <= states, messages
     assert "SPEAKING" not in states, messages
     assert any(m["type"] == "transcript" for m in messages), messages
+    assert any(
+        m["type"] == "transcript" and m.get("role") == "user" and m.get("text") == transcript
+        for m in messages
+    ), messages
 
     if phrase_id == 1:
         assert any(

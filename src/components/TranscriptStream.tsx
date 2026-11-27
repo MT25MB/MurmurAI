@@ -12,7 +12,7 @@ interface TranscriptStreamProps {
 
 export interface Turn {
   id: number;
-  role: "assistant" | "system";
+  role: "user" | "assistant" | "system";
   text: string;
 }
 
@@ -48,7 +48,8 @@ export function useTranscriptTurns(
 /**
  * Screen-reader and refreshable-Braille friendly transcript log.
  *
- * Every Murmur response/action summary is emitted as a plain-text WS message.
+ * Every user prompt plus Murmur response/action summary is emitted as a
+ * plain-text WS message.
  * There is no markdown, decoration or visual clutter here: the region is
  * visually hidden but exposed as a polite live log so assistive tech can read
  * each turn in order.
@@ -79,8 +80,14 @@ export default function TranscriptStream({
         <p className="text-muted">Nothing said yet. Speak, or type a command below.</p>
       ) : null}
       {turns.map((turn) => (
-        <p key={turn.id} data-role={turn.role} className={turn.role === "system" ? "text-muted" : "text-ink"}>
-          {turn.role === "system" ? `Status: ${turn.text}` : turn.text}
+        <p
+          key={turn.id}
+          data-role={turn.role}
+          className={
+            turn.role === "system" ? "text-muted" : turn.role === "user" ? "text-blue" : "text-ink"
+          }
+        >
+          {turn.role === "system" ? `Status: ${turn.text}` : turn.role === "user" ? `You: ${turn.text}` : turn.text}
         </p>
       ))}
     </div>

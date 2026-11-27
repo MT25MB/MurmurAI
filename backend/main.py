@@ -955,6 +955,9 @@ async def handle_text_input(
     if handled:
         return
     session.add_turn("user", text)
+    # Mirror the user's own words into the shared chat log so the conversation
+    # reads in order instead of showing only Murmur's replies and status lines.
+    await emit_transcript(session, send, text, "user")
     if text_is_sleep_phrase(text):
         await enter_sleep(session, send)
         return

@@ -73,7 +73,7 @@ class ServerMessage(BaseModel):
     command: str | None = None
     model: str | None = None
     detail: str | None = None
-    role: str | None = None      # transcript speaker (assistant | system)
+    role: str | None = None      # transcript speaker (user | assistant | system)
     version: str | None = None   # update notification
     notes: str | None = None     # spoken release summary
     x: int | None = None         # cursor overlay: physical screen pixel

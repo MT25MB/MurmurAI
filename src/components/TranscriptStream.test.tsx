@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import TranscriptStream from "./TranscriptStream";
 import type { ServerMessage } from "../lib/websocket";
 
-const turn = (text: string, role: "assistant" | "system" = "assistant"): ServerMessage =>
+const turn = (text: string, role: "user" | "assistant" | "system" = "assistant"): ServerMessage =>
   ({ type: "transcript", text, role });
 
 describe("TranscriptStream", () => {
@@ -44,5 +44,14 @@ describe("TranscriptStream", () => {
   it("collapses whitespace from streamed text", () => {
     render(<TranscriptStream lastMessage={turn("  line one \n  line two  ")} />);
     expect(screen.getByRole("log", { name: /murmur ai transcript/i })).toHaveTextContent("line one line two");
+  });
+
+  it("labels the user's own prompt before Murmur's reply", () => {
+    const { rerender } = render(<TranscriptStream lastMessage={turn("Open Blender", "user")} visible />);
+    rerender(<TranscriptStream lastMessage={turn("Blender is open.", "assistant")} visible />);
+    const log = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(log).toHaveTextContent(/You: Open Blender/);
+    expect(log).toHaveTextContent(/Blender is open\./);
+    expect(log.querySelector('[data-role="user"]')).toHaveClass("text-blue");
   });
 });
