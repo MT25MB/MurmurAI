@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sync package manifests with release version + checksums.
 
-Usage: python scripts/sync_packaging.py --version 1.2.61 --assets-dir release-assets
+Usage: python scripts/sync_packaging.py --version 1.2.62 --assets-dir release-assets
 """
 
 from __future__ import annotations
