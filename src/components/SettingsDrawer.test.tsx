@@ -331,7 +331,7 @@ describe("SettingsDrawer", () => {
     render(<App />);
     await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());
     const size = windowMock.setSize.mock.calls.at(-1)?.[0];
-    expect(size.width).toBe(520);
+    expect(size.width).toBe(560);
     expect(size.height).toBeGreaterThan(84);
     expect(screen.getByText("Connecting to the local backend…")).toBeInTheDocument();
   });
@@ -340,7 +340,7 @@ describe("SettingsDrawer", () => {
     render(<App />);
     await waitFor(() => {
       const size = windowMock.setSize.mock.calls.at(-1)?.[0];
-      expect(size?.width).toBe(440);
+      expect(size?.width).toBe(560);
       expect(size?.height).toBe(120);
     });
     expect(windowMock.setResizable).toHaveBeenCalledWith(false);
@@ -352,8 +352,8 @@ describe("SettingsDrawer", () => {
     await screen.findByRole("alert");
     await waitFor(() => expect(windowMock.setSize).toHaveBeenCalled());
     const size = windowMock.setSize.mock.calls.at(-1)?.[0];
-    expect(size.width).toBe(520);
-    expect(size.height).toBe(620);
+    expect(size.width).toBe(560);
+    expect(size.height).toBe(680);
     expect(windowMock.setResizable).toHaveBeenCalledWith(true);
     expect(screen.getByRole("button", { name: /try connecting/i })).toBeInTheDocument();
   });

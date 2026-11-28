@@ -69,15 +69,15 @@ export default function App() {
         const window = getCurrentWindow();
         if (ready === null) {
           // "Connecting…" shows a two-line progress message plus a hint; the
-          // 400x120 pill would clip it. Give it room until status is known.
+          // short pill would clip it. Give it room until status is known.
           await window.setResizable(false);
-          await window.setSize(new LogicalSize(520, 220));
+          await window.setSize(new LogicalSize(560, 220));
         } else if (ready === false) {
           await window.setResizable(true);
-          await window.setSize(new LogicalSize(520, 620));
+          await window.setSize(new LogicalSize(560, 680));
         } else {
           await window.setResizable(false);
-          await window.setSize(new LogicalSize(440, 120));
+          await window.setSize(new LogicalSize(560, 120));
         }
         await window.center();
       } catch {

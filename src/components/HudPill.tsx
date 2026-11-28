@@ -79,8 +79,8 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
   // One place decides the native size: expanded panel, typing row, or pill.
   useEffect(() => {
     if (expanded) void setHudSize(560, 680, true);
-    else if (typing) void setHudSize(440, 260, false);
-    else void setHudSize(440, 120, false);
+    else if (typing) void setHudSize(560, 260, false);
+    else void setHudSize(560, 120, false);
   }, [expanded, typing]);
 
   useEffect(() => {
@@ -378,7 +378,7 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
       className={
         expanded
           ? "app-region-drag relative fixed inset-0 z-[9999] flex h-full max-h-full min-h-0 select-none flex-col gap-2 overflow-hidden rounded-[1.75rem] border border-border bg-obsidian/95 p-4 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
-          : "app-region-drag relative fixed bottom-[6vh] left-1/2 z-[9999] w-[420px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
+          : "app-region-drag relative fixed bottom-[6vh] left-1/2 z-[9999] w-[540px] -translate-x-1/2 select-none rounded-[1.75rem] border border-border bg-obsidian/92 px-4 py-3 shadow-2xl shadow-black/70 ring-1 ring-white/5 backdrop-blur-xl"
       }
       role="region"
       aria-label="Murmur AI status and controls"
@@ -387,7 +387,7 @@ export default function HudPill({ onOpenSettings = () => {} }: HudPillProps) {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
         <img
           src={logoUrl}
           alt=""
