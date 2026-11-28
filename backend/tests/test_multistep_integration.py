@@ -156,6 +156,27 @@ def test_one_transient_vlm_failure_does_not_abort_the_task(monkeypatch):
     assert "Task finished" in result, result
 
 
+def test_stuck_recovery_has_a_short_bound_and_announces_it(monkeypatch):
+    import tools.event_bus as event_bus
+    from agent.loop_detector import LoopStatus
+
+    agent = _agent(monkeypatch)
+    agent._recovery_attempts = 1
+    calls = []
+    monkeypatch.setattr(
+        event_bus.tool_bus,
+        "request_guidance",
+        lambda question, timeout=120.0: calls.append(timeout) or None,
+    )
+
+    outcome = agent._recover(0, LoopStatus(stuck=True, kind="static_screen", detail="static"), None)
+
+    assert outcome == "abort:no-guidance"
+    assert calls and calls[0] <= 30
+    assert agent.abort.is_aborted()
+    assert any("stopping this task" in text for text in agent._spoken)
+
+
 def test_subgoal_progress_works_when_model_omits_subgoal_done(monkeypatch):
     """Small local models often omit the flag; fresh-screen evidence must win."""
     agent = _agent(monkeypatch)

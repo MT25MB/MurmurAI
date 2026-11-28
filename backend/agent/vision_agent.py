@@ -1220,7 +1220,9 @@ class VisionAgent:
                 "Try a keyboard shortcut, the application's menu or command/search palette, "
                 "or click a different control to achieve the current subgoal."
             )
-            self._speak("That didn't work. Trying a different approach.")
+            spoken = "That didn't work. Trying a different approach."
+            self._speak(spoken)
+            tool_bus.emit(ServerMessage(type="transcript", text=spoken, role="system"))
             return f"auto-recovery:{status.kind}"
 
         # Second (and later) recovery: stop spinning and ask the user for help.
@@ -1228,8 +1230,13 @@ class VisionAgent:
             f"I'm stuck on: {active.text if active else 'the current step'}. "
             f"{status.detail} What should I do instead?"
         )
-        answer = tool_bus.request_guidance(question)
+        # Wait briefly, then end clearly. A two-minute silent wait looked like
+        # a frozen agent and gave no chance to correct the task.
+        answer = tool_bus.request_guidance(question, timeout=25)
         if answer is None or not answer.strip():
+            spoken = "I didn't get an answer, so I'm stopping this task."
+            self._speak(spoken)
+            tool_bus.emit(ServerMessage(type="transcript", text=spoken, role="system"))
             self.abort.abort("no guidance received while stuck")
             return "abort:no-guidance"
         return f"guidance:{answer.strip()}"
