@@ -236,6 +236,21 @@ def test_run_diagnostics_report(monkeypatch):
     assert "Ollama: running" in result["summary"]
 
 
+def test_diagnostics_does_not_warn_about_display_on_windows(monkeypatch):
+    monkeypatch.setattr(st.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(st, "_mic_signal", lambda: {"available": True, "signal": 90, "ok": True})
+    monkeypatch.setattr(st, "_available_models", lambda: ["qwen2.5:7b"])
+    monkeypatch.setattr(app_setup, "ollama_status", lambda: {"running": True, "installed": True})
+    monkeypatch.setattr(app_setup, "permission_status", lambda: {"platform": "Windows", "items": []})
+    for key in ("XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "DISPLAY"):
+        monkeypatch.delenv(key, raising=False)
+
+    result = st.run_diagnostics()
+    assert result["issues"] == []
+    assert "Display: native" in result["summary"]
+    assert "Computer control:" in result["summary"]
+
+
 def test_diagnostics_offers_fixes(monkeypatch):
     monkeypatch.setattr(st, "_mic_signal", lambda: {"available": False, "signal": 0, "ok": False})
     monkeypatch.setattr(st, "_available_models", lambda: [])

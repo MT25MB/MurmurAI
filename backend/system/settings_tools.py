@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 from pathlib import Path
@@ -669,12 +670,17 @@ def run_diagnostics() -> dict[str, Any]:
     except Exception:
         checks["permissions"] = {"items": []}
 
+    # XDG session variables only exist on Linux. Reporting an unknown display
+    # on Windows/macOS was a false alarm: pyautogui uses the native desktop.
     session_type = os.getenv("XDG_SESSION_TYPE", "").lower()
-    if not session_type:
-        session_type = "wayland" if os.getenv("WAYLAND_DISPLAY") else ("x11" if os.getenv("DISPLAY") else "unknown")
+    if platform.system() == "Linux":
+        if not session_type:
+            session_type = "wayland" if os.getenv("WAYLAND_DISPLAY") else ("x11" if os.getenv("DISPLAY") else "unknown")
+        if session_type == "unknown":
+            issues.append("No Wayland or X11 display was detected, so screen control may not work.")
+    else:
+        session_type = "native"
     checks["display_session"] = session_type
-    if session_type == "unknown":
-        issues.append("No Wayland or X11 display was detected, so screen control may not work.")
 
     # Click and type tools depend on the optional local input backend. Report
     # its state so a silent computer-control failure is easy to diagnose.
