@@ -1,7 +1,7 @@
 {
   "name": "murmur-ai",
   "private": true,
-  "version": "1.2.77",
+  "version": "1.2.78",
   "type": "module",
   "description": "Murmur AI: 100% local voice-controlled desktop agent",
   "scripts": {

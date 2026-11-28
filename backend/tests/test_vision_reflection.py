@@ -73,6 +73,86 @@ def test_ollama_image_request_uses_native_images_field(monkeypatch, tmp_path):
         agent.abort.remove_listener(agent._announce_stop)
 
 
+def test_vision_server_error_retries_with_a_smaller_capture(monkeypatch, tmp_path):
+    import base64
+    import io
+
+    from PIL import Image
+
+    agent = _agent(monkeypatch, tmp_path)
+    buf = io.BytesIO()
+    Image.new("RGB", (1600, 900), "black").save(buf, format="PNG")
+    big = base64.b64encode(buf.getvalue()).decode()
+
+    calls = []
+
+    class Response:
+        def __init__(self, status, payload):
+            self.status_code = status
+            self.is_success = status < 400
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            return None
+
+        @property
+        def text(self):
+            return ""
+
+    class Client:
+        def post(self, path, json):
+            calls.append(json)
+            if len(calls) == 1:
+                return Response(500, {"error": "image too large"})
+            return Response(200, {"message": {"content": "{}"}})
+
+    agent._client = Client()
+    try:
+        agent._chat_with_image("System", "Prompt", big)
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+    assert len(calls) == 2
+    assert calls[1]["messages"][1]["images"][0] != big
+    assert calls[1]["options"]["num_ctx"] == 4096
+
+
+def test_vision_errors_are_plain_english_without_http_details(monkeypatch, tmp_path):
+    import pytest
+
+    agent = _agent(monkeypatch, tmp_path)
+
+    class Response:
+        status_code = 404
+        is_success = False
+
+        def json(self):
+            return {"error": "model 'qwen2.5vl:7b' not found, try pulling"}
+
+        @property
+        def text(self):
+            return ""
+
+    class Client:
+        def post(self, path, json):
+            return Response()
+
+    agent._client = Client()
+    try:
+        with pytest.raises(RuntimeError) as exc:
+            agent._chat_with_image("System", "Prompt", "BASE64PNG")
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+    message = str(exc.value)
+    assert "not found" in message
+    assert "http" not in message.lower()
+    assert "developer.mozilla" not in message
+
+
 def test_already_open_app_is_not_launched_again(monkeypatch, tmp_path):
     from types import SimpleNamespace
 

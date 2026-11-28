@@ -1216,6 +1216,36 @@ class VisionAgent:
             return "abort:no-guidance"
         return f"guidance:{answer.strip()}"
 
+    @staticmethod
+    def _ollama_error(response) -> str:
+        """Pull Ollama's own error message without leaking HTTP client details."""
+        try:
+            data = response.json()
+            detail = data.get("error") if isinstance(data, dict) else str(data)
+        except Exception:
+            detail = getattr(response, "text", "") or ""
+        return " ".join(str(detail or "").split())[:240]
+
+    @staticmethod
+    def _shrink_b64_png(b64_png: str, max_dim: int = 768) -> str | None:
+        """Downscale a capture for a retry, or None if it is already small."""
+        try:
+            from PIL import Image  # type: ignore
+
+            raw = base64.b64decode(b64_png)
+            image = Image.open(io.BytesIO(raw))
+            if max(image.size) <= max_dim:
+                return None
+            image.thumbnail(
+                (max_dim, max_dim),
+                getattr(Image, "Resampling", Image).LANCZOS,
+            )
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            return base64.b64encode(buffer.getvalue()).decode("ascii")
+        except Exception:  # pragma: no cover - optional image backend
+            return None
+
     def _chat_with_image(
         self, system: str, prompt: str, b64_png: str, format_json: bool = False
     ) -> dict:
@@ -1240,7 +1270,25 @@ class VisionAgent:
         # it from plain text (including fenced replies).
         _ = format_json
         response = self._client.post("/api/chat", json=payload)
-        response.raise_for_status()
+        status = getattr(response, "status_code", 200)
+
+        # A 500 on a high-resolution capture is usually Ollama running out of
+        # vision context. Retry once with a smaller image and context before
+        # giving up, so one oversized frame does not kill the whole task.
+        if status >= 500:
+            detail = self._ollama_error(response)
+            smaller = self._shrink_b64_png(b64_png)
+            if smaller:
+                payload["messages"][1]["images"] = [smaller]
+                payload["options"] = {"num_ctx": 4096}
+                response = self._client.post("/api/chat", json=payload)
+                status = getattr(response, "status_code", 200)
+
+        if status >= 400 or not getattr(response, "is_success", True):
+            detail = self._ollama_error(response) or "no detail reported"
+            raise RuntimeError(
+                f"Local vision model could not answer ({status}): {detail}"
+            )
         return response.json()
 
     def _reflect_on_subgoal(
