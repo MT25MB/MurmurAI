@@ -333,6 +333,18 @@ describe("HudPill", () => {
     });
   });
 
+  it("keeps the typed-command panel inside the native window height", async () => {
+    const user = userEvent.setup();
+    render(<HudPill />);
+    await user.click(screen.getByRole("button", { name: /type a command/i }));
+
+    const region = screen.getByRole("region", { name: /status and controls/i });
+    expect(region).toHaveClass("h-[260px]");
+    expect(region).toHaveClass("overflow-hidden");
+    const log = screen.getByRole("log", { name: /murmur ai transcript/i });
+    expect(log.parentElement).toHaveClass("overflow-y-auto");
+  });
+
   it("shows replies as a visible message while typing", async () => {
     const user = userEvent.setup();
     render(<HudPill />);
