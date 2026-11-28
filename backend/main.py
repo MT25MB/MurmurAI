@@ -944,6 +944,7 @@ def _preview_settings() -> dict:
 
 async def _build_and_store_preview(session: SessionState, send, goal: str) -> None:
     """Build a read-only preview for a goal and hold it for one decision."""
+    await _working_on_it(session, send)
     try:
         if pick_engine(goal) == "vision":
             from agent.vision_agent import run_agent_method
@@ -984,6 +985,7 @@ async def _route_plan_preview(
         if decision.kind == "approve":
             session.pending_plan = None
             preview = pending
+            await _working_on_it(session, send)
             try:
                 if preview.engine == "vision":
                     from agent.vision_agent import run_agent_method
@@ -999,6 +1001,10 @@ async def _route_plan_preview(
                     result = await asyncio.to_thread(
                         app_state.brain.execute_preview, preview
                     )
+                # The agent must always answer an approval, even when the
+                # visual loop returns no text (an empty result was silent).
+                if not result or not str(result).strip():
+                    result = "I ran the plan, but there was nothing to report."
                 await _speak_and_return(session, send, result)
             except Exception:  # pragma: no cover - desktop dependent
                 logger.exception("Approved preview failed")
@@ -1630,15 +1636,16 @@ def _chime(kind: str) -> None:
 
 
 async def _working_on_it(session: SessionState, send) -> None:
-    """Tell the user immediately that a slow command has been accepted."""
-    await emit_transcript(session, send, "Working on it.", "system")
+    """Say 'loading' the moment any slow model-backed turn starts."""
+    message = "Loading, working on it."
+    await emit_transcript(session, send, message, "system")
     if getattr(app_state, "last_input_mode", "voice") == "typed":
         return  # typed mode is a silent chat; the message is already visible
     if app_state.speaker is not None:
         try:
-            await asyncio.to_thread(app_state.speaker.speak, "Working on it.")
+            await asyncio.to_thread(app_state.speaker.speak, message)
         except Exception:  # pragma: no cover - TTS dependent
-            logger.debug("Working announcement failed", exc_info=True)
+            logger.debug("Loading announcement failed", exc_info=True)
 
 
 async def _set_state(send, session: SessionState, status: str) -> None:

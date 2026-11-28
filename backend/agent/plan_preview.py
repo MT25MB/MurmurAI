@@ -17,8 +17,10 @@ PREVIEW_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 APPROVE_RE = re.compile(
-    r"^\s*(?:go ahead|yes[, ]+confirm|yes confirm|confirm(?: the plan)?|"
-    r"execute (?:the )?plan|do it|proceed|approved?)\s*[.!]?$",
+    r"^\s*(?:go ahead|go for it|let'?s do it|do that|do it|"
+    r"yes(?:[, ]+confirm|[, ]+please|[, ]+(?:i'?m |i am )?ready)?|"
+    r"yeah|yep|yup|ok|okay|sure|"
+    r"confirm(?: the plan)?|execute (?:the )?plan|proceed|approved?)\s*[.!]?$",
     re.IGNORECASE,
 )
 SKIP_RE = re.compile(
@@ -82,7 +84,7 @@ class PlanPreview:
             parts.append("Tools: " + ", ".join(self.tools[:6]) + ".")
         if self.files:
             parts.append("Files: " + ", ".join(self.files[:6]) + ".")
-        parts.append("Say go ahead to run it, skip step two to adjust, or cancel to discard.")
+        parts.append("Say yes or go ahead to run it, skip step two to adjust, or cancel to discard.")
         return " ".join(parts)
 
 

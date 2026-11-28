@@ -583,7 +583,7 @@ class Brain:
         messages.append({"role": "user", "content": user_text})
 
         # First model pass: decide tool or reply.
-        _activity("Thinking about your request…")
+        _activity("Loading your request…")
         response = self._chat(messages, tools=ALL_TOOLS if self._tools_ready else None)
         message = response.get("message", {})
         tool_calls = message.get("tool_calls") or []

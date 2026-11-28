@@ -87,8 +87,8 @@ async def test_working_on_it_is_announced(monkeypatch):
         sent.append(message)
 
     await main._working_on_it(SessionState(), send)
-    assert any(m.type == "transcript" and "Working on it" in m.text for m in sent)
-    assert spoken == ["Working on it."]
+    assert any(m.type == "transcript" and "Loading" in m.text for m in sent)
+    assert spoken == ["Loading, working on it."]
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_working_on_it_stays_silent_for_typed_commands(monkeypatch):
         sent.append(message)
 
     await main._working_on_it(SessionState(), send)
-    assert any(m.type == "transcript" and "Working on it" in m.text for m in sent)
+    assert any(m.type == "transcript" and "Loading" in m.text for m in sent)
 
 
 def test_transcript_message_serialization():

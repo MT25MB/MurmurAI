@@ -676,12 +676,26 @@ def run_diagnostics() -> dict[str, Any]:
     if session_type == "unknown":
         issues.append("No Wayland or X11 display was detected, so screen control may not work.")
 
+    # Click and type tools depend on the optional local input backend. Report
+    # its state so a silent computer-control failure is easy to diagnose.
+    try:
+        import pyautogui  # noqa: F401
+
+        computer_control = {"available": True}
+    except Exception:
+        computer_control = {
+            "available": False,
+            "hint": "Install the computer extra: pip install -e 'backend[computer]'",
+        }
+    checks["computer_control"] = computer_control
+
     parts = [
         "Diagnostics.",
         f"Microphone: {'ok' if mic.get('ok') else ('quiet' if mic.get('available') else 'unavailable')}.",
         f"Ollama: {'running' if checks['ollama'].get('running') else 'not running'}.",
         f"Local models: {len(models)}.",
         f"Display: {session_type}.",
+        f"Computer control: {'ok' if computer_control['available'] else 'unavailable'}.",
     ]
     if issues:
         parts.append("Issues: " + " ".join(issues))

@@ -228,7 +228,7 @@ def test_voice_to_action_roundtrip(monkeypatch, fixture_wavs, phrase_id, expecte
 
     if phrase_id == 1:
         assert any(
-            m["type"] == "transcript" and "Working on it" in m.get("text", "")
+            m["type"] == "transcript" and "Loading" in m.get("text", "")
             for m in messages
         ), messages
         assert any(

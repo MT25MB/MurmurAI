@@ -41,6 +41,11 @@ def test_decision_phrases_are_recognized():
     assert classify("Go ahead").kind == "approve"
     assert classify("Yes, confirm").kind == "approve"
     assert classify("Execute the plan").kind == "approve"
+    # A preview prompt ends by asking "are you ready?" - a bare "yes" must
+    # approve it instead of discarding the plan and re-asking the model.
+    for phrase in ("Yes", "yes.", "yeah", "yep", "yup", "ok", "okay", "sure",
+                   "yes please", "go for it", "let's do it", "do that"):
+        assert classify(phrase).kind == "approve", phrase
     assert classify("Skip step two").numbers == [2]
     assert classify("Skip steps 2 and 4").numbers == [2, 4]
     assert classify("Cancel").kind == "cancel"
@@ -164,6 +169,27 @@ async def test_preview_request_builds_and_speaks_a_plan_without_executing(
     assert brain_calls == []
     assert session.pending_plan is not None
     assert any("Preview:" in str(getattr(m, "text", "")) for m in sent)
+
+
+@pytest.mark.asyncio
+async def test_bare_yes_executes_the_preview_and_always_answers(plan_env, monkeypatch):
+    """Screenshot regression: 'yes' to 'are you ready?' must run the GUI task."""
+    session, send, sent = plan_env
+    session.pending_plan = _sample_preview()
+    executed = []
+    monkeypatch.setattr(
+        main.app_state.brain,
+        "execute_preview",
+        lambda preview: executed.append(preview) or "",
+    )
+
+    handled, _ = await main._route_plan_preview(session, send, "Yes")
+
+    assert handled is True
+    assert len(executed) == 1
+    assert "nothing to report" in " ".join(
+        str(getattr(m, "text", "")) for m in sent
+    ).lower()
 
 
 @pytest.mark.asyncio
