@@ -123,6 +123,14 @@ def main() -> None:
 
         check_websocket()
     finally:
+        # Ask for a clean exit first so the port is released even if a
+        # platform-specific terminate leaves a child process behind.
+        try:
+            urllib.request.urlopen(
+                urllib.request.Request(f"{BASE}/shutdown", method="POST"), timeout=5
+            ).read()
+        except Exception:
+            pass
         proc.terminate()
         try:
             proc.wait(timeout=15)
