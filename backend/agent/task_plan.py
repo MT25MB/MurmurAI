@@ -38,7 +38,7 @@ Rules:
   scene", not a vague intention like "work on the project".
 - Use at most 8 subgoals. Prefer fewer, but never fewer than the action count.
 - If the goal is a single simple action, return exactly one subgoal.
-- Do NOT explain. Return ONLY a JSON object: {"subgoals": ["...", "..."]}
+- Do NOT explain. Return ONLY a JSON object: {{"subgoals": ["...", "..."]}}
 
 Example:
 Goal: "open blender, make a new general project, delete the default cube, and add a sphere"
@@ -138,7 +138,7 @@ def _is_multistep(goal: str) -> bool:
     return len(verbs) >= 2 or (joined and len(verbs) >= 1)
 
 
-def build_plan(goal: str, timeout: float = 20.0) -> TaskPlan:
+def build_plan(goal: str, timeout: float = 10.0) -> TaskPlan:
     """Decompose a goal into ordered subgoals using the local LLM (with fallback)."""
     plan = TaskPlan(goal=goal)
     try:

@@ -63,6 +63,14 @@ def test_collapsed_multistep_goal_falls_back_to_split(monkeypatch):
     assert any("sphere" in s.text.lower() for s in plan.subgoals)
 
 
+def test_plan_prompt_formats_without_keyerror():
+    from agent.task_plan import PLAN_PROMPT
+
+    rendered = PLAN_PROMPT.format(goal="open notepad and type hello")
+    assert '"subgoals": ["...", "..."]' in rendered
+    assert "open notepad and type hello" in rendered
+
+
 def test_launch_subgoal_is_resolved_by_os_tool(monkeypatch):
     import tools.os_tools as os_tools
 

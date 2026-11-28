@@ -774,6 +774,7 @@ class VisionAgent:
         self.loop_detector.reset()
         self._recovery_attempts = 0
         self._recovery_hint = ""
+        self._fail_streak = 0
 
         # 1) Plan: break a multi-step goal into ordered subgoals, or reuse the
         #    approved preview so execution matches what the user heard.
@@ -927,11 +928,23 @@ class VisionAgent:
                     return f"Task finished after {step} step(s)."
                 continue
 
-            # A failed model call must never be reported as a finished task.
+            # A single model failure is transient; try an alternative path
+            # before giving up. Only repeated failures abort the task.
             if action == "FAIL":
+                self._fail_streak += 1
                 record.result = "FAIL"
                 self.history.append(record)
-                return f"Task stopped after {step} step(s): {thought or 'vision model unavailable'}"
+                if self._fail_streak >= 2:
+                    return (
+                        f"Task stopped after {step} step(s): "
+                        f"{thought or 'vision model unavailable'}"
+                    )
+                self._recovery_hint = (
+                    "The vision model could not choose an action. Inspect the screen "
+                    "and try a simpler direct step or an alternative path."
+                )
+                time.sleep(STEP_SETTLE_S)
+                continue
 
             # --- bounded off-screen search and zoom re-grounding ---
             if action == "SCROLL_SEARCH":
@@ -999,6 +1012,7 @@ class VisionAgent:
                     time.sleep(STEP_SETTLE_S)
                     continue
                 record.result = "executed"
+                self._fail_streak = 0
                 # Verify the action actually changed the UI. A static screen
                 # after a click/shortcut feeds an alternative-path hint next step.
                 if action not in {"WAIT", "FINISH", "FAIL", "DONE"}:
@@ -1015,38 +1029,42 @@ class VisionAgent:
                 self.history.append(record)
                 return f"Action {action} failed on step {step}: {exc}"
 
-            # --- subgoal progress: only after a fresh visual self-check ---
-            if subgoal_done:
-                if after_png is None:
-                    fresh_png, _, _ = self._capture_for_vlm()
-                    after_png = fresh_png
+            # --- subgoal progress: decide from fresh-screen evidence, not the
+            # model's optional `subgoal_done` flag. Small local models often
+            # omit that flag even when the step is visibly complete. ---
+            if after_png is None:
+                fresh_png, _, _ = self._capture_for_vlm()
+                after_png = fresh_png
+            if after_png is not None:
                 after_b64 = self.controller.to_base64(after_png)
-                if not self._subgoal_complete(
+                complete = self._subgoal_complete(
                     active.text if active else goal, goal, after_b64,
                     width, height, app_section, thought,
-                ):
+                )
+                if not complete and subgoal_done:
                     record.result += "; subgoal not reflected as complete"
                     self.history.append(record)
                     time.sleep(STEP_SETTLE_S)
                     continue
-                self.plan.complete_current()
-                self.loop_detector.mark_progress(self.plan.active_index)
-                self._recovery_attempts = 0
-                self._recovery_hint = ""
-                if active:
-                    self._speak(f"Done: {active.text}")
-                    logger.info("Subgoal complete: %s", active.text)
-                from agent.checkpoint import record_progress
+                if complete:
+                    self.plan.complete_current()
+                    self.loop_detector.mark_progress(self.plan.active_index)
+                    self._recovery_attempts = 0
+                    self._recovery_hint = ""
+                    if active:
+                        self._speak(f"Done: {active.text}")
+                        logger.info("Subgoal complete: %s", active.text)
+                    from agent.checkpoint import record_progress
 
-                record_progress(
-                    goal,
-                    [s.text for s in self.plan.subgoals],
-                    [s.text for s in self.plan.subgoals if s.done],
-                    self.plan.active_index,
-                )
-                if self.plan.all_done:
-                    self._speak("All steps are done.")
-                    return f"Task finished after {step} step(s)."
+                    record_progress(
+                        goal,
+                        [s.text for s in self.plan.subgoals],
+                        [s.text for s in self.plan.subgoals if s.done],
+                        self.plan.active_index,
+                    )
+                    if self.plan.all_done:
+                        self._speak("All steps are done.")
+                        return f"Task finished after {step} step(s)."
 
             self.history.append(record)
             time.sleep(STEP_SETTLE_S)

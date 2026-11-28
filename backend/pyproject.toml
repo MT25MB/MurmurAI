@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "murmur-ai-backend"
-version = "1.2.79"
+version = "1.2.80"
 description = "Murmur AI local voice sidecar: FastAPI + WebSocket control plane"
 requires-python = ">=3.11"
 license = { text = "MIT" }
