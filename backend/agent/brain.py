@@ -267,8 +267,18 @@ _ACTION_CLAIM_RE = re.compile(
     r"\b(?:i've|we've|i|we)\s+(?:have\s+|just\s+|already\s+)?"
     r"(?:opened|launched|closed|saved|deleted|removed|moved|renamed|copied|"
     r"sent|posted|installed|ran|executed|changed|set|wrote|created|started|"
-    r"stopped)\b|\b(?:done|finished)\s*[.!]?$",
-    re.IGNORECASE,
+    r"stopped)\b"
+    # Present-progressive narration and future promises are claims too. A
+    # reply like "Opening Firefox. Clicking the image." must not be spoken
+    # when no tool actually ran.
+    r"|\b(?:i'm|i am|we're|we are|let me|now|i'll|i will)\s+"
+    r"(?:opening|launching|searching|navigating|clicking|typing|creating|"
+    r"deleting|removing|saving|installing|running|changing|writing|starting|"
+    r"stopping|go|open|click|search|navigate)\b"
+    r"|^\s*(?:opening|navigating|clicking|typing|searching|creating|deleting|"
+    r"saving|launching|installing)\b"
+    r"|\b(?:done|finished)\s*[.!]?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 

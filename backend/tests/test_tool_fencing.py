@@ -48,6 +48,14 @@ def test_guard_rejects_action_claim_without_tool_call():
 
 def test_guard_leaves_conversation_alone():
     assert guard_unverified_claim("Hello there.", []) == "Hello there."
+    # Present-progressive narration ("Opening... Clicking...") is still a
+    # claim that an action ran. The screenshot regression showed it being
+    # spoken while no tool had been called.
+    fabricated = (
+        "Opening Firefox and searching for apple images. "
+        "Navigating to the first image. Clicking the image."
+    )
+    assert "didn't actually do that" in guard_unverified_claim(fabricated, [])
 
 
 def test_guard_allows_claim_after_successful_tool():

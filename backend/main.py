@@ -1095,8 +1095,10 @@ def _is_multi_step_gui_goal(text: str) -> bool:
     if not MULTI_STEP_RE.search(value) or pick_engine(value) != "vision":
         return False
     actions = (
-        "open", "start", "create", "new", "delete", "remove", "add",
+        "open", "start", "launch", "create", "new", "delete", "remove", "add",
         "click", "type", "save", "select", "name", "insert", "build",
+        "search", "go", "navigate", "visit", "browse", "find", "choose",
+        "pick", "scroll", "press", "enter", "switch",
     )
     return sum(
         1 for verb in actions if re.search(rf"\b{verb}\b", value, re.IGNORECASE)

@@ -44,7 +44,9 @@ GUI_KEYWORDS = (
     "vs code", "chrome", "firefox", "desktop", "screen", "window", "click",
 )
 
-MULTI_STEP_RE = re.compile(r"\b(and|then|after that|finally)\b|;", re.IGNORECASE)
+MULTI_STEP_RE = re.compile(
+    r"\b(and|then|after that|finally|next)\b|[,;]", re.IGNORECASE
+)
 
 
 @dataclass

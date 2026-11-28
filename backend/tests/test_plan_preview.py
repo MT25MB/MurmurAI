@@ -27,6 +27,11 @@ def test_multi_step_gui_goal_is_detected_for_voice_commands():
     assert main._is_multi_step_gui_goal(goal) is True
     assert main._is_multi_step_gui_goal("open Blender") is False
     assert main._is_multi_step_gui_goal("rewrite notes.txt and save it") is False
+    # Navigation verbs count as GUI actions: this prompt must use the visual
+    # planner in one turn instead of doing two calls and asking a question.
+    assert main._is_multi_step_gui_goal(
+        "open firefox, search up apple, go to images, go to the link of one of the images"
+    ) is True
 
 
 def test_preview_phrase_extracts_the_goal():
