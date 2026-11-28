@@ -1371,7 +1371,27 @@ class VisionAgent:
             # Never turn a failed model call into a successful FINISH.
             return f"Vision request failed: {detail}", "FAIL", None, None, None, None, False
 
-        return self._parse_vlm_json(content)
+        parsed = self._parse_vlm_json(content)
+        if parsed[1] == "FAIL" and not parsed[0].strip():
+            # An empty FAIL is not information: retry once with a smaller
+            # capture before abandoning the task.
+            smaller = self._shrink_b64_png(b64_png)
+            if smaller:
+                try:
+                    retry = self._chat_with_image(system, prompt, smaller, format_json=True)
+                    retried = self._parse_vlm_json(
+                        retry.get("message", {}).get("content", "{}")
+                    )
+                    if retried[1] != "FAIL" or retried[0].strip():
+                        return retried
+                except Exception:  # pragma: no cover - retry is best effort
+                    logger.debug("Vision empty-FAIL retry failed", exc_info=True)
+            excerpt = " ".join(str(content or "").split())[:120]
+            detail = f"Local vision model {self.model} did not return a usable action"
+            if excerpt:
+                detail += f" (reply: {excerpt})"
+            return detail, "FAIL", None, None, None, None, False
+        return parsed
 
     @staticmethod
     def _extract_json(content: str) -> dict:

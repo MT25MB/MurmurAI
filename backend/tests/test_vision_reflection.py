@@ -153,6 +153,55 @@ def test_vision_errors_are_plain_english_without_http_details(monkeypatch, tmp_p
     assert "developer.mozilla" not in message
 
 
+def test_empty_vlm_failure_retries_then_explains(monkeypatch, tmp_path):
+    import base64
+    import io
+
+    from PIL import Image
+
+    agent = _agent(monkeypatch, tmp_path)
+    buf = io.BytesIO()
+    Image.new("RGB", (1600, 900), "black").save(buf, format="PNG")
+    big = base64.b64encode(buf.getvalue()).decode()
+    replies = [
+        {"message": {"content": '{"action":"FAIL","thought":""}'}},
+        {"message": {"content": '{"action":"CLICK","thought":"click General"}'}},
+    ]
+    calls = []
+
+    def fake_chat(system, prompt, image, format_json=False):
+        calls.append(image)
+        return replies[min(len(calls) - 1, 1)]
+
+    monkeypatch.setattr(agent, "_chat_with_image", fake_chat)
+    try:
+        parsed = agent._ask_vlm("goal", big, 1600, 900, "", {})
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+    assert parsed[1] == "CLICK"
+    assert len(calls) == 2
+
+
+def test_empty_vlm_failure_names_the_model(monkeypatch, tmp_path):
+    agent = _agent(monkeypatch, tmp_path)
+    calls = []
+
+    def fake_chat(system, prompt, image, format_json=False):
+        calls.append(image)
+        return {"message": {"content": '{"action":"FAIL","thought":""}'}}
+
+    monkeypatch.setattr(agent, "_chat_with_image", fake_chat)
+    try:
+        parsed = agent._ask_vlm("goal", "BASE64PNG", 320, 180, "", {})
+    finally:
+        agent.abort.remove_listener(agent._announce_stop)
+
+    assert parsed[1] == "FAIL"
+    assert "did not return a usable action" in parsed[0]
+    assert agent.model in parsed[0]
+
+
 def test_already_open_app_is_not_launched_again(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
